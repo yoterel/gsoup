@@ -127,7 +127,7 @@ setup(
     #
     # For an analysis of "install_requires" vs pip's requirements files see:
     # https://packaging.python.org/discussions/install-requires-vs-requirements/
-    install_requires=["numpy", "torch"],  # Optional
+    install_requires=["numpy", "torch", "igl", "Pillow"],  # Optional
     # List additional groups of dependencies here (e.g. development
     # dependencies). Users will be able to install these using the "extras"
     # syntax, for example:
@@ -142,15 +142,15 @@ setup(
     #},
     # If there are data files included in your packages that need to be
     # installed, specify them here.
-    #package_data={  # Optional
-    #    "sample": ["package_data.dat"],
-    #},
+    # package_data={  # Optional
+    #    "gsoup": ["FreeMono.ttf"],
+    # },
     # Although 'package_data' is the preferred approach, in some case you may
     # need to place data files outside of your packages. See:
     # http://docs.python.org/distutils/setupscript.html#installing-additional-files
     #
     # In this case, 'data_file' will be installed into '<sys.prefix>/my_data'
-    # data_files=[("my_data", ["data/data_file"])],  # Optional
+    # data_files=[("my_data", ["data/FreeMono.ttf"])],  # Optional
     # To provide executable scripts, use entry points in preference to the
     # "scripts" keyword. Entry points provide cross-platform support and allow
     # `pip` to create the appropriate form of executable for the target

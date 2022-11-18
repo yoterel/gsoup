@@ -93,11 +93,17 @@ def to_torch(arr: np.array, dtype=None, device="cpu"):
     else:
         return torch.tensor(arr, dtype=dtype, device=device)
 
-def to8b(x: np.array, clip=True):
+def to_8b(x: np.array, clip=True):
     """
     convert a numpy (float) array to 8 bit
     """
     if clip:
         x = np.clip(x, 0, 1)
     return (255 * x).astype(np.uint8)
+
+def to_float(x: np.array):
+    """
+    convert a numpy (8bit) array to float
+    """
+    return (x.astype(np.float32) / 255)
 
