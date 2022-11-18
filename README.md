@@ -1,2 +1,3 @@
-# graphics_soup
-A python library supporting graphics research
+# Graphics Soup
+
+A python toolkit for various graphics related computations
