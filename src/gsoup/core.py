@@ -81,6 +81,45 @@ def look_at(from_, to_, up_):
     c2w = np.concatenate((rot, from_[:, :, None]), axis=-1)
     return to_44(c2w)
 
+def look_at_torch(
+        eye:torch.Tensor, #3
+        at:torch.Tensor, #3
+        up:torch.Tensor, #3
+        device:torch.device
+    ) -> torch.Tensor: #4,4
+    """
+    creates a lookat transform matrix
+    """
+    z = (at - eye).type(torch.float32).to(device)
+    z /= torch.norm(z)
+    x = torch.cross(up, z).type(torch.float32).to(device)
+    x /= torch.norm(x)
+    y = torch.cross(z, x).type(torch.float32).to(device)
+    y /= torch.norm(y)
+    T = torch.eye(4, device=device)
+    T[:3,:3] = torch.stack([x,y,z],dim=1)
+    T[:3,3] = eye
+    return T
+
+def create_random_cameras_on_unit_sphere(n, r, device="cuda"):
+    """
+    creates a batch of world2view and view2camera transforms on a unit sphere looking at the center
+    reminder: "view" is the camera frame of reference, and "camera" is the image frame of reference (openGL conventions)
+    """
+    locs = torch.randn((n, 3), device=device)
+    locs = torch.nn.functional.normalize(locs, dim=1, eps=1e-6)
+    locs = locs * r
+    matrices = torch.empty((n, 4, 4), dtype=torch.float32, device=device)
+    for i in range(len(locs)):
+        matrices[i] = look_at_torch(locs[i],
+                                       torch.zeros(3, dtype=torch.float32, device=device),
+                                       torch.tensor([0.,1.,0.], device=device),
+                                       device=device)
+    v2w = matrices  # c2w
+    w2v = torch.inverse(v2w)
+    v2c = torch.tensor(perspective_projection(), dtype=torch.float32, device=device)
+    return w2v, v2c
+
 def opengl_to_opencv(opengl_transform):
     """
     converts a standard opengl transform to opencv transform by flipping y and z axes
@@ -151,7 +190,7 @@ def orthographic_projection(l, r, b, t, n, f):
                       [0,0,-2.0/dz,rz],
                       [0,0,0,1]])
 
-def perspective_projection(fovy, aspect, n, f):
+def perspective_projection(fovy=45, aspect=1.0, n=0.1, f=100.0):
     s = 1.0/np.tan(np.deg2rad(fovy)/2.0)
     sx, sy = s / aspect, s
     zz = (f+n)/(n-f)

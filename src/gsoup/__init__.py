@@ -8,6 +8,7 @@ from .core import (
     to_torch,
     to_8b,
     to_float,
+    create_random_cameras_on_unit_sphere,
 )
 
 from .geometry_basic import (
@@ -33,3 +34,10 @@ from .image import (
     write_text_on_image,
     merge_figures_with_line,
 )
+
+from .sphere_trace import (
+    generate_rays,
+    render
+)
+
+from . import structures
