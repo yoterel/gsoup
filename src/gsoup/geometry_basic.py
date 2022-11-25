@@ -40,10 +40,11 @@ def normalize_vertices(vertices, mode="unit_sphere"):
     """
     eps = 1e-7
     if type(vertices) == np.ndarray:
+        vertices -= (vertices.min(axis=0) + vertices.max(axis=0)) / 2
         if mode == "unit_sphere":
-            vertices -= (vertices.min(axis=0) + vertices.max(axis=0)) / 2
             vertices = vertices / (np.linalg.norm(vertices, axis=-1).max() + eps)
         elif mode == "unit_cube":
+            vertices = vertices / (np.abs(vertices).max(dim=-1) + eps)
             raise NotImplementedError
         
     elif type(vertices) == torch.Tensor:

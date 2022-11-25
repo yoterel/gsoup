@@ -101,6 +101,76 @@ def look_at_torch(
     T[:3,3] = eye
     return T
 
+def orthographic_projection(l, r, b, t, n, f):
+    dx = r - l
+    dy = t - b
+    dz = f - n
+    rx = -(r + l) / (r - l)
+    ry = -(t + b) / (t - b)
+    rz = -(f + n) / (f - n)
+    return np.array([[2.0/dx,0,0,rx],
+                      [0,2.0/dy,0,ry],
+                      [0,0,-2.0/dz,rz],
+                      [0,0,0,1]])
+
+def perspective_projection(fovy=45, aspect=1.0, n=0.1, f=100.0):
+    s = 1.0/np.tan(np.deg2rad(fovy)/2.0)
+    sx, sy = s / aspect, s
+    zz = (f+n)/(n-f)
+    zw = 2*f*n/(n-f)
+    return np.array([[sx,0,0,0],
+                      [0,sy,0,0],
+                      [0,0,zz,zw],
+                      [0,0,-1,0]])
+
+def frustum_projection(x0, x1, y0, y1, z0, z1):
+    a = (x1+x0)/(x1-x0)
+    b = (y1+y0)/(y1-y0)
+    c = -(z1+z0)/(z1-z0)
+    d = -2*z1*z0/(z1-z0)
+    sx = 2*z0/(x1-x0)
+    sy = 2*z0/(y1-y0)
+    return np.array([[sx, 0, a, 0],
+                      [ 0,sy, b, 0],
+                      [ 0, 0, c, d],
+                      [ 0, 0,-1, 0]])
+
+def opengl_project_from_opencv_project(opencv_project):
+    """
+    given a matrix K from opencv, returns the corresponding matrix K' for opengl
+    """
+    fx = opencv_project[0, 0]
+    fy = opencv_project[1, 1]
+    cx = opencv_project[0, 2]
+    cy = opencv_project[1, 2]
+    w = 512
+    h = 512
+    far = 100.0
+    near = 0.1
+    opengl_mtx = np.array([[2*fx/w, 0.0, (w - 2*cx)/w, 0.0],
+                           [0.0, -2*fy/h, (h - 2*cy)/h, 0.0],
+                           [0.0, 0.0, (-far - near) / (far - near), -2.0*far*near/(far-near)],
+                           [0.0, 0.0, -1.0, 0.0]])
+    return opengl_mtx
+
+def opengl_coords_to_opencv_coords(opengl_transform):
+    """
+    converts coordinates of opengl to "vision" (opencv) coordinates by flipping y and z axes
+    """
+    assert opengl_transform.shape == (4, 4)
+    transform = np.array([[1, 0, 0, 0],  # flip y and z
+                          [0, -1, 0, 0],
+                          [0, 0, -1, 0],
+                          [0, 0, 0, 1]])
+    opencv_transform = np.matmul(opengl_transform, transform)
+    return opencv_transform
+
+def opencv_coords_to_opengl_coords(opencv_transform):
+    """
+    converts coordinates of "vision" (opencv) to opengl coordinates by flipping y and z axes
+    """
+    return opengl_coords_to_opencv_coords(opencv_transform)
+
 def create_random_cameras_on_unit_sphere(n, r, device="cuda"):
     """
     creates a batch of world2view and view2camera transforms on a unit sphere looking at the center
@@ -119,18 +189,6 @@ def create_random_cameras_on_unit_sphere(n, r, device="cuda"):
     w2v = torch.inverse(v2w)
     v2c = torch.tensor(perspective_projection(), dtype=torch.float32, device=device)
     return w2v, v2c
-
-def opengl_to_opencv(opengl_transform):
-    """
-    converts a standard opengl transform to opencv transform by flipping y and z axes
-    """
-    assert opengl_transform.shape == (4, 4)
-    transform = np.array([[1, 0, 0, 0],  # flip y and z
-                          [0, -1, 0, 0],
-                          [0, 0, -1, 0],
-                          [0, 0, 0, 1]])
-    opencv_transform = np.matmul(opengl_transform, transform)
-    return opencv_transform
 
 def to_np(arr: torch.Tensor):
     if type(arr) == torch.Tensor:
@@ -177,40 +235,6 @@ def to_PIL(x: np.array):
         return Image.fromarray(to_8b(x))
     elif x.ndim == 2:
         return Image.fromarray(to_8b(x[:, :, None]), mode="L")
-
-def orthographic_projection(l, r, b, t, n, f):
-    dx = r - l
-    dy = t - b
-    dz = f - n
-    rx = -(r + l) / (r - l)
-    ry = -(t + b) / (t - b)
-    rz = -(f + n) / (f - n)
-    return np.array([[2.0/dx,0,0,rx],
-                      [0,2.0/dy,0,ry],
-                      [0,0,-2.0/dz,rz],
-                      [0,0,0,1]])
-
-def perspective_projection(fovy=45, aspect=1.0, n=0.1, f=100.0):
-    s = 1.0/np.tan(np.deg2rad(fovy)/2.0)
-    sx, sy = s / aspect, s
-    zz = (f+n)/(n-f)
-    zw = 2*f*n/(n-f)
-    return np.array([[sx,0,0,0],
-                      [0,sy,0,0],
-                      [0,0,zz,zw],
-                      [0,0,-1,0]])
-
-def frustum(x0, x1, y0, y1, z0, z1):
-    a = (x1+x0)/(x1-x0)
-    b = (y1+y0)/(y1-y0)
-    c = -(z1+z0)/(z1-z0)
-    d = -2*z1*z0/(z1-z0)
-    sx = 2*z0/(x1-x0)
-    sy = 2*z0/(y1-y0)
-    return np.array([[sx, 0, a, 0],
-                      [ 0,sy, b, 0],
-                      [ 0, 0, c, d],
-                      [ 0, 0,-1, 0]])
 
 def translate(t):
     """
