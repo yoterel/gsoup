@@ -6,7 +6,8 @@ import igl
 
 def load_obj(path: Path, load_normals=False, to_torch=False, device=None):
     """
-    needs explaining?...
+    needs explaining?
+    use igl backend.
     """
     v, _, n, f, _, _ = igl.read_obj(str(path))
     if to_torch and device is not None:
@@ -21,6 +22,7 @@ def load_obj(path: Path, load_normals=False, to_torch=False, device=None):
 def save_obj(path: Path, vertices, faces):
     """"
     saves a mesh as an obj file
+    use igl backend.
     """
     filename = Path(filename)
     if filename.suffix not in [".obj", ".ply"]:

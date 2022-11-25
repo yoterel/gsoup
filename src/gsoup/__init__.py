@@ -20,7 +20,8 @@ from .geometry_basic import (
 )
 
 from .geometry_advanced import (
-    merge_meshes,
+    calculate_vertex_incident_scalar,
+    calculate_vertex_incident_vector
 )
 
 from .io import (
@@ -30,4 +31,5 @@ from .io import (
 
 from .image import (
     write_text_on_image,
+    merge_figures_with_line,
 )

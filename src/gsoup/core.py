@@ -1,5 +1,12 @@
 import torch
 import numpy as np
+from PIL import Image
+
+def normalize(x, eps=1e-7):
+    if type(x) == torch.Tensor:
+        return x / (torch.norm(x, dim=-1, keepdim=True) + eps)
+    elif type(x) == np.ndarray:
+        return x / (np.linalg.norm(x, axis=-1, keepdims=True) + eps)
 
 
 def broadcast_batch(*args):
@@ -57,11 +64,13 @@ def to_44(mat: np.array):
 def look_at(from_, to_, up_):
     """
     returns a batch of look_at transforms 4x4 (c2w)
+    will broadcast upon batch dimension if necessary.
     :param from_: n x 3 from vectors in world space
-    :param to_: 1 x 3 at vector in world space
-    :param up_: 1 x 3 up vector in world space
+    :param to_: n x 3 at vector in world space
+    :param up_: n x 3 up vector in world space
     :return: n x 4 x 4 transformation matrices (c2w)
     """
+    from_, to_, up_ = broadcast_batch(from_, to_, up_)
     forward = to_[None, :] - from_
     forward = forward / np.linalg.norm(forward, axis=-1, keepdims=True)
     right = np.cross(up_[None, :], forward)
@@ -85,6 +94,12 @@ def opengl_to_opencv(opengl_transform):
     return opencv_transform
 
 def to_np(arr: torch.Tensor):
+    if type(arr) == torch.Tensor:
+        return arr.detach().cpu().numpy()
+    elif type(arr) == np.ndarray:
+        return arr
+    elif type(arr) == Image.Image:
+        return np.array(arr)
     return arr.detach().cpu().numpy()
 
 def to_torch(arr: np.array, dtype=None, device="cpu"):
@@ -97,13 +112,131 @@ def to_8b(x: np.array, clip=True):
     """
     convert a numpy (float) array to 8 bit
     """
-    if clip:
-        x = np.clip(x, 0, 1)
-    return (255 * x).astype(np.uint8)
+    if x.dtype == np.float32:
+        if clip:
+            x = np.clip(x, 0, 1)
+        return (255 * x).astype(np.uint8)
+    elif x.dtype == np.uint8:
+        return x
 
-def to_float(x: np.array):
+def to_float(x: np.array, clip=True):
     """
     convert a numpy (8bit) array to float
     """
-    return (x.astype(np.float32) / 255)
+    if x.dtype == np.uint8:
+        return x.astype(np.float32) / 255
+    elif x.dtype == np.float32:
+        if clip:
+            x = np.clip(x, 0, 1)
+        return x
 
+def to_PIL(x: np.array):
+    """
+    convert a numpy float array to a PIL image
+    """
+    if x.ndim == 3:
+        return Image.fromarray(to_8b(x))
+    elif x.ndim == 2:
+        return Image.fromarray(to_8b(x[:, :, None]), mode="L")
+
+def orthographic_projection(l, r, b, t, n, f):
+    dx = r - l
+    dy = t - b
+    dz = f - n
+    rx = -(r + l) / (r - l)
+    ry = -(t + b) / (t - b)
+    rz = -(f + n) / (f - n)
+    return np.array([[2.0/dx,0,0,rx],
+                      [0,2.0/dy,0,ry],
+                      [0,0,-2.0/dz,rz],
+                      [0,0,0,1]])
+
+def perspective_projection(fovy, aspect, n, f):
+    s = 1.0/np.tan(np.deg2rad(fovy)/2.0)
+    sx, sy = s / aspect, s
+    zz = (f+n)/(n-f)
+    zw = 2*f*n/(n-f)
+    return np.array([[sx,0,0,0],
+                      [0,sy,0,0],
+                      [0,0,zz,zw],
+                      [0,0,-1,0]])
+
+def frustum(x0, x1, y0, y1, z0, z1):
+    a = (x1+x0)/(x1-x0)
+    b = (y1+y0)/(y1-y0)
+    c = -(z1+z0)/(z1-z0)
+    d = -2*z1*z0/(z1-z0)
+    sx = 2*z0/(x1-x0)
+    sy = 2*z0/(y1-y0)
+    return np.array([[sx, 0, a, 0],
+                      [ 0,sy, b, 0],
+                      [ 0, 0, c, d],
+                      [ 0, 0,-1, 0]])
+
+def translate(t):
+    """
+    creates a translation matrix from a translation vector
+    :param t: translation vector or batch of translation vectors
+    :return: 4x4 translation matrix
+    """
+    if t.shape[-1] != 3:
+        raise ValueError("translation vector must be 3d")
+    if t.ndim == 1:
+        t = t[None, :]
+    mat = np.concatenate((np.eye(3)[None, :, :], t[:, :, None]), axis=-1)
+    return to_44(mat)
+
+def scale(s):
+    if s.shape[-1] != 3:
+        raise ValueError("translation vector must be 3d")
+    if s.ndim == 1:
+        s = s[None, :]
+    mat = np.diag(s)
+    return to_44(mat)
+
+def sincos(a):
+    a = np.deg2rad(a)
+    return np.sin(a), np.cos(a)
+
+def rotate(a, r):
+    """
+    creates a rotation matrix from an angle and an axis
+    """
+    s, c = sincos(a)
+    r = normalize(r)
+    nc = 1 - c
+    x, y, z = r
+    return np.array([[x*x*nc +   c, x*y*nc - z*s, x*z*nc + y*s, 0],
+                      [y*x*nc + z*s, y*y*nc +   c, y*z*nc - x*s, 0],
+                      [x*z*nc - y*s, y*z*nc + x*s, z*z*nc +   c, 0],
+                      [           0,            0,            0, 1]])
+
+def rotx(a):
+    """
+    creates a rotation matrix around the x axis
+    """
+    s, c = sincos(a)
+    return np.array([[1,0,0,0],
+                      [0,c,-s,0],
+                      [0,s,c,0],
+                      [0,0,0,1]])
+
+def roty(a):
+    """
+    creates a rotation matrix around the y axis
+    """
+    s, c = sincos(a)
+    return np.array([[c,0,s,0],
+                      [0,1,0,0],
+                      [-s,0,c,0],
+                      [0,0,0,1]])
+
+def rotz(a):
+    """
+    creates a rotation matrix around the z axis
+    """
+    s, c = sincos(a)
+    return np.array([[c,-s,0,0],
+                      [s,c,0,0],
+                      [0,0,1,0],
+                      [0,0,0,1]])
