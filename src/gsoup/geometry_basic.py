@@ -339,7 +339,7 @@ def get_center_of_attention(c2w):
 
 def scale_poses(c2w, n=1.0):
     """
-    scales the camera poses so that the average distance to the center of attention is n
+    scales c2w transforms so that the average distance to the center of attention is n
     :param c2w: n x 4 x 4 np array of c2w matrices
     :param n: the average distance to the center of attention
     :return: the scaled c2w matrices

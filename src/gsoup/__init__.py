@@ -17,6 +17,8 @@ from .geometry_basic import (
     calc_face_normals,
     calc_vertex_normals,
     calc_edge_length,
+    get_center_of_attention,
+    scale_poses
 )
 
 from .geometry_advanced import (
@@ -25,8 +27,11 @@ from .geometry_advanced import (
 )
 
 from .io import (
-    load_obj,
+    save_images,
+    save_animation,
     save_obj,
+    load_images,
+    load_obj,
 )
 
 from .image import (

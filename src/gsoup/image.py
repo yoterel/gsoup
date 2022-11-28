@@ -1,9 +1,8 @@
 import torch
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
-from .core import to_8b, to_float
+from .core import to_8b, to_float, to_np
 from scipy.spatial import Voronoi
-
 
 def write_text_on_image(images, text_per_image, fill_white=True):
     """
