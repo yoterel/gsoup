@@ -2,7 +2,7 @@ from .core import (
     broadcast_batch,
     compose_rt,
     to_44,
-    look_at,
+    look_at_np,
     to_np,
     to_torch,
     to_8b,
@@ -27,6 +27,7 @@ from .geometry_advanced import (
 )
 
 from .io import (
+    save_image,
     save_images,
     save_animation,
     save_obj,

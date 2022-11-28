@@ -34,7 +34,6 @@ def broadcast_batch(*args):
                 new_args.append(np.broadcast_to(a, (batch_dim, *a.shape[1:])))
     return new_args
 
-
 def compose_rt(R: np.array, t: np.array):
     """
     composes a n x 3 x 4 numpy array from rotation and translation.
@@ -61,25 +60,29 @@ def to_44(mat: np.array):
         new_mat = np.concatenate((mat, np.array([0, 0, 0, 1])[None, :]), axis=0)
     return new_mat
 
-def look_at(from_, to_, up_):
+def look_at_np(from_, to_, up_, is_openGL=False):
     """
     returns a batch of look_at transforms 4x4 (c2w)
     will broadcast upon batch dimension if necessary.
     :param from_: n x 3 from vectors in world space
     :param to_: n x 3 at vector in world space
     :param up_: n x 3 up vector in world space
+    :param is_openGL: if True, output will be in opengl coordinates (z backward, y up) otherwise (z forward, y down)
     :return: n x 4 x 4 transformation matrices (c2w)
     """
+    if is_openGL:
+        raise NotImplementedError("only supports opencv coordinate system for now")
     from_, to_, up_ = broadcast_batch(from_, to_, up_)
-    forward = to_[None, :] - from_
+    forward = to_ - from_
     forward = forward / np.linalg.norm(forward, axis=-1, keepdims=True)
-    right = np.cross(up_[None, :], forward)
+    right = np.cross(up_, forward)
     right = right / np.linalg.norm(right, axis=-1, keepdims=True)
     up = np.cross(forward, right)
     up = up / np.linalg.norm(up, axis=-1, keepdims=True)
-    rot = np.concatenate((right[:, :, None], up[:, :, None], forward[:, :, None]), axis=-1)
-    c2w = np.concatenate((rot, from_[:, :, None]), axis=-1)
-    return to_44(c2w)
+    rot = np.concatenate((right[..., None], up[..., None], forward[..., None]), axis=-1)
+    c2w = np.concatenate((rot, from_[..., None]), axis=-1)
+    c2w = to_44(c2w)
+    return c2w
 
 def look_at_torch(
         eye:torch.Tensor, #3
@@ -153,23 +156,25 @@ def opengl_project_from_opencv_project(opencv_project):
                            [0.0, 0.0, -1.0, 0.0]])
     return opengl_mtx
 
-def opengl_coords_to_opencv_coords(opengl_transform):
+def opengl_c2w_to_opencv_c2w(opengl_transforms):
     """
     converts coordinates of opengl to "vision" (opencv) coordinates by flipping y and z axes
     """
-    assert opengl_transform.shape == (4, 4)
-    transform = np.array([[1, 0, 0, 0],  # flip y and z
-                          [0, -1, 0, 0],
-                          [0, 0, -1, 0],
-                          [0, 0, 0, 1]])
-    opencv_transform = np.matmul(opengl_transform, transform)
-    return opencv_transform
+    if opengl_transforms.ndim == 2:
+        my_transforms = opengl_transforms[None, ...]
+    else:
+        my_transforms = opengl_transforms
+    if my_transforms.shape[1:] != (4, 4):
+        raise ValueError("transform must be 4x4 or batch of 4x4")
+    my_transforms[:, :, 1] *= -1
+    my_transforms[:, :, 2] *= -1
+    return my_transforms.reshape(opengl_transforms.shape)
 
-def opencv_coords_to_opengl_coords(opencv_transform):
+def opencv_c2w_to_opengl_c2w(opencv_transform):
     """
     converts coordinates of "vision" (opencv) to opengl coordinates by flipping y and z axes
     """
-    return opengl_coords_to_opencv_coords(opencv_transform)
+    return opengl_c2w_to_opencv_c2w(opencv_transform)
 
 def create_random_cameras_on_unit_sphere(n, r, device="cuda"):
     """

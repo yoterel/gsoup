@@ -8,7 +8,7 @@ from PIL import Image
 def save_animation(images, dst:Path):
     """
     saves a gif animation
-    :param images: (b x H x W x 3) tensor
+    :param images: (b x H x W x C) tensor
     :param dst: path to save animation to
     """
     if type(images) == torch.Tensor:
@@ -18,18 +18,32 @@ def save_animation(images, dst:Path):
     if images.dtype == np.float32:
         images = to_8b(images)
     if images.shape[-1] == 1:
-        images = [Image.fromarray(image, mode="L") for image in images]
+        images = [Image.fromarray(image[..., 0], mode="L").convert('P') for image in images]
     else:
         images = [Image.fromarray(image) for image in images]
-    images[0].save(str(dst), save_all=True, append_images=images[1:], optimize=False, duration=40, loop=0)
+    dst = Path(dst.parent, dst.stem)
+    images[0].save(str(dst)+".gif", save_all=True, append_images=images[1:], optimize=False, duration=100, loop=0)
 
 
-def save_images(images, dst: Path, force_grayscale=False):
+def save_image(image, dst: Path, file_name: str = None, force_grayscale: bool = False):
+    """
+    saves single image as png
+    :param image: (H x W x C) tensor
+    :param dst: path to save image to
+    :param force_grayscale: if True, saves image as grayscale
+    :param file_name: if provided, saves image with this name
+    """
+    if image.ndim != 3:
+        raise ValueError("Image must be 3 dimensional")
+    save_images(image[None, ...], dst, [file_name], force_grayscale)
+
+def save_images(images, dst: Path, file_names: list = [], force_grayscale: bool = False):
     """
     saves images as png
-    :param images: (b x H x W x 3) numpy array
+    :param images: (b x H x W x C) tensor
     :param dst: path to save images to
     :param force_grayscale: if True, saves images as grayscale
+    :param file_names: if provided, saves images with these names (list of length b)
     """
     if type(images) == torch.Tensor:
         images = to_np(images)
@@ -37,19 +51,28 @@ def save_images(images, dst: Path, force_grayscale=False):
         raise ValueError("Images must be finite")
     if images.dtype == np.float32:
         images = to_8b(images)
+    if images.ndim != 4:
+        raise ValueError("Images must be of shape (b x H x W x C)")
+    if file_names:
+        if images.shape[0] != len(file_names):
+            raise ValueError("Number of images and length of file names list must match")
     for i, image in enumerate(images):
         if force_grayscale or images.shape[-1] == 1:
             if images.shape[-1] == 3:
-                image = image.mean(axis=-1)
-            pil_image = Image.fromarray(image, mode="L")
+                image = image.mean(axis=-1, keepdims=True)
+            pil_image = Image.fromarray(image[..., 0], mode="L")
         else:
             pil_image = Image.fromarray(image)
-        pil_image.save(str(Path(dst, "{:05d}.png".format(i))))
+        if file_names is not None:
+            file_names = [Path(x).stem for x in file_names]  # remove suffix
+            pil_image.save(str(Path(dst, "{}.png".format(file_names[i]))))
+        else:
+            pil_image.save(str(Path(dst, "{:05d}.png".format(i))))
 
 def load_images(path: Path, to_torch=False, device=None):
     """
-    loads images from a folder
-    :param path: path to folder
+    loads images from a folder or a single image from a file
+    :param path: path to folder with images / file
     :param to_torch: if True, returns a torch tensor
     :param device: device to load tensor to
     :return: (b x H x W x 3) tensor
