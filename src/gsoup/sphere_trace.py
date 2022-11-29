@@ -4,8 +4,6 @@ from pathlib import Path
 from gsoup import structures
 import torch
 import torch.nn as nn
-from tqdm import tqdm
-
 
 def sphere_tracing(
         signed_distance_function,
@@ -33,10 +31,7 @@ def sphere_tracing(
         foreground_masks = foreground_masks & bounded
 
     with torch.no_grad():
-        loop = tqdm(total=num_iterations, position=0)
         for i in range(num_iterations):
-            loop.set_description('sphere tracing up to {} iters'.format(num_iterations))
-            loop.update(1)
             signed_distances = signed_distance_function(ray_positions)
             if i:
                 ray_positions = torch.where(foreground_masks & ~converged,
@@ -50,7 +45,6 @@ def sphere_tracing(
             converged = torch.abs(signed_distances) < convergence_threshold
             if torch.all(~foreground_masks | converged):
                 break
-        loop.close()
     return ray_positions, converged
 
 
@@ -121,7 +115,7 @@ def generate_rays(w2v, v2c, resx=512, resy=512, device="cuda:0"):
     """
     y_clip = (torch.arange(resy, dtype=torch.float32, device=device) / resy) * 2 - 1
     x_clip = (torch.arange(resx, dtype=torch.float32, device=device) / resx) * 2 - 1
-    xy_clip = torch.stack(torch.meshgrid(x_clip, y_clip), dim=-1)
+    xy_clip = torch.stack(torch.meshgrid(x_clip, y_clip, indexing="ij"), dim=-1)
     xy_clip_near = torch.cat((xy_clip, -1*torch.ones_like(xy_clip[:, :, :1]), torch.ones_like(xy_clip[:, :, :1])), dim=-1)
     xy_clip_far = torch.cat((xy_clip, torch.ones_like(xy_clip[:, :, :1]), torch.ones_like(xy_clip[:, :, :1])), dim=-1)
     xy_view_near = (torch.inverse(v2c) @ xy_clip_near.view(-1, 4).T).T.view(resy, resx, 4)

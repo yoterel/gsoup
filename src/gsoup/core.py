@@ -2,6 +2,36 @@ import torch
 import numpy as np
 from PIL import Image
 
+def to_hom(x):
+    """
+    converts a vector to homogeneous coordinates
+    :param x: nxc numpy array
+    :return: nxc+1 numpy array
+    """
+    if type(x) == torch.Tensor:
+        if x.ndim == 1:
+            return torch.cat((x, torch.ones(1, device=x.device)))
+        else:
+            return torch.cat((x, torch.ones(x.shape[0], 1, device=x.device)), dim=-1)
+    elif type(x) == np.ndarray:
+        if x.ndim == 1:
+            return np.concatenate((x, np.array([1])))
+        else:
+            return np.concatenate((x, np.ones((x.shape[0], 1))), axis=-1)
+    else:
+        raise ValueError("x must be torch.Tensor or np.ndarray")
+
+def homogenize(x, keepdim=False):
+    """
+    converts a 3d vector to homogeneous coordinates
+    :param x: nx3 numpy array
+    :return: nx4 numpy array
+    """
+    x = (x / x[..., -1:])
+    if not keepdim:
+        x = x[..., :-1]
+    return x
+
 def normalize(x, eps=1e-7):
     if type(x) == torch.Tensor:
         return x / (torch.norm(x, dim=-1, keepdim=True) + eps)

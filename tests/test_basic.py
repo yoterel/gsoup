@@ -3,6 +3,23 @@ import numpy as np
 import torch
 import gsoup
 
+def test_homogenize():
+    x = np.random.rand(100, 2)
+    hom_x = gsoup.to_hom(x)
+    assert hom_x.shape == (100, 3)
+    hom_x = gsoup.to_hom(hom_x)
+    assert hom_x.shape == (100, 4)
+    dehom_x = gsoup.homogenize(hom_x)
+    assert dehom_x.shape == (100, 3)
+    dehom_x = gsoup.homogenize(dehom_x, keepdim=True)
+    assert dehom_x.shape == (100, 3)
+    x = np.random.rand(3)
+    hom_x = gsoup.to_hom(x)
+    assert hom_x.shape == (4,)
+    dehom_x = gsoup.homogenize(hom_x)
+    assert dehom_x.shape == (3,)
+
+
 def test_sphere_tracer():
     w2v, v2c = gsoup.create_random_cameras_on_unit_sphere(4, 1.0, "cuda:0")
     ray_origins, ray_directions = gsoup.generate_rays(w2v, v2c, 512, 512, "cuda:0")

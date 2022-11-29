@@ -69,35 +69,46 @@ def save_images(images, dst: Path, file_names: list = [], force_grayscale: bool 
         else:
             pil_image.save(str(Path(dst, "{:05d}.png".format(i))))
 
-def load_images(path: Path, to_torch=False, device=None):
+def load_images(path: Path, return_paths=False, to_torch=False, device=None):
     """
     loads images from a folder or a single image from a file
     :param path: path to folder with images / file
+    :param return_paths: if True, returns a list of file paths
     :param to_torch: if True, returns a torch tensor
     :param device: device to load tensor to
-    :return: (b x H x W x 3) tensor
+    :return: (b x H x W x 3) tensor, and optionally a list of file names
     """
     if not path.exists():
         raise ValueError("Path does not exist")
     if path.is_dir():
         images = []
+        file_paths = []
         for image in path.iterdir():
             if image.suffix in [".png", ".jpg", ".jpeg"]:
                 images.append(np.array(Image.open(str(image))))
+                file_paths.append(image)
         images = np.stack(images, axis=0)
         if to_torch and device is not None:
             images = torch.tensor(images, dtype=torch.float32, device=device)
     elif path.is_file():
         images = np.array(Image.open(str(path)))
+        file_paths = [path]
         if to_torch and device is not None:
             images = torch.tensor(images, dtype=torch.float32, device=device)
         images = images[None, ...]
-    return images
+    if return_paths:
+        return images, file_paths
+    else:
+        return images
 
 def load_obj(path: Path, load_normals=False, to_torch=False, device=None):
     """
-    needs explaining?
-    use igl backend.
+    uses igl backend to read an obj file
+    :param path: path to obj file
+    :param load_normals: if True, loads normals
+    :param to_torch: if True, returns a torch tensor
+    :param device: device to load tensor to
+    :return: (V x 3) tensor, (F x 3) tensor, and optionally (V x 3) tensor
     """
     v, _, n, f, _, _ = igl.read_obj(str(path))
     if to_torch and device is not None:
@@ -111,8 +122,10 @@ def load_obj(path: Path, load_normals=False, to_torch=False, device=None):
 
 def save_obj(path: Path, vertices, faces):
     """"
-    saves a mesh as an obj file
-    use igl backend.
+    uses igl backend to write an obj file
+    :param path: path to save obj file to
+    :param vertices: (n x 3) tensor of vertices
+    :param faces: (m x 3) tensor of vertex indices
     """
     filename = Path(filename)
     if filename.suffix not in [".obj", ".ply"]:

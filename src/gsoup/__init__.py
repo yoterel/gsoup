@@ -1,5 +1,7 @@
 from .core import (
     broadcast_batch,
+    to_hom,
+    homogenize,
     compose_rt,
     to_44,
     look_at_np,
@@ -36,8 +38,12 @@ from .io import (
 )
 
 from .image import (
-    write_text_on_image,
+    draw_text_on_image,
+    draw_gizmo_on_image,
     merge_figures_with_line,
+    generate_voronoi_diagram,
+    interpolate_single_channel,
+    interpolate_multi_channel,
 )
 
 from .sphere_trace import (
