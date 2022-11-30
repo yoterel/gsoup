@@ -69,10 +69,11 @@ def save_images(images, dst: Path, file_names: list = [], force_grayscale: bool 
         else:
             pil_image.save(str(Path(dst, "{:05d}.png".format(i))))
 
-def load_images(path: Path, return_paths=False, to_torch=False, device=None):
+def load_images(path: Path, to_float=False, channels_last=True, return_paths=False, to_torch=False, device=None):
     """
     loads images from a folder or a single image from a file
     :param path: path to folder with images / file
+    :param to_float: if True, converts images to float
     :param return_paths: if True, returns a list of file paths
     :param to_torch: if True, returns a torch tensor
     :param device: device to load tensor to
@@ -83,18 +84,26 @@ def load_images(path: Path, return_paths=False, to_torch=False, device=None):
     if path.is_dir():
         images = []
         file_paths = []
-        for image in path.iterdir():
+        for image in sorted(path.iterdir()):
             if image.suffix in [".png", ".jpg", ".jpeg"]:
                 images.append(np.array(Image.open(str(image))))
                 file_paths.append(image)
         images = np.stack(images, axis=0)
+        if not channels_last:
+            images = np.moveaxis(images, -1, 1)
+        if to_float:
+            images = images.astype(np.float32) / 255
         if to_torch and device is not None:
-            images = torch.tensor(images, dtype=torch.float32, device=device)
+            images = torch.tensor(images, device=device)
     elif path.is_file():
         images = np.array(Image.open(str(path)))
+        if not channels_last:
+            images = np.moveaxis(images, -1, 0)
+        if to_float:
+            images = images.astype(np.float32) / 255
         file_paths = [path]
         if to_torch and device is not None:
-            images = torch.tensor(images, dtype=torch.float32, device=device)
+            images = torch.tensor(images, device=device)
         images = images[None, ...]
     if return_paths:
         return images, file_paths
