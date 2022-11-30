@@ -30,11 +30,11 @@ def draw_text_on_image(images, text_per_image, fill_white=True):
         rgbs = to_float(rgbs)
     return rgbs
 
-def draw_gizmo_on_image(np_images, w2c, isOpenGL=True, scale=20.0):
+def draw_gizmo_on_image(np_images, w2c, isOpenGL=False, scale=.05):
     """
     adds a gizmo to a batch of pil images
     :param np_images: b x H x W x 3
-    :param w2c: b x 4 x 4 w2c transforms (opencv conventions)
+    :param w2c: b x 3 x 4 w2c transforms (opencv conventions)
     :param isOpenGL: if True, the w2c transforms are assumed to be in OpenGL conventions, else OpenCV conventions
     :param scale: scale of the gizmo
     :return: b x H x W x 3
@@ -48,18 +48,26 @@ def draw_gizmo_on_image(np_images, w2c, isOpenGL=True, scale=20.0):
         pil_image = Image.fromarray(to_8b(np_image))
         W, H = pil_image.size
         # W, H = image.shape[1], image.shape[0]
-        gizmo_cords = get_gizmo_coords() / scale
+        gizmo_cords = get_gizmo_coords(scale)
         gizmo_hom = to_hom(gizmo_cords)  #  = np.concatenate((gizmo_cords, np.ones_like(gizmo_cords[:, 0:1])), axis=-1)
-        verts_screen = (w2c[i] @ gizmo_hom.T).T
-        verts_screen_xy = homogenize(verts_screen, keepdim=True) # verts_screen_xy = verts_screen[:, :2] / verts_screen[:, 2:3]
+        verts_clip = (w2c[i] @ gizmo_hom.T).T
+        verts_clip = homogenize(verts_clip) # verts_screen_xy = verts_screen[:, :2] / verts_screen[:, 2:3]
+        if isOpenGL:
+            raise NotImplementedError("OpenGL convention is not supported for now")
+            # if not (np.abs(verts_screen_xy[:, 2]) <= 1).all():
+            #    raise ValueError("OpenGL convention is not followed")
+            # verts_clip = verts_clip[:, :2]
+            # verts_screen = np.array([W, H]) * (verts_clip + 1) / 2
+        else:
+            verts_screen = verts_clip
         desired_loc = np.array([W - 40, H - 40])
-        verts_screen_xy += desired_loc - verts_screen_xy[0]
+        verts_screen += desired_loc - verts_screen[0]
         draw = ImageDraw.Draw(pil_image)
-        draw.line((tuple(verts_screen_xy[0]), tuple(verts_screen_xy[1])), fill="red", width = 0)
-        draw.line((tuple(verts_screen_xy[0]), tuple(verts_screen_xy[2])), fill="green", width = 0)
-        draw.line((tuple(verts_screen_xy[0]), tuple(verts_screen_xy[3])), fill="blue", width = 0)
+        draw.line((tuple(verts_screen[0]), tuple(verts_screen[1])), fill="red", width = 0)
+        draw.line((tuple(verts_screen[0]), tuple(verts_screen[2])), fill="green", width = 0)
+        draw.line((tuple(verts_screen[0]), tuple(verts_screen[3])), fill="blue", width = 0)
         new_images.append(np.array(pil_image))
-    return np.array(new_images) / 255.
+    return (np.array(new_images) / 255.).astype(np.float32)
 
 def merge_figures_with_line(img1, img2, lower_intersection=0.6, angle=np.pi/2, line_width=5):
     """

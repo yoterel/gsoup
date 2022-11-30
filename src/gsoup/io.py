@@ -49,7 +49,7 @@ def save_images(images, dst: Path, file_names: list = [], force_grayscale: bool 
         images = to_np(images)
     if np.isnan(images).any():
         raise ValueError("Images must be finite")
-    if images.dtype == np.float32:
+    if images.dtype == np.float32 or images.dtype == np.float64:
         images = to_8b(images)
     if images.ndim != 4:
         raise ValueError("Images must be of shape (b x H x W x C)")

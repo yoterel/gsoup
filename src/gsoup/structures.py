@@ -2,7 +2,7 @@ import torch
 import numpy as np
 import torch.nn as nn
 
-def get_gizmo_coords(scale=20.0):
+def get_gizmo_coords(scale=1.0):
     vertices = np.array([
         [0, 0, 0],
         [1, 0, 0],
