@@ -1,5 +1,7 @@
 import numpy as np
-from gsoup import structures
+from . import structures
+from .core import to_hom, homogenize
+
 
 class PolycopeSubStub:
 
@@ -72,8 +74,7 @@ def register_camera(ps, name, poses, edge_rad, group=True):
     e_tot = []
     c_tot = []
     for i, pose in enumerate(poses):
-        v = pose @ np.concatenate((v_cam, np.ones(len(v_cam))[:, None]), axis=1).T
-        v = v.T[:, :3]
+        v = homogenize((pose @ to_hom(v_cam).T).T)
         if group:
             v_tot.append(v)
             c_tot.append(c_cam)
@@ -99,7 +100,6 @@ def view(camera_poses=None, group_cameras=True):
     ps.init()
     ps.set_up_dir("z_up")
     edge_rad = 0.0005
-    point_rad = 0.002
     v_aabb, e_aabb, c_aabb = structures.get_aabb_coords()
     ps_net = ps.register_curve_network("aabb", v_aabb, e_aabb, radius=edge_rad)
     ps_net.add_color_quantity("color", c_aabb, defined_on='edges', enabled=True)

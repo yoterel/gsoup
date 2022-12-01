@@ -296,7 +296,7 @@ def to_np(arr: torch.Tensor):
         return np.array(arr)
     return arr.detach().cpu().numpy()
 
-def to_torch(arr: np.array, dtype=None, device="cpu"):
+def to_torch(arr: np.array, device="cpu", dtype=None):
     """
     converts a numpy array to a torch tensor
     :param arr: numpy array
