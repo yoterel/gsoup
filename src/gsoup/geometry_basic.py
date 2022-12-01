@@ -356,3 +356,19 @@ def merge_meshes(v1, f1, v2=None, f2=None):
     v = np.concatenate([v1, v2], axis=0)
     f = np.concatenate([f1, f2 + v1.shape[0]], axis=0)
     return v, f
+
+def find_princple_componenets(v: torch.Tensor):
+    """
+    finds the principle components of a points nx3
+    :param v: nx3 torch tensor of points
+    :return: the principle components (column major)
+    """
+    if type(v) == torch.Tensor:
+        cov = v.T @ v
+        vecs = torch.eig(cov, eigenvectors=True)[1]
+        if torch.det(vecs) < 0:
+            swap_axis = torch.tensor([[1, 0, 0], [0, 0, 1], [0, 1, 0]], dtype=v.dtype, device=v.device)
+            vecs = swap_axis @ vecs
+    else:
+        raise TypeError('v must be a torch tenor')
+    return vecs

@@ -11,6 +11,7 @@ from .core import (
     to_8b,
     to_float,
     create_random_cameras_on_unit_sphere,
+    opengl_project_from_opencv_intrinsics
 )
 
 from .geometry_basic import (
@@ -29,7 +30,7 @@ from .geometry_advanced import (
     calculate_vertex_incident_vector
 )
 
-from .io import (
+from .gsoup_io import (
     save_image,
     save_images,
     save_animation,

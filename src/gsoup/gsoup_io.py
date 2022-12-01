@@ -136,8 +136,8 @@ def save_obj(path: Path, vertices, faces):
     :param vertices: (n x 3) tensor of vertices
     :param faces: (m x 3) tensor of vertex indices
     """
-    filename = Path(filename)
-    if filename.suffix not in [".obj", ".ply"]:
+    path = Path(path)
+    if path.suffix not in [".obj", ".ply"]:
         raise ValueError("Only .obj and .ply are supported")
     if type(vertices) == torch.Tensor:
         vertices = vertices.detach().cpu().numpy()
@@ -149,8 +149,8 @@ def save_obj(path: Path, vertices, faces):
         raise ValueError("Vertices must be finite")
     if np.isnan(faces).any():
         raise ValueError("Faces must be finite")
-    if vertices.dtype != np.float32:
-        raise ValueError("Vertices must be of type float32")
-    if faces.dtype != np.int64:
-        raise ValueError("Faces must be of type int64")
+    if vertices.dtype != np.float32 and vertices.dtype != np.float64:
+        raise ValueError("Vertices must be of type float32 / float64")
+    if faces.dtype != np.int32 and faces.dtype != np.int64:
+        raise ValueError("Faces must be of type int32 / int64")
     igl.write_obj(str(path), vertices, faces)
