@@ -10,6 +10,9 @@ from .core import (
     to_torch,
     to_8b,
     to_float,
+    rotx,
+    roty,
+    rotz,
     create_random_cameras_on_unit_sphere,
     opengl_c2w_to_opencv_c2w,
     opengl_project_from_opencv_intrinsics,
@@ -23,7 +26,8 @@ from .geometry_basic import (
     calc_vertex_normals,
     calc_edge_length,
     get_center_of_attention,
-    scale_poses
+    scale_poses,
+    find_princple_componenets,
 )
 
 from .geometry_advanced import (
@@ -35,6 +39,8 @@ from .gsoup_io import (
     save_image,
     save_images,
     save_animation,
+    save_mesh,
+    save_meshes,
     save_obj,
     load_images,
     load_obj,

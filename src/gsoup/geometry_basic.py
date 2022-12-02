@@ -365,7 +365,10 @@ def find_princple_componenets(v: torch.Tensor):
     """
     if type(v) == torch.Tensor:
         cov = v.T @ v
-        vecs = torch.eig(cov, eigenvectors=True)[1]
+        _, vecs = torch.linalg.eig(cov)
+        if torch.imag(vecs).any():
+            raise ValueError('imaginary eigenvectors')
+        vecs = torch.real(vecs)
         if torch.det(vecs) < 0:
             swap_axis = torch.tensor([[1, 0, 0], [0, 0, 1], [0, 1, 0]], dtype=v.dtype, device=v.device)
             vecs = swap_axis @ vecs
