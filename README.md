@@ -1,6 +1,6 @@
 # Graphics Soup
 
-A python toolkit for various graphics related computations
+A python library impleneting various geometric and graphics algorithms with focus on clarity rather than performance
 
 ## Installation
 
