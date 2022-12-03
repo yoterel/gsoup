@@ -1,4 +1,4 @@
-# Graphics Soup
+# gsoup
 
 A python library impleneting various geometric and graphics algorithms with focus on clarity rather than performance
 
