@@ -81,3 +81,14 @@ def test_normalize_vertices_torch():
     v = torch.rand(100, 3) * 100
     v_normalized = gsoup.normalize_vertices(v)
     assert (v_normalized < 1.0).all()
+
+def test_structures():
+    v, f = gsoup.structures.cube()
+    gsoup.save_obj("resource/cube.obj", v, f)
+    v, f = gsoup.structures.icosehedron()
+    gsoup.save_obj("resource/ico.obj", v, f)
+
+def test_qslim():
+    v, f = gsoup.structures.cube()
+    v_new, f_new = gsoup.qslim(v, f, budget = 4)
+    assert f_new.shape[0] == 4

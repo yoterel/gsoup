@@ -31,8 +31,10 @@ from .geometry_basic import (
 )
 
 from .geometry_advanced import (
-    calculate_vertex_incident_scalar,
-    calculate_vertex_incident_vector
+    distribute_field,
+    distribute_scalar_field,
+    distribute_vector_field,
+    qslim
 )
 
 from .gsoup_io import (
@@ -44,6 +46,7 @@ from .gsoup_io import (
     save_obj,
     load_images,
     load_obj,
+    load_mesh,
 )
 
 from .image import (

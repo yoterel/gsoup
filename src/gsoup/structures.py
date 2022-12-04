@@ -2,6 +2,84 @@ import torch
 import numpy as np
 import torch.nn as nn
 
+def icosehedron(scale=1.0, centered=True):
+    t = (1.0 + np.sqrt(5.0)) / 2.0
+    vertices = np.array([
+        [-1,  t,  0],
+        [ 1,  t,  0],
+        [-1, -t,  0],
+        [ 1, -t,  0],
+
+        [ 0, -1,  t],
+        [ 0,  1,  t],
+        [ 0, -1, -t],
+        [ 0,  1, -t],
+
+        [ t,  0, -1],
+        [ t,  0,  1],
+        [-t,  0, -1],
+        [-t,  0,  1],
+    ]).astype(np.float32)
+    if centered:
+        vertices -= np.array([0.0, 0.0, 0.0])
+    vertices *= scale
+    faces = np.array([
+        [ 0, 11,  5],
+        [ 0,  5,  1],
+        [ 0,  1,  7],
+        [ 0,  7, 10],
+        [ 0, 10, 11],
+
+        [ 1,  5,  9],
+        [ 5, 11,  4],
+        [11, 10,  2],
+        [10,  7,  6],
+        [ 7,  1,  8],
+
+        [ 3,  9,  4],
+        [ 3,  4,  2],
+        [ 3,  2,  6],
+        [ 3,  6,  8],
+        [ 3,  8,  9],
+
+        [ 4,  9,  5],
+        [ 2,  4, 11],
+        [ 6,  2, 10],
+        [ 8,  6,  7],
+        [ 9,  8,  1],
+    ]).astype(np.int32)
+    return vertices, faces
+
+def cube(scale=1.0, centered=True):
+    vertices = np.array([
+        [0, 0, 0],
+        [1, 0, 0],
+        [0, 1, 0],
+        [0, 0, 1],
+        [1, 1, 0],
+        [0, 1, 1],
+        [1, 0, 1],
+        [1, 1, 1],
+    ]).astype(np.float32)
+    if centered:
+        vertices -= np.array([0.5, 0.5, 0.5])
+    vertices *= scale
+    faces = np.array([
+        [0, 2, 1],
+        [0, 3, 2],
+        [0, 1, 3],
+        [1, 6, 3],
+        [1, 4, 6],
+        [1, 2, 4],
+        [2, 5, 4],
+        [2, 3, 5],
+        [3, 6, 5],
+        [5, 6, 7],
+        [4, 5, 7],
+        [4, 7, 6],
+    ]).astype(np.int32)
+    return vertices, faces
+
 def get_gizmo_coords(scale=1.0):
     vertices = np.array([
         [0, 0, 0],

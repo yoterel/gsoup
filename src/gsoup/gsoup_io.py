@@ -112,7 +112,21 @@ def load_images(path, to_float=False, channels_last=True, return_paths=False, to
     else:
         return images
 
-def load_obj(path, load_normals=False, to_torch=False, device=None):
+def load_mesh(path: Path, load_normals=False, to_torch=False, device=None):
+    """
+    loads a mesh from a file
+    :param path: path to mesh file
+    :param load_normals: if True, loads normals
+    :param to_torch: if True, returns a torch tensor
+    :param device: device to load tensor to
+    :return: (V x 3) tensor of vertices, (F x 3) tensor of faces, and optionally (V x 3) tensor of normals
+    """
+    path = Path(path)
+    if path.suffix != ".obj":
+        raise ValueError("Only .obj are supported")
+    return load_obj(path, load_normals=load_normals, to_torch=to_torch, device=device)
+
+def load_obj(path: Path, load_normals=False, to_torch=False, device=None):
     """
     uses igl backend to read an obj file
     :param path: path to obj file
@@ -121,6 +135,12 @@ def load_obj(path, load_normals=False, to_torch=False, device=None):
     :param device: device to load tensor to
     :return: (V x 3) tensor, (F x 3) tensor, and optionally (V x 3) tensor
     """
+    if not path.exists():
+        raise ValueError("Path does not exist")
+    if not path.is_file():
+        raise ValueError("Path must be a file")
+    if path.suffix != ".obj":
+        raise ValueError("Only .obj are supported")
     v, _, n, f, _, _ = igl.read_obj(str(path))
     if to_torch and device is not None:
         v = torch.tensor(v, dtype=torch.float, device=device)
@@ -131,7 +151,7 @@ def load_obj(path, load_normals=False, to_torch=False, device=None):
     else:
         return v, f
 
-def save_obj(path, vertices, faces):
+def save_obj(path: Path, vertices, faces):
     """"
     uses igl backend to write an obj file
     :param path: path to save obj file to
@@ -155,7 +175,11 @@ def save_obj(path, vertices, faces):
         raise ValueError("Vertices must be of type float32 / float64")
     if faces.dtype != np.int32 and faces.dtype != np.int64:
         raise ValueError("Faces must be of type int32 / int64")
-    igl.write_obj(str(path), vertices, faces)
+    with open(str(path), "w") as file:
+        for v in vertices:
+            file.write("v {} {} {}\n".format(v[0], v[1], v[2]))  # write vertices
+        for f in faces:
+            file.write("f {} {} {}\n".format(f[0] + 1, f[1] + 1, f[2] + 1))  # obj indices start at 1
 
 def save_ply(path: Path, vertices, faces):
     raise NotImplementedError

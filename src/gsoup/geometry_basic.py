@@ -375,3 +375,56 @@ def find_princple_componenets(v: torch.Tensor):
     else:
         raise TypeError('v must be a torch tenor')
     return vecs
+
+def remove_unreferenced_vertices(v, f):
+    """
+    removes unreferenced vertices from a mesh
+    :param v: Vx3 torch tensor of vertices
+    :param f: Fx3 torch tensor of faces
+    :return: the new vertices and faces
+    """
+    referenced = np.zeros((v.shape[0]), dtype=np.bool)
+    referenced[f.flatten()] = True
+    idx = -1 * np.ones((v.shape[0]), dtype=np.int32)
+    idx[referenced] = np.arange(np.sum(referenced), dtype=np.int32)
+    f = idx[f.flatten()].reshape((-1, f.shape[1]))
+    v = v[referenced]
+    return v, f, idx
+
+
+def get_edges(f: np.ndarray):
+    """
+    given a numpy array of faces of a triangular mesh F x 3, returns a numpy array of edges
+    :param f: F x 3 numpy array of faces
+    :return: E x 2 numpy array of edges
+    """
+    e1 = np.concatenate((f[:, 0:1], f[:, 1:2]), axis=1)
+    e2 = np.concatenate((f[:, 1:2], f[:, 2:3]), axis=1)
+    e3 = np.concatenate((f[:, 2:3], f[:, 0:1]), axis=1)
+    e = np.concatenate((e1, e2, e3), axis=0)
+    e = np.sort(e, axis=-1)
+    e = np.unique(e, axis=0)
+    return e
+
+
+def edge_contraction(v, f, edge_to_contract, new_v_location):
+    """
+    contracts an edge in a mesh and moves the vertex to a new location
+    :param v: V x 3 numpy array of vertices
+    :param f: F x 3 numpy array of faces
+    :param edge_to_contract: 2, numpy array of the edge to contract
+    :param new_v_location: 3, numpy array of the new vertex location
+    :return: the contracted mesh
+    """
+    v1 = edge_to_contract[0]
+    v2 = edge_to_contract[1]
+    # replace all instances of v1 with v2 in f
+    f[f==v1] = v2
+    # remove degenerate triangles
+    degenerate_mask = (np.diff(np.sort(f, axis=-1)) == 0).any(axis=-1)
+    f = f[~degenerate_mask] 
+    # place v2 in v_hat
+    v[v2] = new_v_location
+    # remove v1 from v
+    v, f, _ = remove_unreferenced_vertices(v, f)
+    return v, f
