@@ -1,6 +1,6 @@
-# gsoup
+# gsoup v0.0.1
 
-A python library impleneting various geometric and graphics algorithms with focus on clarity rather than performance
+A python library impleneting various geometric and graphics algorithms with focus on clarity rather than performance.
 
 ## Installation
 

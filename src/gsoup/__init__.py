@@ -1,3 +1,5 @@
+__version__ = "0.0.0"
+
 from .core import (
     broadcast_batch,
     to_hom,
