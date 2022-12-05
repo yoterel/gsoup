@@ -3,12 +3,16 @@
 A python library impleneting various geometric and graphics algorithms with focus on clarity rather than performance.
 
 ## Installation
-
-git clone this repo
-
-`cd gsoup`
-`pip install -e .`
+`pip install gsoup`
 
 ## Usage
-
 `import gsoup`
+
+## Developers
+`git clone https://github.com/yoterel/gsoup.git`
+
+`cd gsoup`
+
+`pip install -e .`
+
+Feel free to submit pull requests (run the tests first).
