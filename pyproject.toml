@@ -1,3 +1,31 @@
 [build-system]
-requires = ["setuptools>=43.0.0", "wheel"]
+requires = ["setuptools>=61.0.0", "wheel"]
 build-backend = "setuptools.build_meta"
+
+[project]
+name = "gsoup"
+version = "0.0.1"
+description = "A geoemtry & graphics library with focus on clarity rather than performance."
+readme = "README.md"
+authors = [{ name = "Yotam Erel", email = "erelyotam@gmail.com" }]
+license = { file = "LICENSE" }
+classifiers = [
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3",
+]
+keywords = ["geometry", "graphics", "autograd", "vision"]
+dependencies = [
+    "torch >= 1.10",
+    "numpy",
+    "Pillow", 
+    "scipy",
+    "igl",
+]
+requires-python = ">=3.7"
+
+[project.optional-dependencies]
+dev = ["bumpver", "pytest", "build", "twine"]
+
+[project.urls]
+Homepage = "https://github.com/yoterel/gsoup"

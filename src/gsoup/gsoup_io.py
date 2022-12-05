@@ -70,6 +70,29 @@ def save_images(images, dst, file_names: list = [], force_grayscale: bool = Fals
         else:
             pil_image.save(str(Path(dst, "{:05d}.png".format(i))))
 
+def load_image(path, to_float=False, channels_last=True, return_paths=False, to_torch=False, device=None):
+    """
+    loads images from a folder or a single image from a file
+    :param path: path to folder with images / file
+    :param to_float: if True, converts images to float
+    :param return_paths: if True, returns a list of file paths
+    :param to_torch: if True, returns a torch tensor
+    :param device: device to load tensor to
+    :return: (b x H x W x 3) tensor, and optionally a list of file names
+    """
+    path = Path(path)
+    if not path.exists():
+        raise FileNotFoundError("Path does not exist")
+    if path.is_dir():
+        raise FileNotFoundError("Path must be a file")
+    elif path.is_file():
+        if return_paths:
+            image, name = load_images(path, to_float=to_float, channels_last=channels_last, return_paths=return_paths, to_torch=to_torch, device=device)
+            return image[0], name[0]
+        else:
+            image = load_images(path, to_float=to_float, channels_last=channels_last, return_paths=return_paths, to_torch=to_torch, device=device)
+            return image[0]
+
 def load_images(path, to_float=False, channels_last=True, return_paths=False, to_torch=False, device=None):
     """
     loads images from a folder or a single image from a file
