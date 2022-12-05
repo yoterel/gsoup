@@ -23,7 +23,7 @@ def to_hom(x):
 
 def homogenize(x, keepdim=False):
     """
-    converts a 3d vector to homogeneous coordinates
+    normalizes a homogeneous vector by dividing by the last coordinate
     :param x: nx3 numpy array
     :return: nx4 numpy array
     """
@@ -41,7 +41,7 @@ def normalize(x, eps=1e-7):
 
 def broadcast_batch(*args):
     """
-    broadcast a list of arrays to the same shape on the batch dimnesion
+    broadcast a list of arrays to the same shape on the batch dimension
     assumes first dimension is batch unless ndim = 1 for all inputs (but then does not broadcast)
     :param args: list of arrays
     :return: list of arrays with the same shape
