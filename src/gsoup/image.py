@@ -1,7 +1,7 @@
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 from scipy import interpolate, spatial
-from .core import to_8b, to_float, to_hom, homogenize
+from .core import to_8b, to_float, to_hom, homogenize, broadcast_batch
 from .structures import get_gizmo_coords
 
 
@@ -32,7 +32,8 @@ def draw_text_on_image(images, text_per_image, fill_white=True):
 
 def draw_gizmo_on_image(np_images, w2c, isOpenGL=False, scale=.05):
     """
-    adds a gizmo to a batch of pil images
+    adds a gizmo to a batch of np images.
+    note: will broadcast np_images and w2c against eachother.
     :param np_images: b x H x W x 3
     :param w2c: b x 3 x 4 w2c transforms (opencv conventions)
     :param isOpenGL: if True, the w2c transforms are assumed to be in OpenGL conventions, else OpenCV conventions
@@ -44,6 +45,7 @@ def draw_gizmo_on_image(np_images, w2c, isOpenGL=False, scale=.05):
         raise ValueError("np_images must be b x H x W x 3")
     if w2c.ndim != 3:
         raise ValueError("KRt must be b x 3 x 4")
+    np_images, w2c = broadcast_batch(np_images, w2c)
     for i, np_image in enumerate(np_images):
         pil_image = Image.fromarray(to_8b(np_image))
         W, H = pil_image.size
