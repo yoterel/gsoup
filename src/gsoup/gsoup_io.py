@@ -16,7 +16,7 @@ def save_animation(images, dst):
         images = to_np(images)
     if np.isnan(images).any():
         raise ValueError("Images must be finite")
-    if images.dtype == np.uint8:
+    if images.dtype != np.uint8:
         images = to_8b(images)
     if images.shape[-1] == 1:
         images = [Image.fromarray(image[..., 0], mode="L").convert('P') for image in images]
