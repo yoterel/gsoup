@@ -4,6 +4,24 @@ from scipy import interpolate, spatial
 from .core import to_8b, to_float, to_hom, homogenize, broadcast_batch
 from .structures import get_gizmo_coords
 
+def alpha_compose(images, bg_color=None):
+    """
+    composes a single or batch of RGBA images into a single or batch of RGB images
+    :param image: b x H x W x 4 or H x W x 4
+    :param bg_color: 3 or b x 3
+    :return: b x H x W x 3 or H x W x 3
+    """
+    if bg_color is None:
+        bg_color = np.array([0., 0., 0.]).astype(np.float32)
+    if images.ndim != 3 and images.ndim != 4:
+        raise ValueError("image must be 3 or 4 dimensional")
+    if images.shape[-1] != 4:
+        raise ValueError("image must have 4 channels")
+    if images.dtype != np.float32:
+        images = to_float(images)
+    alpha = images[..., 3:4]
+    rgb = images[..., :3]
+    return alpha * rgb + (1 - alpha) * bg_color
 
 def draw_text_on_image(images, text_per_image, fill_white=True):
     """

@@ -330,6 +330,8 @@ def to_float(x: np.array, clip=True):
         if clip:
             x = np.clip(x, 0, 1)
         return x
+    else:
+        raise ValueError("unsupported dtype")
 
 def to_PIL(x: np.array):
     """
@@ -339,6 +341,8 @@ def to_PIL(x: np.array):
         return Image.fromarray(to_8b(x))
     elif x.ndim == 2:
         return Image.fromarray(to_8b(x[:, :, None]), mode="L")
+    else:
+        raise ValueError("unsupported array dimensions")
 
 def translate(t):
     """

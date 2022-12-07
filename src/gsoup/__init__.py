@@ -53,6 +53,7 @@ from .gsoup_io import (
 )
 
 from .image import (
+    alpha_compose,
     draw_text_on_image,
     draw_gizmo_on_image,
     merge_figures_with_line,

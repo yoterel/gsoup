@@ -16,7 +16,7 @@ def save_animation(images, dst):
         images = to_np(images)
     if np.isnan(images).any():
         raise ValueError("Images must be finite")
-    if images.dtype == np.float32:
+    if images.dtype == np.uint8:
         images = to_8b(images)
     if images.shape[-1] == 1:
         images = [Image.fromarray(image[..., 0], mode="L").convert('P') for image in images]
@@ -26,17 +26,19 @@ def save_animation(images, dst):
     images[0].save(str(dst)+".gif", save_all=True, append_images=images[1:], optimize=False, duration=100, loop=0)
 
 
-def save_image(image, dst, file_name: str = None, force_grayscale: bool = False):
+def save_image(image, dst, force_grayscale: bool = False):
     """
     saves single image as png
     :param image: (H x W x C) tensor
-    :param dst: path to save image to
+    :param dst: path to save image to (full path to destination, suffix not neccessary but allowed)
     :param force_grayscale: if True, saves image as grayscale
     :param file_name: if provided, saves image with this name
     """
     if image.ndim != 3:
         raise ValueError("Image must be 3 dimensional")
-    save_images(image[None, ...], dst, [file_name], force_grayscale)
+    dst = Path(dst)
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    save_images(image[None, ...], dst.parent, [dst.name], force_grayscale)
 
 def save_images(images, dst, file_names: list = [], force_grayscale: bool = False):
     """
