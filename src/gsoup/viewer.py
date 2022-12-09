@@ -33,6 +33,9 @@ class PolyscopeStub:
 
     def register_point_cloud(self, *args, **kwargs):
         return PolycopeSubStub()
+    
+    def register_surface_mesh(self, *args, **kwargs):
+        return PolycopeSubStub()
 
 try:
     import polyscope as ps
@@ -90,10 +93,39 @@ def register_camera(ps, name, poses, edge_rad, group=True):
         ps_net.add_color_quantity("color", c_tot, defined_on='edges', enabled=True)
     return v_tot, e_tot, c_tot
 
-def view(camera_poses=None, group_cameras=True):
+def register_mesh(ps, name, v, f, transparency=1.0, c_vertices=None, c_faces=None, v_vertices=None):
+    ps_mesh = ps.register_surface_mesh(name, v, f,
+                                       edge_width=0.,
+                                       transparency=transparency,
+                                       smooth_shade=True)  # color=np.array([0.5, 0.1, 0.3])
+    if c_vertices is not None:
+        c = (c_vertices - np.min(c_vertices)) / (np.max(c_vertices) - np.min(c_vertices))
+        ps_mesh.add_scalar_quantity("vcolors", c,
+                                    defined_on="vertices",
+                                    enabled=True,
+                                    vminmax=(0., 1.),
+                                    cmap="reds")
+    if c_faces is not None:
+        c = (c_faces - np.min(c_faces)) / (np.max(c_faces) - np.min(c_faces))
+        ps_mesh.add_scalar_quantity("fcolors", c,
+                                    defined_on="faces",
+                                    enabled=True,
+                                    vminmax=(0., 1.),
+                                    cmap="reds")
+    if v_vertices is not None:
+        ps_mesh.add_vector_quantity("vecs", v_vertices,
+                                    enabled=True,
+                                    radius=0.001,
+                                    length=0.01,
+                                    color=(0.2, 0.5, 0.5))
+    return ps_mesh
+
+def view(camera_poses=None, meshes=None, pointclouds=None, group_cameras=True):
     """
     visualizes a camera setup
     :param camera_pose: (n, 4, 4) np array of camera to world transforms
+    :param meshes: list of (v, f) tuples
+    :param pointclouds: list of v
     :param group_cameras: if true, accelerates view but groups camera as a single object
     :return:
     """
@@ -106,6 +138,12 @@ def view(camera_poses=None, group_cameras=True):
     register_pointcloud(ps, "center_of_world", np.zeros((1, 3)), c=np.array([1., 1., 1.])[None, :], radius=0.005, mode="sphere")
     if camera_poses is not None:
         v_tot, e_tot, c_tot = register_camera(ps, "cameras", camera_poses, edge_rad, group_cameras)
+    if meshes is not None:
+        for i, mesh in enumerate(meshes):
+            register_mesh(ps, "mesh_{}".format(i), mesh[0], mesh[1])
+    if pointclouds is not None:
+        for i, pointcloud in enumerate(pointclouds):
+            register_pointcloud(ps, "pc_{}".format(i), pointcloud[0])
     ps.show()
 
 
