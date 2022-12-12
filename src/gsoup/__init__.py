@@ -9,6 +9,7 @@ from .core import (
     to_34,
     look_at_np,
     to_np,
+    to_numpy,
     to_torch,
     to_8b,
     to_float,
@@ -31,6 +32,9 @@ from .geometry_basic import (
     get_center_of_attention,
     scale_poses,
     find_princple_componenets,
+    rotmat2qvec,
+    qvec2rotmat,
+    qslerp
 )
 
 from .geometry_advanced import (

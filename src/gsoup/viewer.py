@@ -18,7 +18,8 @@ class PolycopeSubStub:
 class PolyscopeStub:
     def __init__(self):
         self.ps_net = PolycopeSubStub()
-
+        self.SliderFloat = lambda *args, **kwargs: None
+        
     def init(self):
         return None
 
@@ -39,9 +40,11 @@ class PolyscopeStub:
 
 try:
     import polyscope as ps
+    import polyscope.imgui as psim
     ps.init()
 except RuntimeError:
     ps = PolyscopeStub()
+    psim = PolyscopeStub()
 
 
 def register_pointcloud(ps, name, points, c=None, s=None, v=None, radius=1e-2, mode="quad"):
@@ -68,7 +71,7 @@ def register_pointcloud(ps, name, points, c=None, s=None, v=None, radius=1e-2, m
                                           color=(0.2, 0.5, 0.5))
     return ps_pointcloud
 
-def register_camera(ps, name, poses, edge_rad, group=True):
+def register_camera(ps, name, poses, edge_rad, group=True, alpha=1.0):
     """
     register a camera structure to polyscope
     """
@@ -85,12 +88,14 @@ def register_camera(ps, name, poses, edge_rad, group=True):
         else:
             ps_net = ps.register_curve_network("{}_{}".format(name, i), v, e_cam, radius=edge_rad)
             ps_net.add_color_quantity("color", c_cam, defined_on='edges', enabled=True)
+            ps_net.set_transparency(alpha)
     if group:
         v_tot = np.array(v_tot).reshape(-1, 3)
         e_tot = np.array(e_tot).reshape(-1, 2)
         c_tot = np.array(c_tot).reshape(-1, 3)
         ps_net = ps.register_curve_network(name, v_tot, e_tot, radius=edge_rad)
         ps_net.add_color_quantity("color", c_tot, defined_on='edges', enabled=True)
+    ps_net.set_transparency(alpha)
     return v_tot, e_tot, c_tot
 
 def register_mesh(ps, name, v, f, transparency=1.0, c_vertices=None, c_faces=None, v_vertices=None):
@@ -120,7 +125,42 @@ def register_mesh(ps, name, v, f, transparency=1.0, c_vertices=None, c_faces=Non
                                     color=(0.2, 0.5, 0.5))
     return ps_mesh
 
-def view(camera_poses=None, meshes=None, pointclouds=None, group_cameras=True):
+#### global
+poses = None
+#### global
+
+def slider_callback():
+    global ui_float, poses
+    edge_rad = 0.0005
+    changed, ui_float = psim.SliderFloat("step", ui_float, v_min=0, v_max=len(poses))
+    if changed and poses is not None:
+        if int(ui_float) >= len(poses):
+            ui_float = len(poses)-1
+        v_tot, e_tot, c_tot = register_camera(ps, "poses", poses[int(ui_float)], edge_rad, group=True)
+        
+
+def slide_view(camera_poses):
+    """
+    given a tensor of t x b x 4 x 4 camera poses, where t is time axis (or step number), b is batch axis, and 4x4 is the camera pose matrix,
+    show the batch of poses and allow scrolling through the time axis using a slider.
+    """
+    global poses
+    poses = camera_poses
+    ps.init()
+    ps.set_user_callback(slider_callback)
+    ps.set_up_dir("z_up")
+    ps.set_ground_plane_mode("shadow_only")
+    edge_rad = 0.0005
+    point_rad = 0.002
+    v_aabb, e_aabb, c_aabb = structures.get_aabb_coords()
+    ps_net = ps.register_curve_network("aabb", v_aabb, e_aabb, radius=edge_rad)
+    ps_net.add_color_quantity("color", c_aabb, defined_on='edges', enabled=True)
+    register_pointcloud(ps, "center_of_world", np.zeros((1, 3)), c=np.array([1., 1., 1.])[None, :], radius=0.005, mode="sphere")
+    v_tot, e_tot, c_tot = register_camera(ps, "poses_orig", poses[0], edge_rad, group=True, alpha=0.3)
+    ps.show()
+
+
+def static_view(camera_poses=None, meshes=None, pointclouds=None, group_cameras=True):
     """
     visualizes a camera setup
     :param camera_pose: (n, 4, 4) np array of camera to world transforms

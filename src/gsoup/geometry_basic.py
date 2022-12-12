@@ -144,8 +144,8 @@ def calc_edge_length(vertices: torch.Tensor, edges: torch.Tensor):
 def prepend_dummies(vertices: torch.Tensor, faces: torch.Tensor):
     """
     prepend dummy elements to vertices and faces to enable "masked" scatter operations
-    # V,D
-    # F,3 long
+    :param vertices (V,3)
+    :param faces (F,3) long
     """
     V, D = vertices.shape
     vertices = torch.concat((torch.full((1, D), fill_value=torch.nan, device=vertices.device), vertices), dim=0)
@@ -156,8 +156,9 @@ def prepend_dummies(vertices: torch.Tensor, faces: torch.Tensor):
 def remove_dummies(vertices: torch.Tensor, faces: torch.Tensor):
     """
     remove dummy elements added with prepend_dummies()
-    # V,D - first vertex all nan and unreferenced
-    # F,3 long - first face all zeros
+    :param vertices (V,3) - first vertex all nan and unreferenced
+    :param faces (F,3) long - first face all zeros
+    :return: V-1,D and F-1,3
     """
     return vertices[1:], faces[1:] - 1
 
@@ -184,28 +185,44 @@ def ray_sphere_intersection(sphere_origin, sphere_radius, ray_origin, ray_direct
 
 def vec2skew(v):
     """
+    returns the skew operator matrix given a vector
     :param v:  (3, ) torch tensor
     :return:   (3, 3)
     """
-    zero = torch.zeros(1, dtype=torch.float32, device=v.device)
-    skew_v0 = torch.cat([zero, -v[2:3], v[1:2]])  # (3, 1)
-    skew_v1 = torch.cat([v[2:3], zero, -v[0:1]])
-    skew_v2 = torch.cat([-v[1:2], v[0:1], zero])
-    skew_v = torch.stack([skew_v0, skew_v1, skew_v2], dim=0)  # (3, 3)
-    return skew_v  # (3, 3)
+    return batch_vec2skew(v[None, :])[0]
 
+def batch_vec2skew(v):
+    """
+    returns a batch of skew operator matrices given a batch of vectors
+    :param v:  (B, 3) torch tensor
+    :return:   (B, 3, 3)
+    """
+    zero = torch.zeros_like(v[:, 0:1])
+    skew_v0 = torch.cat([zero, -v[:, 2:3], v[:, 1:2]], dim=1)  # (B, 3)
+    skew_v1 = torch.cat([v[:, 2:3], zero, -v[:, 0:1]], dim=1)
+    skew_v2 = torch.cat([-v[:, 1:2], v[:, 0:1], zero], dim=1)
+    skew_v = torch.stack([skew_v0, skew_v1, skew_v2], dim=1)  # (B, 3, 3)
+    return skew_v  # (B, 3, 3)
+
+def batch_rotvec2mat(r: torch.Tensor):
+    """so(3) vector to SO(3) matrix
+    :param r: (3, ) axis-angle, torch tensor
+    :return:  (3, 3)
+    """
+    if r.ndim != 2:
+        raise ValueError("r must be 2D tensor.")
+    skew_r = batch_vec2skew(r)  # (3, 3)
+    norm_r = r.norm(dim=-1, keepdim=True)[:, :, None] + 1e-15
+    eye = torch.eye(3, dtype=torch.float32, device=r.device)[None, :]
+    R = eye + (torch.sin(norm_r) / norm_r) * skew_r + ((1 - torch.cos(norm_r)) / norm_r ** 2) * (skew_r @ skew_r)
+    return R
 
 def rotvec2mat(r: torch.Tensor):
     """so(3) vector to SO(3) matrix
     :param r: (3, ) axis-angle, torch tensor
     :return:  (3, 3)
     """
-    skew_r = vec2skew(r)  # (3, 3)
-    norm_r = r.norm() + 1e-15
-    eye = torch.eye(3, dtype=torch.float32, device=r.device)
-    R = eye + (torch.sin(norm_r) / norm_r) * skew_r + ((1 - torch.cos(norm_r)) / norm_r ** 2) * (skew_r @ skew_r)
-    return R
-
+    return batch_rotvec2mat(r[None, :])[0]
 
 def mat2rotvec(r: torch.Tensor):
     """SO(3) matrix to so(3) vector
@@ -225,7 +242,7 @@ def mat2rotvec(r: torch.Tensor):
 
 def qvec2rotmat(qvec: np.array):
     """
-    converts a Quaternions to a rotation matrix
+    converts a quaternions to a rotation matrix
     :param qvec: np array (4,)
     :return: 3x3 np array
     """
@@ -244,7 +261,7 @@ def qvec2rotmat(qvec: np.array):
 
 def rotmat2qvec(R: np.array):
     """
-    converts a rotation matrix to a Quaternions
+    converts a rotation matrix to a quaternion
     :param R: np array of size 3x3
     :return: qvec (4,)
     """
@@ -264,10 +281,10 @@ def rotmat2qvec(R: np.array):
 def qslerp(qa, qb, t):
     """
     interpolates between two quanternions
-    :param qa: 
-    :param qb:
-    :param t:
-    :return:
+    :param qa: first quaternions
+    :param qb: second quaternions
+    :param t: number between 0 and 1 indicating the interpolation factor
+    :return: b x 4 array of quaternions
     """
     qm = np.zeros_like(qa)
     cosHalfTheta = qa.dot(qb)
