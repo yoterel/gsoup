@@ -41,7 +41,7 @@ from .geometry_advanced import (
     distribute_field,
     distribute_scalar_field,
     distribute_vector_field,
-    qslim
+    qem
 )
 
 from .gsoup_io import (

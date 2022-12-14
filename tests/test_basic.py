@@ -94,7 +94,7 @@ def test_structures():
     assert np.allclose(v, v1)
     assert np.allclose(f, f1)
 
-def test_qslim():
+def test_qem():
     v, f = gsoup.structures.cube()
-    v_new, f_new = gsoup.qslim(v, f, budget = 4)
+    v_new, f_new = gsoup.qem(v, f, budget = 4)
     assert f_new.shape[0] == 4
