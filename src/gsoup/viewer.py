@@ -19,7 +19,7 @@ class PolyscopeStub:
     def __init__(self):
         self.ps_net = PolycopeSubStub()
         self.SliderFloat = lambda *args, **kwargs: None
-        
+
     def init(self):
         return None
 
@@ -185,5 +185,3 @@ def static_view(camera_poses=None, meshes=None, pointclouds=None, group_cameras=
         for i, pointcloud in enumerate(pointclouds):
             register_pointcloud(ps, "pc_{}".format(i), pointcloud[0])
     ps.show()
-
-
