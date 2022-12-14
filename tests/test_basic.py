@@ -85,8 +85,14 @@ def test_normalize_vertices_torch():
 def test_structures():
     v, f = gsoup.structures.cube()
     gsoup.save_obj("resource/cube.obj", v, f)
+    v1, f1 = gsoup.load_obj("resource/cube.obj")
+    assert np.allclose(v, v1)
+    assert np.allclose(f, f1)
     v, f = gsoup.structures.icosehedron()
     gsoup.save_obj("resource/ico.obj", v, f)
+    v1, f1 = gsoup.load_obj("resource/ico.obj")
+    assert np.allclose(v, v1)
+    assert np.allclose(f, f1)
 
 def test_qslim():
     v, f = gsoup.structures.cube()

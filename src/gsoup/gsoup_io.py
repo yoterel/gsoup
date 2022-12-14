@@ -160,6 +160,7 @@ def load_obj(path: Path, load_normals=False, to_torch=False, device=None):
     :param device: device to load tensor to
     :return: (V x 3) tensor, (F x 3) tensor, and optionally (V x 3) tensor
     """
+    path = Path(path)
     if not path.exists():
         raise ValueError("Path does not exist")
     if not path.is_file():
@@ -186,6 +187,8 @@ def save_obj(path: Path, vertices, faces):
     path = Path(path)
     if path.suffix != ".obj":
         raise ValueError("Only .obj and .ply are supported")
+    if not path.parent.exists():
+        path.parent.mkdir(parents=True, exist_ok=True)
     if type(vertices) == torch.Tensor:
         vertices = to_np(vertices)
     if type(faces) == torch.Tensor:
