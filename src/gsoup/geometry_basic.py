@@ -266,7 +266,7 @@ def rotmat2qvec(R: np.array):
     """
     q = np.empty((R.shape[0], 4), dtype=R.dtype)
     trace = np.trace(R)
-    expanded_trace = np.concatenate((np.diag(R), trace), axis=01)
+    expanded_trace = np.concatenate((np.diag(R), trace), axis=0)
     choice = np.argmax(expanded_trace, axis=-1)
     mask = choice != 3
     i = choice[mask]
