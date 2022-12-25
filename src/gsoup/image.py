@@ -35,7 +35,7 @@ def draw_text_on_image(images, text_per_image, fill_white=True):
     if is_float:
         images = to_8b(images)
     rgbs = [Image.fromarray(x) for x in images]
-    font = ImageFont.truetype("./FreeMono.ttf", 48)  # FreeSerif / FreeSans
+    font = ImageFont.truetype("./FreeMono.ttf", 48)
     if fill_white:
         fill = "white"
     else:

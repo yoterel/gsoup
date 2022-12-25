@@ -134,17 +134,21 @@ def look_at_torch(
         eye:torch.Tensor, #3
         at:torch.Tensor, #3
         up:torch.Tensor, #3
-        device:torch.device
+        device:torch.device,
+        openGL:bool=False
     ) -> torch.Tensor: #4,4
     """
     creates a lookat transform matrix (OpenCV convention)
     :param eye: where the camera is
     :param at: where the camera is looking
-    :param up: the up vector
+    :param up: the up vector of world space
     :param device: the device to put the matrix on
     :return: 4x4 lookat transform matrix
     """
-    z = (at - eye).type(torch.float32).to(device)
+    if openGL:
+        z = (eye - at).type(torch.float32).to(device)
+    else:
+        z = (at - eye).type(torch.float32).to(device)
     z /= torch.norm(z)
     x = torch.cross(up, z).type(torch.float32).to(device)
     x /= torch.norm(x)
