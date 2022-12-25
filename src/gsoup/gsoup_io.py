@@ -62,7 +62,7 @@ def save_images(images, dst, file_names: list = [], force_grayscale: bool = Fals
     for i, image in enumerate(images):
         if force_grayscale or images.shape[-1] == 1:
             if images.shape[-1] == 3:
-                image = image.mean(axis=-1, keepdims=True)
+                image = image.mean(axis=-1, keepdims=True).astype(np.uint8)
             pil_image = Image.fromarray(image[..., 0], mode="L")
         else:
             pil_image = Image.fromarray(image)
