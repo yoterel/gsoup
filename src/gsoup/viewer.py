@@ -98,7 +98,7 @@ def register_camera(ps, name, poses, edge_rad, group=True, alpha=1.0):
     ps_net.set_transparency(alpha)
     return v_tot, e_tot, c_tot
 
-def register_mesh(ps, name, v, f, transparency=1.0, c_vertices=None, c_faces=None, v_vertices=None):
+def register_mesh(ps, name, v, f, transparency=1.0, edge_width=0., c_vertices=None, c_faces=None, v_vertices=None):
     """
     regiter a mesh to polyscope
     :param ps: polyscope instance
@@ -111,7 +111,7 @@ def register_mesh(ps, name, v, f, transparency=1.0, c_vertices=None, c_faces=Non
     :param v_vertices: vertex vectors
     """
     ps_mesh = ps.register_surface_mesh(name, v, f,
-                                       edge_width=0.,
+                                       edge_width=edge_width,
                                        transparency=transparency,
                                        smooth_shade=True)  # color=np.array([0.5, 0.1, 0.3])
     if c_vertices is not None:
@@ -131,26 +131,27 @@ def register_mesh(ps, name, v, f, transparency=1.0, c_vertices=None, c_faces=Non
     if v_vertices is not None:
         ps_mesh.add_vector_quantity("vecs", v_vertices,
                                     enabled=True,
-                                    radius=0.001,
-                                    length=0.01,
+                                    radius=0.01,
+                                    length=1.0,
                                     color=(0.2, 0.5, 0.5))
     return ps_mesh
 
 #### global
+ui_float = 0.0
 poses = None
 meshes_v = None
-meshes_attribute = None
 meshes_f = None
+meshes_attribute = None
 #### global
 def meshes_slider_callback():
     global ui_float, meshes_v, meshes_f
     changed, ui_float = psim.SliderFloat("step", ui_float, v_min=0, v_max=len(meshes_v))
-    if changed and poses is not None:
+    if changed:
         if int(ui_float) >= len(meshes_v):
             ui_float = len(meshes_v)-1
         register_mesh(ps, "mesh", meshes_v[int(ui_float)],
                       meshes_f[int(ui_float)],
-                      v_vertices=meshes_attribute[int(ui_float)])
+                      v_vertices=meshes_attribute[int(ui_float)], edge_width=1.0)
 
 def meshes_slide_view(v, f, v_attribute):
     """
@@ -162,11 +163,10 @@ def meshes_slide_view(v, f, v_attribute):
     meshes_v = v
     meshes_f = f
     meshes_attribute = v_attribute
-    psim.set_user_callback(meshes_slider_callback)
+    ps.set_user_callback(meshes_slider_callback)
     ps.set_up_dir("z_up")
-    register_mesh(ps, "mesh", meshes_v[0],
-                      meshes_f[0],
-                      v_vertices=meshes_attribute[0])
+    register_mesh(ps, "mesh", meshes_v[0], meshes_f[0],
+                  v_vertices=meshes_attribute[0], edge_width=1.0)
     ps.show()
 
 def poses_slider_callback():
@@ -198,7 +198,7 @@ def poses_slide_view(camera_poses):
     v_tot, e_tot, c_tot = register_camera(ps, "poses_orig", poses[0], edge_rad, group=True, alpha=0.3)
     ps.show()
 
-def static_poses_view(camera_poses=None, meshes=None, pointclouds=None, group_cameras=True):
+def poses_static_view(camera_poses=None, meshes=None, pointclouds=None, group_cameras=True):
     """
     visualizes a camera setup
     :param camera_pose: (n, 4, 4) np array of camera to world transforms
