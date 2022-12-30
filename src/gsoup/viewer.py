@@ -99,6 +99,17 @@ def register_camera(ps, name, poses, edge_rad, group=True, alpha=1.0):
     return v_tot, e_tot, c_tot
 
 def register_mesh(ps, name, v, f, transparency=1.0, c_vertices=None, c_faces=None, v_vertices=None):
+    """
+    regiter a mesh to polyscope
+    :param ps: polyscope instance
+    :param name: name of the mesh
+    :param v: vertices
+    :param f: faces
+    :param transparency: transparency of the mesh
+    :param c_vertices: vertex colors
+    :param c_faces: face colors
+    :param v_vertices: vertex vectors
+    """
     ps_mesh = ps.register_surface_mesh(name, v, f,
                                        edge_width=0.,
                                        transparency=transparency,
@@ -127,9 +138,38 @@ def register_mesh(ps, name, v, f, transparency=1.0, c_vertices=None, c_faces=Non
 
 #### global
 poses = None
+meshes_v = None
+meshes_attribute = None
+meshes_f = None
 #### global
+def meshes_slider_callback():
+    global ui_float, meshes_v, meshes_f
+    changed, ui_float = psim.SliderFloat("step", ui_float, v_min=0, v_max=len(meshes_v))
+    if changed and poses is not None:
+        if int(ui_float) >= len(meshes_v):
+            ui_float = len(meshes_v)-1
+        register_mesh(ps, "mesh", meshes_v[int(ui_float)],
+                      meshes_f[int(ui_float)],
+                      v_vertices=meshes_attribute[int(ui_float)])
 
-def slider_callback():
+def meshes_slide_view(v, f, v_attribute):
+    """
+    given a list size t of vertices Vx3 and faces Fx3
+    show the mesh as it changes through time t and allow scrolling through using a slider.
+    """
+    global meshes_v, meshes_f, meshes_attribute
+    ps.init()
+    meshes_v = v
+    meshes_f = f
+    meshes_attribute = v_attribute
+    psim.set_user_callback(meshes_slider_callback)
+    ps.set_up_dir("z_up")
+    register_mesh(ps, "mesh", meshes_v[0],
+                      meshes_f[0],
+                      v_vertices=meshes_attribute[0])
+    ps.show()
+
+def poses_slider_callback():
     global ui_float, poses
     edge_rad = 0.0005
     changed, ui_float = psim.SliderFloat("step", ui_float, v_min=0, v_max=len(poses))
@@ -138,8 +178,7 @@ def slider_callback():
             ui_float = len(poses)-1
         v_tot, e_tot, c_tot = register_camera(ps, "poses", poses[int(ui_float)], edge_rad, group=True)
         
-
-def slide_view(camera_poses):
+def poses_slide_view(camera_poses):
     """
     given a tensor of t x b x 4 x 4 camera poses, where t is time axis (or step number), b is batch axis, and 4x4 is the camera pose matrix,
     show the batch of poses and allow scrolling through the time axis using a slider.
@@ -147,7 +186,7 @@ def slide_view(camera_poses):
     global poses
     poses = camera_poses
     ps.init()
-    ps.set_user_callback(slider_callback)
+    ps.set_user_callback(poses_slider_callback)
     ps.set_up_dir("z_up")
     ps.set_ground_plane_mode("shadow_only")
     edge_rad = 0.0005
@@ -159,8 +198,7 @@ def slide_view(camera_poses):
     v_tot, e_tot, c_tot = register_camera(ps, "poses_orig", poses[0], edge_rad, group=True, alpha=0.3)
     ps.show()
 
-
-def static_view(camera_poses=None, meshes=None, pointclouds=None, group_cameras=True):
+def static_poses_view(camera_poses=None, meshes=None, pointclouds=None, group_cameras=True):
     """
     visualizes a camera setup
     :param camera_pose: (n, 4, 4) np array of camera to world transforms
