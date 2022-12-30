@@ -132,7 +132,7 @@ def register_mesh(ps, name, v, f, transparency=1.0, edge_width=0., c_vertices=No
         ps_mesh.add_vector_quantity("vecs", v_vertices,
                                     enabled=True,
                                     radius=0.01,
-                                    length=1.0,
+                                    length=0.1,
                                     color=(0.2, 0.5, 0.5))
     return ps_mesh
 
