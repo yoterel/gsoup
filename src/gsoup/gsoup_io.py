@@ -136,11 +136,10 @@ def load_images(path, to_float=False, channels_last=True, return_paths=False, to
     else:
         return images
 
-def load_mesh(path: Path, load_normals=False, to_torch=False, device=None):
+def load_mesh(path: Path, to_torch=False, device=None):
     """
     loads a mesh from a file
     :param path: path to mesh file
-    :param load_normals: if True, loads normals
     :param to_torch: if True, returns a torch tensor
     :param device: device to load tensor to
     :return: (V x 3) tensor of vertices, (F x 3) tensor of faces, and optionally (V x 3) tensor of normals
@@ -148,7 +147,7 @@ def load_mesh(path: Path, load_normals=False, to_torch=False, device=None):
     path = Path(path)
     if path.suffix != ".obj":
         raise ValueError("Only .obj are supported")
-    return load_obj(path, load_normals=load_normals, to_torch=to_torch, device=device)
+    return load_obj(path, to_torch=to_torch, device=device)
 
 def load_obj(path: Path, to_torch=False, device=None):
     """
@@ -184,9 +183,9 @@ def parse_obj(path: Path):
     faceList = []
     with open(path, 'r') as objFile:
         for line in objFile:
-            line = line.split("#")[0]
+            line = line.split("#")[0]  # remove comments
             split = line.split()
-            if not len(split):
+            if not len(split):  # skip empty lines
                 continue
             if split[0] == "v":
                 if 3 <= len(split[1:]) <= 4:  # x y z [w]
@@ -208,14 +207,12 @@ def parse_obj(path: Path):
                     if np.any(int_face < 0):
                         raise ValueError("negative face indices are not supported")
                     faceList.append(int_face)
-            
             elif split[0] == "vn":
                 if len(split[1:]) != 3:  # xn yn zn
                     raise ValueError("vertex normal {} has {} entries, but only 3 are supported".format(len(vertexNormalList), len(split[1:])))
                 else:
                     float_vertex_normal = np.array([np.float64(x) for x in split[1:]])
                     vertexNormalList.append(float_vertex_normal)
-            
             elif split[0] == "vt":
                 if 2 <= len(split[1:]) <= 3:  # u [v, w]
                     float_vertex_tex = np.array([np.float64(x) for x in split[1:]])
@@ -226,9 +223,9 @@ def parse_obj(path: Path):
                     vertexTextureList.append(float_vertex_tex)
                 else:
                     raise ValueError("vertex normal {} has {} entries, but only 3 are supported".format(len(vertexNormalList), len(split[1:])))
-            elif split[0] == "l":
+            elif split[0] == "l":  # ignore polyline elements
                 continue
-            elif split[0] == "vp":
+            elif split[0] == "vp":  # ignore parameter space vertices
                 continue
     v = np.stack(vertexList)
     f = np.stack(faceList)
