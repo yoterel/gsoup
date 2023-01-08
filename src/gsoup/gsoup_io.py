@@ -136,7 +136,7 @@ def load_images(path, to_float=False, channels_last=True, return_paths=False, to
     else:
         return images
 
-def load_mesh(path: Path, to_torch=False, device=None):
+def load_mesh(path: Path, to_torch=False, device=None, verbose=True):
     """
     loads a mesh from a file
     :param path: path to mesh file
@@ -147,9 +147,9 @@ def load_mesh(path: Path, to_torch=False, device=None):
     path = Path(path)
     if path.suffix != ".obj":
         raise ValueError("Only .obj are supported")
-    return load_obj(path, to_torch=to_torch, device=device)
+    return load_obj(path, to_torch=to_torch, device=device, verbose=verbose)
 
-def load_obj(path: Path, to_torch=False, device=None):
+def load_obj(path: Path, to_torch=False, device=None, verbose=True):
     """
     :param path: path to obj file
     :param to_torch: if True, returns a torch tensor
@@ -163,14 +163,14 @@ def load_obj(path: Path, to_torch=False, device=None):
         raise ValueError("Path must be a file")
     if path.suffix != ".obj":
         raise ValueError("Only .obj are supported")
-    v, f = parse_obj(path)
+    v, f = parse_obj(path, verbose=verbose)
     if to_torch and device is not None:
         v = torch.tensor(v, dtype=torch.float, device=device)
         f = torch.tensor(f,dtype=torch.long, device=device)
         # n = torch.tensor(n, dtype=torch.float, device=device)
     return v, f
 
-def parse_obj(path: Path):
+def parse_obj(path: Path, verbose=True):
     """
     A simple obj parser
     currently supports vertex and triangular face elements only
@@ -181,6 +181,7 @@ def parse_obj(path: Path):
     vertexNormalList = []
     colorList = []
     faceList = []
+    finite_flag = False
     with open(path, 'r') as objFile:
         for line in objFile:
             line = line.split("#")[0]  # remove comments
@@ -190,6 +191,8 @@ def parse_obj(path: Path):
             if split[0] == "v":
                 if 3 <= len(split[1:]) <= 4:  # x y z [w]
                     float_vertex = np.array([np.float64(x) for x in split[1:]])
+                    if not np.isfinite(float_vertex).all():
+                        finite_flag=True
                     vertexList.append(float_vertex)
                 elif len(split[1:]) == 6:
                     float_vertex = np.array([np.float64(x) for x in split[1:4]])
@@ -229,6 +232,8 @@ def parse_obj(path: Path):
                 continue
     v = np.stack(vertexList)
     f = np.stack(faceList)
+    if finite_flag and verbose:
+        print("Warning: some vertices in file were not finite")
     # vn = np.stack(vertexNormalList)
     # vt = np.stack(vertexTextureList)
     return v, f #, vn, vt
@@ -241,7 +246,7 @@ def save_obj(path: Path, vertices, faces):
     """
     path = Path(path)
     if path.suffix != ".obj":
-        raise ValueError("Only .obj and .ply are supported")
+        raise ValueError("Path must have suffix .obj")
     if not path.parent.exists():
         path.parent.mkdir(parents=True, exist_ok=True)
     if type(vertices) == torch.Tensor:
@@ -275,13 +280,13 @@ def save_mesh(path, vertices, faces):
     :param faces: (m x 3) tensor of vertex indices
     """
     path = Path(path)
-    if path.suffix not in [".obj", ".ply"]:
-        raise ValueError("Only .obj and .ply are supported")
+    if path.suffix not in [".obj"]:
+        raise ValueError("Only .obj is supported")
     else:
         if path.suffix == ".obj":
             save_obj(path, vertices, faces)
-        elif path.suffix == ".ply":
-            save_ply(path, vertices, faces)
+        # elif path.suffix == ".ply":
+        #     save_ply(path, vertices, faces)
 
 def save_pointcloud(path: Path, vertices):
     path = Path(path)
