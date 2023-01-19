@@ -98,7 +98,9 @@ def register_camera(ps, name, poses, edge_rad, group=True, alpha=1.0):
     ps_net.set_transparency(alpha)
     return v_tot, e_tot, c_tot
 
-def register_mesh(ps, name, v, f, transparency=1.0, edge_width=0., c_vertices=None, c_faces=None, v_vertices=None):
+def register_mesh(ps, name, v, f,
+                  transparency=1.0, edge_width=0., color=[0.5, 0.5, 0.5], smooth_shade=True,
+                  c_vertices=None, c_faces=None, s_faces=None, v_vertices=None):
     """
     regiter a mesh to polyscope
     :param ps: polyscope instance
@@ -106,28 +108,36 @@ def register_mesh(ps, name, v, f, transparency=1.0, edge_width=0., c_vertices=No
     :param v: vertices
     :param f: faces
     :param transparency: transparency of the mesh
-    :param c_vertices: vertex colors
-    :param c_faces: face colors
+    :param edge_width: edge width of the mesh
+    :param smooth_shade: smooth shading
+    :param c_vertices: vertex scalar values
+    :param c_faces: face scalar values
+    :param s_faces: face colors
     :param v_vertices: vertex vectors
     """
     ps_mesh = ps.register_surface_mesh(name, v, f,
                                        edge_width=edge_width,
                                        transparency=transparency,
-                                       smooth_shade=True)  # color=np.array([0.5, 0.1, 0.3])
+                                       color=color,
+                                       smooth_shade=smooth_shade)
     if c_vertices is not None:
         c = (c_vertices - np.min(c_vertices)) / (np.max(c_vertices) - np.min(c_vertices))
-        ps_mesh.add_scalar_quantity("vcolors", c,
+        ps_mesh.add_scalar_quantity("vscalar", c,
                                     defined_on="vertices",
                                     enabled=True,
                                     vminmax=(0., 1.),
-                                    cmap="reds")
+                                    cmap="rainbow")
     if c_faces is not None:
         c = (c_faces - np.min(c_faces)) / (np.max(c_faces) - np.min(c_faces))
-        ps_mesh.add_scalar_quantity("fcolors", c,
+        ps_mesh.add_scalar_quantity("fscalar", c,
                                     defined_on="faces",
                                     enabled=True,
                                     vminmax=(0., 1.),
-                                    cmap="reds")
+                                    cmap="rainbow")
+    if s_faces is not None:
+        ps_mesh.add_color_quantity("fcolor", s_faces,
+                                    defined_on="faces",
+                                    enabled=True)
     if v_vertices is not None:
         ps_mesh.add_vector_quantity("vecs", v_vertices,
                                     enabled=True,
@@ -219,8 +229,8 @@ def poses_static_view(camera_poses=None, meshes=None, pointclouds=None, group_ca
         v_tot, e_tot, c_tot = register_camera(ps, "cameras", camera_poses, edge_rad, group_cameras)
     if meshes is not None:
         for i, mesh in enumerate(meshes):
-            register_mesh(ps, "mesh_{}".format(i), mesh[0], mesh[1])
+            register_mesh(ps, "mesh_{}".format(i), mesh[0], mesh[1], transparency=0.5)
     if pointclouds is not None:
         for i, pointcloud in enumerate(pointclouds):
-            register_pointcloud(ps, "pc_{}".format(i), pointcloud[0])
+            register_pointcloud(ps, "pc_{}".format(i), pointcloud, radius=1e-4)
     ps.show()

@@ -97,7 +97,7 @@ def load_image(path, to_float=False, channels_last=True, return_paths=False, to_
 
 def load_images(path, to_float=False, channels_last=True, return_paths=False, to_torch=False, device=None):
     """
-    loads images from a folder or a single image from a file
+    loads images from a list of paths, a folder or a single file
     :param path: path to folder with images / file
     :param to_float: if True, converts images to float
     :param return_paths: if True, returns a list of file paths
@@ -105,15 +105,15 @@ def load_images(path, to_float=False, channels_last=True, return_paths=False, to
     :param device: device to load tensor to
     :return: (b x H x W x 3) tensor, and optionally a list of file names
     """
-    path = Path(path)
-    if not path.exists():
-        raise ValueError("Path does not exist")
-    if path.is_dir():
+    supported_suffixes = [".png", ".jpg", ".jpeg"]
+    if type(path) == list:
         images = []
         file_paths = []
-        for image in sorted(path.iterdir()):
-            if image.suffix in [".png", ".jpg", ".jpeg"]:
-                images.append(np.array(Image.open(str(image))))
+        for p in path:
+            if not Path(p).exists():
+                raise FileNotFoundError("Path does not exist")
+            if image.suffix in supported_suffixes:
+                images.append(np.array(Image.open(str(p))))
                 file_paths.append(image)
         images = np.stack(images, axis=0)
         if not channels_last:
@@ -122,16 +122,34 @@ def load_images(path, to_float=False, channels_last=True, return_paths=False, to
             images = images.astype(np.float32) / 255
         if to_torch and device is not None:
             images = torch.tensor(images, device=device)
-    elif path.is_file():
-        images = np.array(Image.open(str(path)))
-        if not channels_last:
-            images = np.moveaxis(images, -1, 0)
-        if to_float:
-            images = images.astype(np.float32) / 255
-        file_paths = [path]
-        if to_torch and device is not None:
-            images = torch.tensor(images, device=device)
-        images = images[None, ...]
+    else:
+        path = Path(path)
+        if not path.exists():
+            raise FileNotFoundError("Path does not exist")
+        if path.is_dir():
+            images = []
+            file_paths = []
+            for image in sorted(path.iterdir()):
+                if image.suffix in supported_suffixes:
+                    images.append(np.array(Image.open(str(image))))
+                    file_paths.append(image)
+            images = np.stack(images, axis=0)
+            if not channels_last:
+                images = np.moveaxis(images, -1, 1)
+            if to_float:
+                images = images.astype(np.float32) / 255
+            if to_torch and device is not None:
+                images = torch.tensor(images, device=device)
+        elif path.is_file():
+            images = np.array(Image.open(str(path)))
+            if not channels_last:
+                images = np.moveaxis(images, -1, 0)
+            if to_float:
+                images = images.astype(np.float32) / 255
+            file_paths = [path]
+            if to_torch and device is not None:
+                images = torch.tensor(images, device=device)
+            images = images[None, ...]
     if return_paths:
         return images, file_paths
     else:

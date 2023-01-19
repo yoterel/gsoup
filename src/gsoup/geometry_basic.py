@@ -1,6 +1,41 @@
 import torch
 import numpy as np
 
+def duplicate_faces(f):
+    """
+    duplicates *every* face in the mesh, with flipped orientation (and appends it to the end of the tensor)
+    note: will transfer to CPU if necessary with current implementation
+    :param f: faces of the mesh (Nx3)
+    :return: faces of the mesh with duplicated faces
+    """
+    if type(f) != np.ndarray:
+        new_faces = f.detach().cpu().numpy()
+    else:
+        new_faces = f
+    swapped_f = new_faces.copy()
+    swapped_f[:, [1, 2]] = swapped_f[:, [2, 1]]
+    f_new = np.concatenate([new_faces, swapped_f])
+    if type(f) != np.ndarray:
+        f_new = torch.tensor(f_new, dtype=f.dtype, device=f.device)
+    return f_new
+
+def remove_duplicate_faces(f):
+    """
+    remove duplicate faces from a mesh
+    note: will transfer to CPU if necessary with current implementation
+    :param f: faces of the mesh (Nx3)
+    :return: vertices and faces of the mesh without duplicate faces
+    """
+    if type(f) != np.ndarray:
+        f_new = f.detach().cpu().numpy()
+    else:
+        f_new = f
+    f_new = np.sort(f_new, axis=1)
+    f_new = np.unique(f_new, axis=0)
+    if type(f) != np.ndarray:
+        f_new = torch.tensor(f_new, dtype=f.dtype, device=f.device)
+    return f_new
+    
 def get_aspect_ratio(v: torch.Tensor, f: torch.Tensor):
     """
     measure aspect ratio of all triangles using: (circumradius / 2inradius)

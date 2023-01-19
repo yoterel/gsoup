@@ -23,6 +23,8 @@ from .core import (
 )
 
 from .geometry_basic import (
+    duplicate_faces,
+    remove_duplicate_faces,
     get_aspect_ratio,
     normalize_vertices,
     calc_edges,
