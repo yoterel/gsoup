@@ -111,9 +111,9 @@ def load_images(path, to_float=False, channels_last=True, return_paths=False, to
         for p in path:
             if not Path(p).exists():
                 raise FileNotFoundError("Path does not exist")
-            if image.suffix in supported_suffixes:
+            if p.suffix in supported_suffixes:
                 images.append(np.array(Image.open(str(p))))
-                file_paths.append(image)
+                file_paths.append(p)
         images = np.stack(images, axis=0)
         if not channels_last:
             images = np.moveaxis(images, -1, 1)

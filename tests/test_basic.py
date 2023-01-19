@@ -102,7 +102,7 @@ def test_image():
     img = gsoup.load_image(dst)
     assert img.shape == (512, 512, 3)
     img = gsoup.load_images(dst)
-    assert img.shape == (512, 512, 3)
+    assert img.shape == (1, 512, 512, 3)
     img = gsoup.load_images([dst])
     assert img.shape == (1, 512, 512, 3)
     img = gsoup.load_images([dst, dst])
