@@ -21,3 +21,12 @@ This library is the result of me getting tired of replicating pieces of utility 
 `pip install -e .`
 
 Feel free to submit pull requests (run the tests first).
+
+## Build
+`bumpver update --no-fetch --patch`
+
+`python -m build`
+
+`twine check dist/*`
+
+`twine upload dist/*`
