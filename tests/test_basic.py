@@ -3,6 +3,12 @@ import numpy as np
 import torch
 import gsoup
 
+def test_load_obj():
+    v, f = gsoup.load_obj("resource/cube.obj")
+    assert v.shape[0] == 8
+    assert f.shape[0] == 12
+
+
 def test_homogenize():
     x = np.random.rand(100, 2)
     hom_x = gsoup.to_hom(x)

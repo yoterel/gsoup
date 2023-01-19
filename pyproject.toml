@@ -19,8 +19,7 @@ dependencies = [
     "torch >= 1.10",
     "numpy",
     "Pillow", 
-    "scipy",
-    "igl",
+    "scipy"
 ]
 requires-python = ">=3.7"
 

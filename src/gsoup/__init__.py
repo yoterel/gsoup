@@ -27,6 +27,7 @@ from .geometry_basic import (
     remove_duplicate_faces,
     get_aspect_ratio,
     normalize_vertices,
+    clean_infinite_vertices,
     calc_edges,
     calc_face_normals,
     calc_vertex_normals,

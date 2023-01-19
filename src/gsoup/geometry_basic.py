@@ -450,14 +450,14 @@ def find_princple_componenets(v: torch.Tensor):
 def remove_unreferenced_vertices(v, f):
     """
     removes unreferenced vertices from a mesh
-    :param v: Vx3 torch tensor of vertices
-    :param f: Fx3 torch tensor of faces
-    :return: the new vertices and faces
+    :param v: Vx3 np array of vertices
+    :param f: Fx3 np array of faces
+    :return: the new vertices and faces, and a map from new to old indices (-1 if unreferenced)
     """
     referenced = np.zeros((v.shape[0]), dtype=np.bool)
     referenced[f.flatten()] = True
-    idx = -1 * np.ones((v.shape[0]), dtype=np.int32)
-    idx[referenced] = np.arange(np.sum(referenced), dtype=np.int32)
+    idx = -1 * np.ones((v.shape[0]), dtype=np.int64)
+    idx[referenced] = np.arange(np.sum(referenced), dtype=np.int64)
     f = idx[f.flatten()].reshape((-1, f.shape[1]))
     v = v[referenced]
     return v, f, idx
@@ -498,4 +498,17 @@ def edge_contraction(v, f, edge_to_contract, new_v_location):
     v[v2] = new_v_location
     # remove v1 from v
     v, f, _ = remove_unreferenced_vertices(v, f)
+    return v, f
+
+def clean_infinite_vertices(v, f):
+    """
+    removes vertices that are infinite / nan, and all their incident faces
+    :param v: V x 3 numpy array of vertices
+    :param f: F x 3 numpy array of faces
+    :return: the cleaned mesh
+    """
+    finite_mask = np.isfinite(v).any(axis=-1)  # finite mask
+    if ~np.all(finite_mask):
+        f = f[finite_mask[f].all(axis=-1)]  # remove faces with infinite vertices
+        v, f, _ = remove_unreferenced_vertices(v, f)  # update vertex indices
     return v, f
