@@ -7,6 +7,8 @@ All the code is used for self-educational purposes and to aid with research and 
 ## Long version
 This library is the result of me getting tired of replicating pieces of utility code to do similar work across different projects. I decided to push any fundamental piece of code into this repository. Later on I also wanted a place I can implement any related algorithm and easily verify/test/modify them so I decided it would be usefull to add them to the same place. The focus is on clarity and concisness for all implementations, but here and there some immediate/easy performance gains are used.
 
+The majority of the code uses numpy, but a significant effort has been made to also be compatible with pytorch for GPU computations, as many of my interests rely on a strong auto-differentiaion (and GPU enabled) package.
+
 ## Installation
 `pip install gsoup`
 
