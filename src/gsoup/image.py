@@ -89,7 +89,7 @@ def draw_gizmo_on_image(np_images, w2c, isOpenGL=False, scale=.05):
         new_images.append(np.array(pil_image))
     return (np.array(new_images) / 255.).astype(np.float32)
 
-def merge_figures_with_line(img1, img2, lower_intersection=0.6, angle=np.pi/2, line_width=5):
+def merge_figures_with_line(img1, img2, lower_intersection=0.6, angle=np.pi/2, line_width=5, line_color=[255, 255, 255, 255]):
     """
     merges two np images (H x W x 3) with a white line in between
     :param img1: (H x W x 3) numpy array
@@ -97,9 +97,15 @@ def merge_figures_with_line(img1, img2, lower_intersection=0.6, angle=np.pi/2, l
     :param lower_intersection: lower intersection of the line with the images
     :param angle: angle of the line
     :param line_width: width of the line
+    :param line_color: color of the line
     :return: new (H x W x 3) numpy array with line in between
     """
-    combined = np.ones_like(img1)*255
+    if img1.dtype != np.uint8:
+        line_color = np.array(line_color) / 255
+    else:
+        line_color = np.array(line_color, dtype=np.uint8)
+    combined = np.ascontiguousarray(np.broadcast_to(line_color, img1.shape))
+    # combined = np.ones_like(img1)*255
     y, x, _ = img1.shape
     yy, xx = np.mgrid[:y, :x]
     img1_positions = (xx-lower_intersection*x)*np.tan(angle)-line_width//2>(yy-y)
