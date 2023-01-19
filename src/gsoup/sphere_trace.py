@@ -1,9 +1,5 @@
 import torch
 import torch.nn as nn
-from pathlib import Path
-from gsoup import structures
-import torch
-import torch.nn as nn
 
 def sphere_tracing(
         signed_distance_function,
@@ -12,14 +8,24 @@ def sphere_tracing(
         num_iterations,
         convergence_threshold,
         foreground_masks=None,
-        bounding_radius=None
+        bounding_radius=None,
+        count_access=False,
 ):
     """
-    Sphere trace an sdf. can be made differentiable using https://arxiv.org/abs/1912.07372
+    Sphere trace a SDF in pytorch.
+    note: can be made differentiable using https://arxiv.org/abs/1912.07372
+    :param signed_distance_function: a function that takes a tensor of shape (N, 3) and returns a tensor of shape (N, 1)
+    :param ray_positions: a tensor of shape (N, 3)
+    :param ray_directions: a tensor of shape (N, 3)
+    :param num_iterations: the number of iterations to run
+    :param convergence_threshold: the threshold from the surface for a ray to be considered converged
+    :param foreground_masks: a tensor of shape (N, 1) that indicates which rays are foreground
+    :param bounding_radius: a float that indicates the radius of the scene bounding sphere
+    :param count_access: a boolean that indicates whether to count the number of times the SDF is accessed
     """
+    counter = 0
     if foreground_masks is None:
         foreground_masks = torch.all(torch.isfinite(ray_positions), dim=-1, keepdim=True)
-
     if bounding_radius:
         a = torch.sum(ray_directions * ray_directions, dim=-1, keepdim=True)
         b = 2 * torch.sum(ray_directions * ray_positions, dim=-1, keepdim=True)
@@ -29,23 +35,25 @@ def sphere_tracing(
         bounded = d >= 0
         ray_positions = torch.where(bounded, ray_positions + ray_directions * t, ray_positions)
         foreground_masks = foreground_masks & bounded
-
+    foreground_masks = foreground_masks[:, 0]
     with torch.no_grad():
-        for i in range(num_iterations):
-            signed_distances = signed_distance_function(ray_positions)
-            if i:
-                ray_positions = torch.where(foreground_masks & ~converged,
-                                            ray_positions + ray_directions * signed_distances, ray_positions)
-            else:
-                ray_positions = torch.where(foreground_masks, ray_positions + ray_directions * signed_distances,
-                                            ray_positions)
+        converged = torch.zeros((ray_positions.shape[:-1]), device=ray_positions.device, dtype=torch.bool)
+        for _ in range(num_iterations):
+            mask = foreground_masks & ~converged
+            cur_ray_positions = ray_positions.view(-1, 3)[mask]
+            cur_ray_directions = ray_directions.view(-1, 3)[mask]
+            signed_distances = signed_distance_function(cur_ray_positions).view(-1, 1)
+            if count_access:
+                counter += cur_ray_positions.shape[0]
+            cur_ray_positions = cur_ray_positions + cur_ray_directions * signed_distances
+            ray_positions[mask] = cur_ray_positions
             if bounding_radius:
-                bounded = torch.norm(ray_positions, dim=-1, keepdim=True) < bounding_radius
+                bounded = torch.norm(ray_positions, dim=-1) < bounding_radius
                 foreground_masks = foreground_masks & bounded
-            converged = torch.abs(signed_distances) < convergence_threshold
+            converged[mask] |= torch.abs(signed_distances[:, 0]) < convergence_threshold
             if torch.all(~foreground_masks | converged):
                 break
-    return ray_positions, converged
+    return ray_positions, converged[:, None], counter
 
 
 def compute_shadows(
@@ -58,7 +66,7 @@ def compute_shadows(
         foreground_masks=None,
         bounding_radius=None,
 ):
-    surface_positions, converged = sphere_tracing(
+    surface_positions, converged, _ = sphere_tracing(
         signed_distance_function=signed_distance_function,
         ray_positions=surface_positions + surface_normals * 1e-3,
         ray_directions=light_directions,
@@ -133,7 +141,7 @@ def generate_rays(w2v, v2c, resx=512, resy=512, device="cuda:0"):
 
 
 def render(p_sdf, ray_positions, ray_directions, num_iterations=2000, convergence_threshold=1e-4, use_gradient=False):
-    surface_positions, converged = sphere_tracing(
+    surface_positions, converged, _ = sphere_tracing(
         signed_distance_function=p_sdf,
         ray_positions=ray_positions,
         ray_directions=ray_directions,
