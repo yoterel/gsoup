@@ -2,12 +2,7 @@ import pytest
 import numpy as np
 import torch
 import gsoup
-
-def test_load_obj():
-    v, f = gsoup.load_obj("resource/cube.obj")
-    assert v.shape[0] == 8
-    assert f.shape[0] == 12
-
+from pathlib import Path
 
 def test_homogenize():
     x = np.random.rand(100, 2)
@@ -25,7 +20,6 @@ def test_homogenize():
     dehom_x = gsoup.homogenize(hom_x)
     assert dehom_x.shape == (3,)
 
-
 def test_sphere_tracer():
     w2v, v2c = gsoup.create_random_cameras_on_unit_sphere(4, 1.0, "cuda:0")
     ray_origins, ray_directions = gsoup.generate_rays(w2v, v2c, 512, 512, "cuda:0")
@@ -34,7 +28,6 @@ def test_sphere_tracer():
     for o, d in zip(ray_origins, ray_directions):
         images.append(gsoup.render(sdf, o, d))
     images = torch.stack(images)
-
 
 def test_broadcast_batch():
     R = np.random.randn(1, 3, 3)
@@ -99,6 +92,21 @@ def test_structures():
     v1, f1 = gsoup.load_obj("resource/ico.obj")
     assert np.allclose(v, v1)
     assert np.allclose(f, f1)
+    v, f = gsoup.load_obj("resource/cube.obj")
+    assert v.shape[0] == 8
+    assert f.shape[0] == 12
+
+def test_image():
+    dst = Path("resource/voronoi.png")
+    gsoup.generate_voronoi_diagram(512, 512, 1000, dst=dst)
+    img = gsoup.load_image(dst)
+    assert img.shape == (512, 512, 3)
+    img = gsoup.load_images(dst)
+    assert img.shape == (512, 512, 3)
+    img = gsoup.load_images([dst])
+    assert img.shape == (1, 512, 512, 3)
+    img = gsoup.load_images([dst, dst])
+    assert img.shape == (2, 512, 512, 3)
 
 def test_qem():
     v, f = gsoup.structures.cube()
