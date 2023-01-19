@@ -1,4 +1,4 @@
-# gsoup v0.0.4
+# gsoup v0.0.5
 
 ## In a nutshell
 A python library implementing various computational geometry / graphics / AR algorithms with focus on clarity rather than performance.
