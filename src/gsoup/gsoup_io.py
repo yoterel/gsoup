@@ -105,7 +105,7 @@ def load_images(path, to_float=False, channels_last=True, return_paths=False, to
     :return: (b x H x W x 3) tensor, and optionally a list of file names
     """
     supported_suffixes = [".png", ".jpg", ".jpeg"]
-    if type(path) == list:
+    if type(path) == list or type(path) == tuple or type(path) == np.ndarray:
         images = []
         file_paths = []
         for p in path:
