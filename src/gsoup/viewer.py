@@ -3,40 +3,11 @@ from . import structures
 from .core import to_hom, homogenize
 from .gsoup_io import write_to_json
 
-class PolycopeSubStub:
-
-    def add_color_quantity(self, *args, **kwargs):
-        return None
-
-    def add_scalar_quantity(self, *args, **kwargs):
-        return None
-
-    def add_vector_quantity(self, *args, **kwargs):
-        return None
-
-
 class PolyscopeStub:
-    def __init__(self):
-        self.ps_net = PolycopeSubStub()
-        self.SliderFloat = lambda *args, **kwargs: None
-
-    def init(self):
-        return None
-
-    def set_up_dir(self, *kwargs):
-        return None
-
-    def register_curve_network(self, *args, **kwargs):
-        return PolycopeSubStub()
-
-    def show(self):
-        return None
-
-    def register_point_cloud(self, *args, **kwargs):
-        return PolycopeSubStub()
-    
-    def register_surface_mesh(self, *args, **kwargs):
-        return PolycopeSubStub()
+    def __getattr__(self, name):
+        def wrapper(*args, **kwargs):
+            print("{} was called".format(name))
+        return wrapper
 
 class gviewer():
     """
