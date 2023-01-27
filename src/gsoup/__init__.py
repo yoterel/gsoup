@@ -48,6 +48,7 @@ from .geometry_advanced import (
 )
 
 from .gsoup_io import (
+    write_to_json,
     save_image,
     save_images,
     save_animation,
@@ -68,6 +69,8 @@ from .image import (
     generate_voronoi_diagram,
     interpolate_single_channel,
     interpolate_multi_channel,
+    image_grid,
+    resize_square_images,
 )
 
 from .sphere_trace import (

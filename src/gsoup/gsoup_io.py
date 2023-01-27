@@ -3,6 +3,20 @@ import numpy as np
 from pathlib import Path
 from .core import to_8b, to_np
 from PIL import Image
+import json
+
+
+def write_to_json(data, dst):
+    """
+    writes data to json file
+    :param data: data to write
+    :param dst: path to save json file to
+    """
+    dst = Path(dst)
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    with open(dst, "w") as f:
+        json.dump(data, f, indent=4, sort_keys=True)
+
 
 def save_animation(images, dst):
     """

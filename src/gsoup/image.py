@@ -184,3 +184,37 @@ def interpolate_multi_channel(image: np.ndarray, mask: np.ndarray):
         interpolated_channel = interpolate_single_channel(image[:, :, channel], mask)
         interpolated[:, :, channel] = interpolated_channel
     return interpolated
+
+def image_grid(images, rows, cols):
+    """
+    :param images: list of images
+    :param rows: number of rows
+    :param cols: number of cols
+    :return: grid image
+    """
+    if images.ndim != 4:
+        raise ValueError("images must be a 4D array")
+    if len(images) != rows * cols:
+        raise ValueError("number of images must be equal to rows * cols")
+    tmp = images.reshape(rows, cols, images.shape[1], images.shape[2], -1)
+    result = tmp.transpose(0, 2, 1, 3, 4).reshape(rows * images.shape[1], cols * images.shape[2], -1)
+    return result
+
+def resize_square_images(images, output_size, channels_last=True):
+    """
+    resize images to output_size
+    :param images: numpy array of images (N x H x W x C) where H=W
+    :param output_size: output size that has a common divisor with the input size (if it doesn't the output size will be rounded down)
+    :param channels_last: if True, the images are provided in channels last format (and so will the output)
+    :return: np array of resized images
+    """
+    if images.ndim != 4:
+        raise ValueError("images must be a 4D array")
+    if images.shape[1] != images.shape[2]:
+        raise ValueError("images must be square")
+    if not channels_last:
+        raise NotImplementedError("only channels last is supported")
+    input_size = images.shape[1]
+    bin_size = input_size // output_size
+    small_images = images.reshape((images.shape[0], output_size, bin_size, output_size, bin_size, 3)).max(4).max(2)
+    return small_images

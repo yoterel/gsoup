@@ -105,8 +105,12 @@ def test_image():
     assert img.shape == (1, 512, 512, 3)
     img = gsoup.load_images([dst])
     assert img.shape == (1, 512, 512, 3)
-    img = gsoup.load_images([dst, dst])
-    assert img.shape == (2, 512, 512, 3)
+    img = gsoup.load_images([dst, dst, dst, dst])
+    assert img.shape == (4, 512, 512, 3)
+    resized_img = gsoup.resize_square_images(img, 256, dst=dst)
+    assert resized_img.shape == (4, 128, 128, 3)
+    grid = gsoup.image_grid(resized_img, 2, 2)
+    assert grid.shape == (512, 512, 3)
 
 def test_qem():
     v, f = gsoup.structures.cube()
