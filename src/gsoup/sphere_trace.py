@@ -130,10 +130,17 @@ def generate_rays(w2v, v2c, resx=512, resy=512, device="cuda:0"):
     xy_view_near = xy_view_near / xy_view_near[:, :, 3:]
     rays_d = []
     rays_o = []
-    for transform in w2v:
-        xy_world_near = (torch.inverse(transform) @ xy_view_near.view(-1, 4).T).T.view(resy, resx, 4)
+    for i in range(len(w2v)):
+        if v2c.ndim == 3:
+            v2c_transform = v2c[i]
+        else:
+            v2c_transform = v2c
+        w2v_transform = w2v[i]
+        xy_view_near = (torch.inverse(v2c_transform) @ xy_clip_near.view(-1, 4).T).T.view(resy, resx, 4)
+        xy_view_near = xy_view_near / xy_view_near[:, :, 3:]
+        xy_world_near = (torch.inverse(w2v_transform) @ xy_view_near.view(-1, 4).T).T.view(resy, resx, 4)
         ray_o = xy_world_near[:, :, :3]
-        camera_position = torch.inverse(transform)[:3 ,3]
+        camera_position = torch.inverse(w2v_transform)[:3 ,3]
         ray_d = nn.functional.normalize(xy_world_near[:, :, :3] - camera_position, dim=-1)
         rays_d.append(ray_d)
         rays_o.append(ray_o)

@@ -26,7 +26,8 @@ def test_sphere_tracer():
     sdf = gsoup.structures.sphere_sdf(0.5)
     images = []
     for o, d in zip(ray_origins, ray_directions):
-        images.append(gsoup.render(sdf, o, d))
+        result = gsoup.render(sdf, o.view(-1, 3), d.view(-1, 3))
+        images.append(result.view(512, 512, 4))
     images = torch.stack(images)
 
 def test_broadcast_batch():
@@ -107,8 +108,8 @@ def test_image():
     assert img.shape == (1, 512, 512, 3)
     img = gsoup.load_images([dst, dst, dst, dst])
     assert img.shape == (4, 512, 512, 3)
-    resized_img = gsoup.resize_square_images(img, 256, dst=dst)
-    assert resized_img.shape == (4, 128, 128, 3)
+    resized_img = gsoup.resize_square_images(img, 256)
+    assert resized_img.shape == (4, 256, 256, 3)
     grid = gsoup.image_grid(resized_img, 2, 2)
     assert grid.shape == (512, 512, 3)
 
