@@ -54,6 +54,10 @@ def poses_slide_view(camera_poses):
     given a tensor of t x b x 4 x 4 camera poses, where t is time axis (or step number), b is batch axis, and 4x4 is the camera pose matrix,
     show the batch of poses and allow scrolling through the time axis using a slider.
     """
+    if camera_poses.ndim != 4:
+        raise ValueError("camera_poses must be t x b x 4 x 4")
+    if camera_poses.shape[2] != 4 or camera_poses.shape[3] != 4:
+        raise ValueError("camera_poses must be t x b x 4 x 4")
     global poses
     poses = camera_poses
     gviewer.init()

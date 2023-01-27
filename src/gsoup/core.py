@@ -78,16 +78,13 @@ def compose_rt(R: np.array, t: np.array):
 def to_44(mat: np.array):
     """
     converts a 3x4 to a 4x4 matrix by concatenating 0 0 0 1
-    :param mat: 3x4 numpy array
-    :return: 4x4 numpy array
+    :param mat: dimsx3x4 numpy array (dims can be any number of dims including 0)
+    :return: dimsx4x4 numpy array
     """
-    if mat.ndim == 3:
-        assert mat.shape[1:] == (3, 4)
-        to_cat = np.broadcast_to(np.array([0, 0, 0, 1]), (mat.shape[0], 1, 4))
-        new_mat = np.concatenate((mat, to_cat), axis=1)
-    else:
-        assert mat.shape == (3, 4)
-        new_mat = np.concatenate((mat, np.array([0, 0, 0, 1])[None, :]), axis=0)
+    if mat.shape[-2:] != (3, 4):
+        raise ValueError("mat must be 3x4")
+    to_cat = np.broadcast_to(np.array([0, 0, 0, 1]), (*mat.shape[:-2], 1, 4))
+    new_mat = np.concatenate((mat, to_cat), axis=-2)
     return new_mat
 
 def to_34(mat: np.array):
