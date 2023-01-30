@@ -47,7 +47,7 @@ def load_video(video_path):
     h, w, _ = get_video_info(video_path)
     out, _ = (
         ffmpeg
-        .input(video_path)
+        .input(str(video_path))
         .output('pipe:', format='rawvideo', pix_fmt='rgb24')
         .run(capture_stdout=True)
     )
@@ -96,7 +96,7 @@ def reverse_video(video_path, output_path=None):
     h, w, _ = get_video_info(video_path)
     out, _ = (
         ffmpeg
-        .input(video_path)
+        .input(str(video_path))
         .filter('reverse')
         .output('pipe:', format='rawvideo', pix_fmt='rgb24')
         .run(capture_stdout=True)
