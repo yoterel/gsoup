@@ -105,3 +105,19 @@ def reverse_video(video_path, output_path=None):
     if output_path is not None:
         save_video(video, output_path)
     return video
+
+def compress_video(src, dst):
+    """
+    compresses a video using ffmpeg
+    :param src: path to video
+    :param dst: path to save compressed video to
+    """
+    dst = Path(dst)
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    (
+        ffmpeg
+        .input(str(src))
+        .output(str(dst), vcodec='libx264', crf=23, preset='slow')
+        .overwrite_output()
+        .run()
+    )

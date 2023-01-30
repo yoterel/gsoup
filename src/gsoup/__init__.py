@@ -78,6 +78,7 @@ from .video import (
     load_video,
     save_video,
     reverse_video,
+    compress_video,
 )
 
 from .sphere_trace import (
