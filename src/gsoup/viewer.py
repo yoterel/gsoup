@@ -88,14 +88,14 @@ class gviewer():
                 c_tot.append(c_cam)
                 e_tot.append(e_cam + (i * len(v_cam)))
             else:
-                ps_net = self.register_curve_network("{}_{}".format(name, i), v, e_cam, radius=edge_rad)
+                ps_net = self.ps.register_curve_network("{}_{}".format(name, i), v, e_cam, radius=edge_rad)
                 ps_net.add_color_quantity("color", c_cam, defined_on='edges', enabled=True)
                 ps_net.set_transparency(alpha)
         if group:
             v_tot = np.array(v_tot).reshape(-1, 3)
             e_tot = np.array(e_tot).reshape(-1, 2)
             c_tot = np.array(c_tot).reshape(-1, 3)
-            ps_net = self.register_curve_network(name, v_tot, e_tot, radius=edge_rad)
+            ps_net = self.ps.register_curve_network(name, v_tot, e_tot, radius=edge_rad)
             ps_net.add_color_quantity("color", c_tot, defined_on='edges', enabled=True)
         ps_net.set_transparency(alpha)
         return v_tot, e_tot, c_tot
