@@ -34,9 +34,23 @@ def get_video_info(video_path):
     width = int(video_stream['width'])
     height = int(video_stream['height'])
     fps = float(video_stream['r_frame_rate'].split('/')[0]) / float(video_stream['r_frame_rate'].split('/')[1])
+    frame_count = int(video_stream['nb_frames'])
     # codec_name = video_stream['codec_name']
     # format_name = probe['format']['format_name']
-    return height, width, fps
+    return height, width, fps, frame_count
+
+def get_frame_timestamps(video_path):
+    """
+    returns numpy array of frame timestamps in seconds for a video
+    :param video_path: path to video
+    :return: numpy array of frame timestamps in seconds
+    """
+    video_path = Path(video_path)
+    probe = ffmpeg.probe(str(video_path), show_frames="-show_frames")
+    video_frames = [frame for frame in probe['frames'] if frame['media_type'] == 'video']
+    frame_times = np.array([float(frame["pts_time"]) for frame in video_frames])
+    return frame_times
+
 
 def load_video(video_path):
     """
@@ -44,7 +58,7 @@ def load_video(video_path):
     :param video_path: path to video
     :return: (n x h x w x 3) tensor
     """
-    h, w, _ = get_video_info(video_path)
+    h, w, _, _ = get_video_info(video_path)
     out, _ = (
         ffmpeg
         .input(str(video_path))
@@ -93,7 +107,7 @@ def reverse_video(video_path, output_path=None):
     :param output_path: path to save video to
     :return: (n x h x w x 3) tensor of reversed video
     """
-    h, w, _ = get_video_info(video_path)
+    h, w, _, _ = get_video_info(video_path)
     out, _ = (
         ffmpeg
         .input(str(video_path))
@@ -121,3 +135,39 @@ def compress_video(src, dst):
         .overwrite_output()
         .run()
     )
+
+def video_to_images(src, dst):
+    """
+    creates a folder of images from a video
+    """
+    dst = Path(dst)
+    dst.mkdir(parents=True, exist_ok=True)
+    (
+        ffmpeg
+        .input(str(src))
+        .output(str(dst / '%d.png'), vcodec='png', format='image2')
+        .overwrite_output()
+        .run()
+    )
+
+def slice_from_video(src, every_n_frames=2, start_frame=0, end_frame=None):
+    """
+    slices a video into frames
+    :param src: path to video
+    :param every_n_frames: how many frames to skip
+    :param start_frame: first frame to slice
+    :param end_frame: last frame to slice
+    :return: (n x h x w x 3) tensor of sliced video
+    """
+    h, w, _, fc = get_video_info(src)
+    if end_frame is None:
+        end_frame = fc + 1
+    out, _ = (
+        ffmpeg
+        .input(str(src))
+        .filter('select', 'between(n, {}, {})*not(mod(n,{}))'.format(start_frame, end_frame, every_n_frames))
+        .output('pipe:', format='rawvideo', pix_fmt='rgb24', fps_mode='passthrough')
+        .run(capture_stdout=True)
+    )
+    video = np.frombuffer(out, np.uint8).reshape([-1, h, w, 3])
+    return video

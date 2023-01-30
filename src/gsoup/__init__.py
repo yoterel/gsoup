@@ -75,10 +75,13 @@ from .image import (
 
 from .video import (
     get_video_info,
+    get_frame_timestamps,
     load_video,
     save_video,
     reverse_video,
     compress_video,
+    video_to_images,
+    slice_from_video
 )
 
 from .sphere_trace import (
