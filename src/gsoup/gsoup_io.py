@@ -5,7 +5,6 @@ from .core import to_8b, to_np
 from PIL import Image
 import json
 
-
 def write_to_json(data, dst):
     """
     writes data to json file
@@ -37,7 +36,6 @@ def save_animation(images, dst):
         images = [Image.fromarray(image) for image in images]
     dst = Path(dst.parent, dst.stem)
     images[0].save(str(dst)+".gif", save_all=True, append_images=images[1:], optimize=False, duration=100, loop=0)
-
 
 def save_image(image, dst, force_grayscale: bool = False):
     """
@@ -85,11 +83,11 @@ def save_images(images, dst, file_names: list = [], force_grayscale: bool = Fals
         else:
             pil_image.save(str(Path(dst, "{:05d}.png".format(i))))
 
-def load_image(path, to_float=False, channels_last=True, return_paths=False, to_torch=False, device=None):
+def load_image(path, to_float=False, channels_last=True, to_torch=False, device=None):
     """
-    loads images from a folder or a single image from a file
-    :param path: path to folder with images / file
-    :param to_float: if True, converts images to float
+    loads an image from a single file
+    :param path: path to file
+    :param to_float: if True, converts image to float
     :param return_paths: if True, returns a list of file paths
     :param to_torch: if True, returns a torch tensor
     :param device: device to load tensor to
@@ -101,28 +99,24 @@ def load_image(path, to_float=False, channels_last=True, return_paths=False, to_
     if path.is_dir():
         raise FileNotFoundError("Path must be a file")
     elif path.is_file():
-        if return_paths:
-            image, name = load_images(path, to_float=to_float, channels_last=channels_last, return_paths=return_paths, to_torch=to_torch, device=device)
-            return image[0], name[0]
-        else:
-            image = load_images(path, to_float=to_float, channels_last=channels_last, return_paths=return_paths, to_torch=to_torch, device=device)
-            return image[0]
+        image = load_images(path, to_float=to_float, channels_last=channels_last, return_paths=False, to_torch=to_torch, device=device)
+        return image[0]
 
-def load_images(path, to_float=False, channels_last=True, return_paths=False, to_torch=False, device=None):
+def load_images(source, to_float=False, channels_last=True, return_paths=False, to_torch=False, device=None):
     """
     loads images from a list of paths, a folder or a single file
-    :param path: path to folder with images / file
-    :param to_float: if True, converts images to float
+    :param source: path to folder with images / path to image file / list of paths
+    :param to_float: if True, converts images to float (and normalizes to [0, 1])
     :param return_paths: if True, returns a list of file paths
     :param to_torch: if True, returns a torch tensor
     :param device: device to load tensor to
     :return: (b x H x W x 3) tensor, and optionally a list of file names
     """
     supported_suffixes = [".png", ".jpg", ".jpeg"]
-    if type(path) == list or type(path) == tuple or type(path) == np.ndarray:
+    if type(source) == list or type(source) == tuple or type(source) == np.ndarray:
         images = []
         file_paths = []
-        for p in path:
+        for p in source:
             if not Path(p).exists():
                 raise FileNotFoundError("Path does not exist")
             if p.suffix in supported_suffixes:
@@ -136,7 +130,7 @@ def load_images(path, to_float=False, channels_last=True, return_paths=False, to
         if to_torch and device is not None:
             images = torch.tensor(images, device=device)
     else:
-        path = Path(path)
+        path = Path(source)
         if not path.exists():
             raise FileNotFoundError("Path does not exist")
         if path.is_dir():

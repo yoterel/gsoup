@@ -113,6 +113,22 @@ def test_image():
     grid = gsoup.image_grid(resized_img, 2, 2)
     assert grid.shape == (512, 512, 3)
 
+def test_video():
+    images = np.random.randint(0, 255, (20, 512, 512, 3), dtype=np.uint8)
+    # im1 = gsoup.generate_voronoi_diagram(512, 512, 1000)
+    # im2 = gsoup.generate_voronoi_diagram(512, 512, 1000)
+    # im1s = np.tile(im1[None, ...], (10, 1, 1, 1))
+    # im2s = np.tile(im2[None, ...], (10, 1, 1, 1))
+    # images = np.vstack([im1s, im2s])
+    dst = Path("resource/noise.avi")
+    from gsoup.video import save_video, load_video, reverse_video
+    save_video(images, dst, fps=10)
+    video_frames = load_video(dst)
+    assert video_frames.shape == (20, 512, 512, 3)
+    assert np.all(video_frames == images)
+    video_frames_reversed = reverse_video(dst)
+    assert (video_frames_reversed[-1] == video_frames[0]).all()
+
 def test_qem():
     v, f = gsoup.structures.cube()
     v_new, f_new = gsoup.qem(v, f, budget = 4)
