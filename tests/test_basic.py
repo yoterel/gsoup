@@ -126,7 +126,7 @@ def test_video():
     reader = gsoup.VideoReader(dst, h=512, w=512)
     fps = gsoup.FPS()
     for i, frame in enumerate(reader):
-        print(fps())
+        print("{}: {}, fps: {}".format(i, frame.shape, fps()))
         assert np.all(frame == images[i])
     video_frames = gsoup.load_video(dst)
     assert video_frames.shape == (frame_number, 512, 512, 3)

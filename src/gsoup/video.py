@@ -195,7 +195,7 @@ class VideoReader:
     """
     A (very) basic video iterator
     """
-    def __init__(self, video_path, h=None, w=None):
+    def __init__(self, video_path, h=None, w=None, every_n_frames=1, start_frame=0, end_frame=None):
         """
         :param video_path: path to video
         :param target_resolution: (h, w) tuple of target resolution (must have common divisor with original resolution)
@@ -208,10 +208,17 @@ class VideoReader:
             self.th, self.tw = h, w
             if self.h % self.th != 0 or self.w % self.tw != 0:
                 raise ValueError("target resolution must have common divisor with original resolution")
+        self.start_frame = start_frame
+        if end_frame is None:
+            self.end_frame = self.fc + 1
+        else:
+            self.end_frame = end_frame
+        self.every_n_frames = every_n_frames
         self.stream = (
             ffmpeg
             .input(str(self.video_path))
-            .output('pipe:', format='rawvideo', pix_fmt='rgb24')
+            .filter('select', 'between(n, {}, {})*not(mod(n,{}))'.format(self.start_frame, self.end_frame, self.every_n_frames))
+            .output('pipe:', format='rawvideo', pix_fmt='rgb24', fps_mode='passthrough')
             .run_async(pipe_stdout=True, quiet=True)
         )
 
@@ -223,7 +230,7 @@ class VideoReader:
         if self.n < self.fc:
             in_bytes = self.stream.stdout.read(self.h * self.w * 3)
             if not in_bytes:  # should never happen
-                self._raw.stdout.close()
+                self.stream.stdout.close()
                 raise StopIteration
             frame = np.frombuffer(in_bytes, np.uint8).reshape([self.h, self.w, 3])
             if self.th is not None:
