@@ -200,12 +200,14 @@ def image_grid(images, rows, cols):
     result = tmp.transpose(0, 2, 1, 3, 4).reshape(rows * images.shape[1], cols * images.shape[2], -1)
     return result
 
-def resize_square_images(images, output_size, channels_last=True):
+def resize_images_naive(images, H, W, channels_last=True, mode="mean"):
     """
-    resize images to output_size
-    :param images: numpy array of images (N x H x W x C) where H=W
-    :param output_size: output size that has a common divisor with the input size (if it doesn't the output size will be rounded down)
+    resize images to output_size, but only if the output size has a common divisor of the input size
+    :param images: numpy array of images (N x H x W x C)
+    :param H: output height size that has a common divisor with the input height size
+    :param W: output width size that has a common divisor with the input width size
     :param channels_last: if True, the images are provided in channels last format (and so will the output)
+    :param mode: one of "max", "mean"
     :return: np array of resized images
     """
     if images.ndim != 4:
@@ -214,7 +216,14 @@ def resize_square_images(images, output_size, channels_last=True):
         raise ValueError("images must be square")
     if not channels_last:
         raise NotImplementedError("only channels last is supported")
-    input_size = images.shape[1]
+    input_size = np.array(images.shape[1:3])
+    output_size = np.array([H, W])
     bin_size = input_size // output_size
-    small_images = images.reshape((images.shape[0], output_size, bin_size, output_size, bin_size, 3)).max(4).max(2)
+    if mode == "max":
+        small_images = images.reshape((images.shape[0], output_size[0], bin_size[0], output_size[1], bin_size[1], 3)).max(4).max(2)
+    elif mode == "mean":
+        small_images = images.reshape((images.shape[0], output_size[0], bin_size[0], output_size[1], bin_size[1], 3)).mean(4).mean(2)
+        small_images = small_images.astype(np.uint8)
+    else:
+        raise ValueError("mode must be one of 'max', 'mean'")
     return small_images

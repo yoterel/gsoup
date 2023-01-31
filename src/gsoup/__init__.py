@@ -70,7 +70,7 @@ from .image import (
     interpolate_single_channel,
     interpolate_multi_channel,
     image_grid,
-    resize_square_images,
+    resize_images_naive,
 )
 
 from .video import (
@@ -81,7 +81,9 @@ from .video import (
     reverse_video,
     compress_video,
     video_to_images,
-    slice_from_video
+    slice_from_video,
+    VideoReader,
+    FPS
 )
 
 from .sphere_trace import (
