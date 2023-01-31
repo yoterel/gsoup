@@ -51,7 +51,7 @@ def save_image(image, dst, force_grayscale: bool = False):
     dst.parent.mkdir(parents=True, exist_ok=True)
     save_images(image[None, ...], dst.parent, [dst.name], force_grayscale)
 
-def save_images(images, dst, file_names: list = [], force_grayscale: bool = False):
+def save_images(images, dst, file_names: list = [], force_grayscale: bool = False, overwrite: bool = True):
     """
     saves images as png
     :param images: (b x H x W x C) tensor
@@ -70,6 +70,7 @@ def save_images(images, dst, file_names: list = [], force_grayscale: bool = Fals
     if file_names:
         if images.shape[0] != len(file_names):
             raise ValueError("Number of images and length of file names list must match")
+        file_names = [Path(x).stem for x in file_names]  # remove suffix
     for i, image in enumerate(images):
         if force_grayscale or images.shape[-1] == 1:
             if images.shape[-1] == 3:
@@ -78,10 +79,17 @@ def save_images(images, dst, file_names: list = [], force_grayscale: bool = Fals
         else:
             pil_image = Image.fromarray(image)
         if file_names is not None:
-            file_names = [Path(x).stem for x in file_names]  # remove suffix
-            pil_image.save(str(Path(dst, "{}.png".format(file_names[i]))))
+            cur_dst = Path(dst, "{}.png".format(file_names[i]))
+            if not overwrite:
+                if cur_dst.exists():
+                    continue
+            pil_image.save(str(cur_dst))
         else:
-            pil_image.save(str(Path(dst, "{:05d}.png".format(i))))
+            cur_dst = Path(dst, "{:05d}.png".format(i))
+            if not overwrite:
+                if cur_dst.exists():
+                    continue
+            pil_image.save(str(cur_dst))
 
 def load_image(path, to_float=False, channels_last=True, to_torch=False, device=None):
     """
