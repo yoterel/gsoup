@@ -4,28 +4,25 @@ import cv2
 from .gsoup_io import save_image, save_images, load_images, load_image
 from .image import interpolate_multi_channel, change_brightness
 from pathlib import Path
-from PIL import Image
 
-def warp_image(p2c, cam_image, output_path=None, BGR=False):
+def warp_image(p2c, cam_image, cam_h=None, cam_w=None, output_path=None):
     """
     given a 2D dense mapping between pixels from optical device 1 to optical device 2,
     warp an image from optical device 1 to optical device 2
     :param p2c: 2D dense mapping between pixels from optical device 1 to optical device 2
     :param cam_image: path to image from optical device 1
+    :param cam_h: camera height, if not supplied assumes cam_image is in the correct dimensions in relation to p2c
+    :param cam_w: camera width, if not supplied assumes cam_image is in the correct dimensions in relation to p2c
     :param output_path: path to save warped image to
-    :param BGR: if True, assumes input image is BGR instead of RGB
     """
     if type(cam_image) == np.ndarray:
         unwarped = cam_image
     else:
-        pilImage = Image.open(Path(cam_image))
-        unwarped = np.asarray(pilImage)
-        if BGR:
-            unwarped = cv2.cvtColor(unwarped, cv2.COLOR_RGB2BGR)
-        #unwarped = cv2.resize(unwarped, (cam_width, cam_height))
-        unwarped = (unwarped / 255).astype(np.float32)
+        unwarped = load_image(cam_image, to_float=True, resize_wh=(cam_w, cam_h))
     #print(p2c.shape)
     #p2c = Image.open(Path(interpolated_p2c_path))
+    if type(p2c) != np.ndarray:
+        p2c = np.load(p2c)
     p2c = np.asarray(p2c)[:, :, :2]
     #p2c = p2c/255
     p2c[:, :, 0] = (p2c[:, :, 0] * 2) - 1
