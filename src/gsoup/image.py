@@ -1,7 +1,7 @@
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 from scipy import interpolate, spatial
-from .core import to_8b, to_float, to_hom, homogenize, broadcast_batch
+from .core import to_8b, to_float, to_hom, homogenize, broadcast_batch, map_range
 from .structures import get_gizmo_coords
 
 def alpha_compose(images, bg_color=None):
@@ -227,3 +227,43 @@ def resize_images_naive(images, H, W, channels_last=True, mode="mean"):
     else:
         raise ValueError("mode must be one of 'max', 'mean'")
     return small_images
+
+def change_brightness(input_img, brightness=255):
+    """
+    changes brightness of an image
+    :param input_img the numpy image
+    :param brightness a number between -255 to 255 (0=no change)
+    :return the new image
+    """
+    brightness = map_range(brightness, 0, 510, -255, 255)
+
+    if brightness != 0:
+        if brightness > 0:
+            shadow = brightness
+            highlight = 255
+        else:
+            shadow = 0
+            highlight = 255 + brightness
+        alpha_b = (highlight - shadow)/255
+        gamma_b = shadow
+    else:
+        alpha_b = 1
+        gamma_b = 0
+    return input_img*alpha_b + gamma_b
+
+def change_contrast(input_img, contrast=127):
+    """
+    changes brightness of an image
+    :param input_img the numpy image
+    :param brightness a number between -127 to 127 (0=no change)
+    :return the new image
+    """
+    contrast = map_range(contrast, 0, 254, -127, 127)
+    if contrast != 0:
+        f = float(131 * (contrast + 127)) / (127 * (131 - contrast))
+        alpha_c = f
+        gamma_c = 127*(1-f)
+    else:
+        alpha_c = 1
+        gamma_c = 0
+    return input_img*alpha_c + gamma_c

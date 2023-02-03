@@ -16,6 +16,7 @@ from .core import (
     rotx,
     roty,
     rotz,
+    map_range,
     create_random_cameras_on_unit_sphere,
     opengl_c2w_to_opencv_c2w,
     opencv_c2w_to_opengl_c2w,
@@ -71,6 +72,8 @@ from .image import (
     interpolate_multi_channel,
     image_grid,
     resize_images_naive,
+    change_brightness,
+    change_contrast
 )
 
 from .video import (
@@ -84,6 +87,12 @@ from .video import (
     slice_from_video,
     VideoReader,
     FPS
+)
+
+from .procam import (
+    warp_image,
+    generate_gray_code,
+    pix2pix_correspondence,
 )
 
 from .sphere_trace import (

@@ -425,3 +425,11 @@ def rotz(a):
                       [s,c,0,0],
                       [0,0,1,0],
                       [0,0,0,1]])
+
+def map_range(x, in_min, in_max, out_min, out_max):
+    """
+    given an input and a range, maps it to a new range
+    """
+    if not in_min <= x <= in_max:
+        raise ValueError("input must be inside range ({} - {})".format(in_min, in_max))
+    return int((x-in_min) * (out_max-out_min) / (in_max-in_min) + out_min)

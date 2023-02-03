@@ -91,7 +91,7 @@ def save_images(images, dst, file_names: list = [], force_grayscale: bool = Fals
                     continue
             pil_image.save(str(cur_dst))
 
-def load_image(path, to_float=False, channels_last=True, to_torch=False, device=None):
+def load_image(path, to_float=False, channels_last=True, to_torch=False, device=None, resize_wh=None):
     """
     loads an image from a single file
     :param path: path to file
@@ -99,6 +99,7 @@ def load_image(path, to_float=False, channels_last=True, to_torch=False, device=
     :param return_paths: if True, returns a list of file paths
     :param to_torch: if True, returns a torch tensor
     :param device: device to load tensor to
+    :param resize_wh: a tuple (w, h) to resize the image using nearest neighbor interpolation
     :return: (b x H x W x 3) tensor, and optionally a list of file names
     """
     path = Path(path)
@@ -107,10 +108,10 @@ def load_image(path, to_float=False, channels_last=True, to_torch=False, device=
     if path.is_dir():
         raise FileNotFoundError("Path must be a file")
     elif path.is_file():
-        image = load_images(path, to_float=to_float, channels_last=channels_last, return_paths=False, to_torch=to_torch, device=device)
+        image = load_images(path, to_float=to_float, channels_last=channels_last, return_paths=False, to_torch=to_torch, device=device, resize_wh=resize_wh)
         return image[0]
 
-def load_images(source, to_float=False, channels_last=True, return_paths=False, to_torch=False, device=None):
+def load_images(source, to_float=False, channels_last=True, return_paths=False, to_torch=False, device=None, resize_wh=None):
     """
     loads images from a list of paths, a folder or a single file
     :param source: path to folder with images / path to image file / list of paths
@@ -118,6 +119,7 @@ def load_images(source, to_float=False, channels_last=True, return_paths=False, 
     :param return_paths: if True, returns a list of file paths
     :param to_torch: if True, returns a torch tensor
     :param device: device to load tensor to
+    :param resize_wh: a tuple (w, h) to resize all images using nearest neighbor interpolation
     :return: (b x H x W x 3) tensor, and optionally a list of file names
     """
     supported_suffixes = [".png", ".jpg", ".jpeg"]
@@ -146,7 +148,10 @@ def load_images(source, to_float=False, channels_last=True, return_paths=False, 
             file_paths = []
             for image in sorted(path.iterdir()):
                 if image.suffix in supported_suffixes:
-                    images.append(np.array(Image.open(str(image))))
+                    im = Image.open(str(image))
+                    if resize_wh is not None:
+                        im.resize(resize_wh)
+                    images.append(np.array(im))
                     file_paths.append(image)
             images = np.stack(images, axis=0)
             if not channels_last:
@@ -156,7 +161,10 @@ def load_images(source, to_float=False, channels_last=True, return_paths=False, 
             if to_torch and device is not None:
                 images = torch.tensor(images, device=device)
         elif path.is_file():
-            images = np.array(Image.open(str(path)))
+            im = Image.open(str(path))
+            if resize_wh is not None:
+                im.resize(resize_wh)
+            images = np.array(im)
             if not channels_last:
                 images = np.moveaxis(images, -1, 0)
             if to_float:

@@ -141,7 +141,6 @@ def test_video():
     timestamps = gsoup.get_frame_timestamps(dst)
     assert timestamps[0] == 0
 
-
 def test_qem():
     v, f = gsoup.structures.cube()
     v_new, f_new = gsoup.qem(v, f, budget = 4)

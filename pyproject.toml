@@ -20,7 +20,8 @@ dependencies = [
     "numpy",
     "Pillow", 
     "scipy",
-    "ffmpeg-python"
+    "ffmpeg-python",
+    "opencv-contrib-python",
 ]
 requires-python = ">=3.7"
 
