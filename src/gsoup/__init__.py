@@ -93,6 +93,7 @@ from .procam import (
     warp_image,
     generate_gray_code,
     pix2pix_correspondence,
+    calibrate_procam
 )
 
 from .sphere_trace import (
