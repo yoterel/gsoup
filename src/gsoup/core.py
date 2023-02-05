@@ -115,7 +115,7 @@ def look_at_np(from_, to_, up_, openGL=False):
     from_, to_, up_ = broadcast_batch(from_, to_, up_)
     forward = to_ - from_
     forward = forward / np.linalg.norm(forward, axis=-1, keepdims=True)
-    right = np.cross(up_, forward)
+    right = np.cross(forward, up_)
     right = right / np.linalg.norm(right, axis=-1, keepdims=True)
     up = np.cross(forward, right)
     up = up / np.linalg.norm(up, axis=-1, keepdims=True)
