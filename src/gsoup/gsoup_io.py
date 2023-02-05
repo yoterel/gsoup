@@ -91,7 +91,7 @@ def save_images(images, dst, file_names: list = [], force_grayscale: bool = Fals
                     continue
             pil_image.save(str(cur_dst))
 
-def load_image(path, to_float=False, channels_last=True, to_torch=False, device=None, resize_wh=None):
+def load_image(path, to_float=False, channels_last=True, to_torch=False, device=None, resize_wh=None, as_grayscale=False):
     """
     loads an image from a single file
     :param path: path to file
@@ -100,6 +100,7 @@ def load_image(path, to_float=False, channels_last=True, to_torch=False, device=
     :param to_torch: if True, returns a torch tensor
     :param device: device to load tensor to
     :param resize_wh: a tuple (w, h) to resize the image using nearest neighbor interpolation
+    :param as_grayscale: if True, loads image as grayscale by averaging over the channels
     :return: (b x H x W x 3) tensor, and optionally a list of file names
     """
     path = Path(path)
@@ -108,10 +109,10 @@ def load_image(path, to_float=False, channels_last=True, to_torch=False, device=
     if path.is_dir():
         raise FileNotFoundError("Path must be a file")
     elif path.is_file():
-        image = load_images(path, to_float=to_float, channels_last=channels_last, return_paths=False, to_torch=to_torch, device=device, resize_wh=resize_wh)
+        image = load_images(path, to_float=to_float, channels_last=channels_last, return_paths=False, to_torch=to_torch, device=device, resize_wh=resize_wh, as_grayscale=as_grayscale)
         return image[0]
 
-def load_images(source, to_float=False, channels_last=True, return_paths=False, to_torch=False, device=None, resize_wh=None):
+def load_images(source, to_float=False, channels_last=True, return_paths=False, to_torch=False, device=None, resize_wh=None, as_grayscale=False):
     """
     loads images from a list of paths, a folder or a single file
     :param source: path to folder with images / path to image file / list of paths
@@ -120,23 +121,32 @@ def load_images(source, to_float=False, channels_last=True, return_paths=False, 
     :param to_torch: if True, returns a torch tensor
     :param device: device to load tensor to
     :param resize_wh: a tuple (w, h) to resize all images using nearest neighbor interpolation
-    :return: (b x H x W x 3) tensor, and optionally a list of file names
+    :param as_grayscale: if True, loads images as grayscale by averaging over the channels
+    :return: (b x H x W x C) tensor, and optionally a list of file names
     """
     supported_suffixes = [".png", ".jpg", ".jpeg"]
     if type(source) == list or type(source) == tuple or type(source) == np.ndarray:
         images = []
         file_paths = []
         for p in source:
-            if not Path(p).exists():
+            p = Path(p)
+            if not p.exists():
                 raise FileNotFoundError("Path does not exist")
             if p.suffix in supported_suffixes:
-                images.append(np.array(Image.open(str(p))))
+                im = Image.open(str(p))
+                if resize_wh is not None:
+                    im.resize(resize_wh)
+                images.append(np.array(im))
                 file_paths.append(p)
         images = np.stack(images, axis=0)
+        if as_grayscale and images.ndim == 4:
+            images = images.mean(axis=-1, keepdims=True).astype(np.float32)
         if not channels_last:
             images = np.moveaxis(images, -1, 1)
         if to_float:
             images = images.astype(np.float32) / 255
+        else:
+            images = images.astype(np.uint8)
         if to_torch and device is not None:
             images = torch.tensor(images, device=device)
     else:
@@ -154,10 +164,14 @@ def load_images(source, to_float=False, channels_last=True, return_paths=False, 
                     images.append(np.array(im))
                     file_paths.append(image)
             images = np.stack(images, axis=0)
+            if as_grayscale and images.ndim == 4:
+                images = images.mean(axis=-1, keepdims=True).astype(np.float32)
             if not channels_last:
                 images = np.moveaxis(images, -1, 1)
             if to_float:
                 images = images.astype(np.float32) / 255
+            else:
+                images = images.astype(np.uint8)
             if to_torch and device is not None:
                 images = torch.tensor(images, device=device)
         elif path.is_file():
@@ -165,10 +179,14 @@ def load_images(source, to_float=False, channels_last=True, return_paths=False, 
             if resize_wh is not None:
                 im.resize(resize_wh)
             images = np.array(im)
+            if as_grayscale and images.ndim == 4:
+                images = images.mean(axis=-1, keepdims=True).astype(np.float32)
             if not channels_last:
                 images = np.moveaxis(images, -1, 0)
             if to_float:
                 images = images.astype(np.float32) / 255
+            else:
+                images = images.astype(np.uint8)
             file_paths = [path]
             if to_torch and device is not None:
                 images = torch.tensor(images, device=device)

@@ -189,7 +189,7 @@ def naive_color_compensate(target_image, all_white_image, all_black_image, cam_w
 
 def calibrate_procam(proj_height, proj_width, graycode_step, capture_dir, 
                      chess_vert=10, chess_hori=7,
-                     black_thr=40, white_thr=5, chess_block_size=999, verbose=True):
+                     black_thr=40, white_thr=5, chess_block_size=10.0, verbose=True):
     """
     calibrates a projection-camera pair
     :param proj_height projector pixel height
@@ -197,7 +197,7 @@ def calibrate_procam(proj_height, proj_width, graycode_step, capture_dir,
     :param chess_vert number of cross points of chessboard in vertical direction (not including the border, i.e. internal corners)
     :param chess_hori number of cross points of chessboard in horizontal direction (not including the border, i.e. internal corners)
     :param graycode_step factor used to downsample the graycode images (see generate_gray_code)
-    :param capture_dir directory containing the captured images, assumes structure as follows ():
+    :param capture_dir directory containing the captured images when gray code patterns were projected, assumes structure as follows:
         capture_dir
             - folder1
                 - 0000.png
@@ -208,7 +208,7 @@ def calibrate_procam(proj_height, proj_width, graycode_step, capture_dir,
                 - ...
     :param black_thr threshold for detecting black pixels in the chessboard
     :param white_thr threshold for detecting white pixels in the chessboard
-    :param chess_block_size size of blocks of chessboard (mm or cm or whatever, doesnt matter)
+    :param chess_block_size size of blocks of chessboard in real world in any unit of measurement (will only effect the translation componenet between camera and projector)
     :param verbose if true, will print out the calibration results
     :return camera intrinsics, camera extrinsics, projector intrinsics, projector extrinsics, cam_proj_rmat, cam_proj_tvec
     """
@@ -237,7 +237,7 @@ def calibrate_procam(proj_height, proj_width, graycode_step, capture_dir,
     graycode = cv2.structured_light_GrayCodePattern.create(gc_width, gc_height)
     graycode.setBlackThreshold(black_thr)
     graycode.setWhiteThreshold(white_thr)
-    cam_shape = cv2.imread(gc_fname_lists[0][0], cv2.IMREAD_GRAYSCALE).shape
+    cam_shape = load_image(gc_fname_lists[0][0], as_grayscale=True).shape
     patch_size_half = int(np.ceil(cam_shape[1] / 180))
     # print('  patch size :', patch_size_half * 2 + 1)
 
@@ -252,7 +252,7 @@ def calibrate_procam(proj_height, proj_width, graycode_step, capture_dir,
 
         imgs = []
         for fname in gc_filenames:
-            img = cv2.imread(fname, cv2.IMREAD_GRAYSCALE)
+            img = load_image(fname, as_grayscale=True)
             if cam_shape != img.shape:
                 raise ValueError("image size of {} does not match other images".format(fname))
             imgs.append(img)
@@ -286,7 +286,7 @@ def calibrate_procam(proj_height, proj_width, graycode_step, capture_dir,
                         dst_points.append(gc_step*np.array(proj_pix))
             if len(src_points) < patch_size_half**2:
                 if verbose:
-                    print('corner {}, {} was skiped because decoded pixels were too few (check your images and threasholds)'.format(c_x, c_y))
+                    print('corner {}, {} was skiped because too few decoded pixels found (check your images and threasholds)'.format(c_x, c_y))
                 continue
             h_mat, inliers = cv2.findHomography(
                 np.array(src_points), np.array(dst_points))
