@@ -141,6 +141,10 @@ def test_video():
     timestamps = gsoup.get_frame_timestamps(dst)
     assert timestamps[0] == 0
 
+def test_procam():
+    gc_patterns = gsoup.generate_gray_code(512, 512, 1)
+    # todo test more functions from this module
+
 def test_qem():
     v, f = gsoup.structures.cube()
     v_new, f_new = gsoup.qem(v, f, budget = 4)
