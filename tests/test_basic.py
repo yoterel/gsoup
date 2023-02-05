@@ -102,8 +102,28 @@ def test_image():
     gsoup.generate_voronoi_diagram(512, 512, 1000, dst=dst)
     img = gsoup.load_image(dst)
     assert img.shape == (512, 512, 3)
+    assert img.dtype == np.uint8
+    img = gsoup.load_image(dst, as_grayscale=True)
+    assert img.shape == (512, 512)
+    assert img.dtype == np.uint8
+    img = gsoup.load_image(dst, to_float=True)
+    assert img.shape == (512, 512, 3)
+    assert img.dtype == np.float32
+    assert (img>=0.0).all()
+    assert (img<=1.0).all()
+    img = gsoup.load_image(dst, channels_last=False)
+    assert img.shape == (3, 512, 512)
+    img = gsoup.load_image(dst, to_float=True, as_grayscale=True)
+    assert img.shape == (512, 512)
+    assert img.dtype == np.float32
+    assert (img>=0.0).all()
+    assert (img<=1.0).all()
+    img = gsoup.load_image(dst, channels_last=False, as_grayscale=True)
+    assert img.shape == (512, 512)
     img = gsoup.load_images(dst)
     assert img.shape == (1, 512, 512, 3)
+    img = gsoup.load_images(dst, as_grayscale=True)
+    assert img.shape == (1, 512, 512)
     img = gsoup.load_images([dst])
     assert img.shape == (1, 512, 512, 3)
     img = gsoup.load_images([dst, dst, dst, dst])
@@ -112,6 +132,16 @@ def test_image():
     assert resized_img.shape == (4, 256, 256, 3)
     grid = gsoup.image_grid(resized_img, 2, 2)
     assert grid.shape == (512, 512, 3)
+    img = gsoup.load_images([dst, dst, dst, dst], as_grayscale=True)
+    assert img.shape == (4, 512, 512)
+    img = gsoup.load_images([dst, dst, dst, dst], as_grayscale=True, channels_last=False)
+    assert img.shape == (4, 512, 512)
+    img = gsoup.load_images([dst, dst, dst, dst], resize_wh=(128, 128))
+    assert img.shape == (4, 128, 128, 3)
+    img, paths = gsoup.load_images([dst, dst, dst, dst], resize_wh=(128, 256), as_grayscale=True, channels_last=False, return_paths=True, to_float=True, to_torch=True)
+    assert len(paths) == 4
+    assert img.dtype == torch.float32
+    assert img.shape == (4, 256, 128)
 
 def test_video():
     frame_number = 100

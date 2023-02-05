@@ -135,19 +135,21 @@ def load_images(source, to_float=False, channels_last=True, return_paths=False, 
             if p.suffix in supported_suffixes:
                 im = Image.open(str(p))
                 if resize_wh is not None:
-                    im.resize(resize_wh)
+                    im = im.resize(resize_wh)
                 images.append(np.array(im))
                 file_paths.append(p)
         images = np.stack(images, axis=0)
         if as_grayscale and images.ndim == 4:
-            images = images.mean(axis=-1, keepdims=True).astype(np.float32)
-        if not channels_last:
+            images = images.mean(axis=-1).astype(np.float32)
+        if not channels_last and images.ndim == 4:
             images = np.moveaxis(images, -1, 1)
         if to_float:
             images = images.astype(np.float32) / 255
         else:
             images = images.astype(np.uint8)
-        if to_torch and device is not None:
+        if to_torch:
+            if device is None:
+                device = torch.device("cpu")
             images = torch.tensor(images, device=device)
     else:
         path = Path(source)
@@ -160,35 +162,39 @@ def load_images(source, to_float=False, channels_last=True, return_paths=False, 
                 if image.suffix in supported_suffixes:
                     im = Image.open(str(image))
                     if resize_wh is not None:
-                        im.resize(resize_wh)
+                        im = im.resize(resize_wh)
                     images.append(np.array(im))
                     file_paths.append(image)
             images = np.stack(images, axis=0)
             if as_grayscale and images.ndim == 4:
-                images = images.mean(axis=-1, keepdims=True).astype(np.float32)
-            if not channels_last:
+                images = images.mean(axis=-1).astype(np.float32)
+            if not channels_last and images.ndim == 4:
                 images = np.moveaxis(images, -1, 1)
             if to_float:
                 images = images.astype(np.float32) / 255
             else:
                 images = images.astype(np.uint8)
-            if to_torch and device is not None:
+            if to_torch:
+                if device is None:
+                    device = torch.device("cpu")
                 images = torch.tensor(images, device=device)
         elif path.is_file():
             im = Image.open(str(path))
             if resize_wh is not None:
-                im.resize(resize_wh)
+                im = im.resize(resize_wh)
             images = np.array(im)
-            if as_grayscale and images.ndim == 4:
-                images = images.mean(axis=-1, keepdims=True).astype(np.float32)
-            if not channels_last:
+            if as_grayscale and images.ndim == 3:
+                images = images.mean(axis=-1).astype(np.float32)
+            if not channels_last and images.ndim == 3:
                 images = np.moveaxis(images, -1, 0)
             if to_float:
                 images = images.astype(np.float32) / 255
             else:
                 images = images.astype(np.uint8)
             file_paths = [path]
-            if to_torch and device is not None:
+            if to_torch:
+                if device is None:
+                    device = torch.device("cpu")
                 images = torch.tensor(images, device=device)
             images = images[None, ...]
     if return_paths:
