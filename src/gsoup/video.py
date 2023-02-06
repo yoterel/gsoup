@@ -4,6 +4,18 @@ import numpy as np
 from pathlib import Path
 import ffmpeg
 from .image import resize_images_naive
+import subprocess
+def get_ffmpeg_version():
+    """
+    returns ffmpeg version
+    :return: ffmpeg version
+    """
+    ffmpeg_output = subprocess.run(["ffmpeg", "-version"], capture_output=True, text=True).stdout
+    parts = ffmpeg_output.split()
+    version = parts[parts.index("version") + 1]
+    if version[0] != "5":
+        print("Warning, detected ffmpeg version: {}. Video module May fail for versions lower than 5".format(version))
+get_ffmpeg_version()
 
 class FPS:
     """
@@ -55,7 +67,7 @@ def get_frame_timestamps(video_path):
     return frame_times
 
 
-def load_video(video_path):
+def load_video(video_path, verbose=False):
     """
     loads a video from disk into a numpy tensor (uint8, channels last, RGB)
     :param video_path: path to video
@@ -66,12 +78,12 @@ def load_video(video_path):
         ffmpeg
         .input(str(video_path))
         .output('pipe:', format='rawvideo', pix_fmt='rgb24')
-        .run(capture_stdout=True, quiet=True)
+        .run(capture_stdout=True, quiet=not verbose)
     )
     video = np.frombuffer(out, np.uint8).reshape([-1, h, w, 3])
     return video
 
-def save_video(frames, output_path, fps, lossy=False):
+def save_video(frames, output_path, fps, lossy=False, verbose=False):
     """
     saves a video from a t x h x w x 3 numpy tensor
     :param frames: (t x h x w x 3) tensor
@@ -87,7 +99,7 @@ def save_video(frames, output_path, fps, lossy=False):
         .input('pipe:', format='rawvideo', pix_fmt='rgb24', s='{}x{}'.format(frames.shape[2], frames.shape[1]), r=fps)
         .output(str(output_path), pix_fmt='yuv420p')
         .overwrite_output()
-        .run(input=frames.tobytes(), quiet=True)
+        .run(input=frames.tobytes(), quiet=not verbose)
         )
     else:
         if output_path.suffix == ".avi":
@@ -100,10 +112,10 @@ def save_video(frames, output_path, fps, lossy=False):
             .input('pipe:', format='rawvideo', pix_fmt='rgb24', s='{}x{}'.format(frames.shape[2], frames.shape[1]), r=fps)
             .output(str(output_path), vcodec='rawvideo', pix_fmt=pix_fmt)
             .overwrite_output()
-            .run(input=frames.tobytes(), quiet=True)
+            .run(input=frames.tobytes(), quiet=not verbose)
         )
 
-def reverse_video(video_path, output_path=None):
+def reverse_video(video_path, output_path=None, verbose=False):
     """
     reverses a video and possibly saves it to disk
     :param video_path: path to video
@@ -116,14 +128,14 @@ def reverse_video(video_path, output_path=None):
         .input(str(video_path))
         .filter('reverse')
         .output('pipe:', format='rawvideo', pix_fmt='rgb24')
-        .run(capture_stdout=True, quiet=True)
+        .run(capture_stdout=True, quiet=not verbose)
     )
     video = np.frombuffer(out, np.uint8).reshape([-1, h, w, 3])
     if output_path is not None:
         save_video(video, output_path)
     return video
 
-def compress_video(src, dst):
+def compress_video(src, dst, verbose=False):
     """
     compresses a video using ffmpeg
     :param src: path to video
@@ -136,10 +148,10 @@ def compress_video(src, dst):
         .input(str(src))
         .output(str(dst), vcodec='libx264', crf=23, preset='slow')
         .overwrite_output()
-        .run(quiet=True)
+        .run(quiet=not verbose)
     )
 
-def video_to_images(src, dst):
+def video_to_images(src, dst, verbose=False):
     """
     creates a folder of images from a video
     """
@@ -150,10 +162,10 @@ def video_to_images(src, dst):
         .input(str(src))
         .output(str(dst / '%d.png'), vcodec='png', format='image2')
         .overwrite_output()
-        .run(quiet=True)
+        .run(quiet=not verbose)
     )
 
-def slice_from_video(src, every_n_frames=2, start_frame=0, end_frame=None):
+def slice_from_video(src, every_n_frames=2, start_frame=0, end_frame=None, verbose=False):
     """
     slices a video into frames
     :param src: path to video
@@ -173,12 +185,12 @@ def slice_from_video(src, every_n_frames=2, start_frame=0, end_frame=None):
         .input(str(src))
         .filter('select', 'between(n, {}, {})*not(mod(n,{}))'.format(start_frame, end_frame, every_n_frames))
         .output('pipe:', format='rawvideo', pix_fmt='rgb24', fps_mode='passthrough')
-        .run(capture_stdout=True, quiet=True)
+        .run(capture_stdout=True, quiet=not verbose)
     )
     video = np.frombuffer(out, np.uint8).reshape([-1, h, w, 3])
     return video
 
-def get_frame_from_video(src, frame_index):
+def get_frame_from_video(src, frame_index, verbose=False):
     """
     gets a single frame from a video
     :param src: path to video
@@ -191,7 +203,7 @@ def get_frame_from_video(src, frame_index):
         .input(str(src))
         .filter('select', 'eq(n,{})'.format(frame_index))
         .output('pipe:', format='rawvideo', pix_fmt='rgb24', fps_mode='passthrough')
-        .run(capture_stdout=True, quiet=True)
+        .run(capture_stdout=True, quiet=not verbose)
     )
     frame = np.frombuffer(out, np.uint8).reshape([h, w, 3])
     return frame
@@ -200,7 +212,7 @@ class VideoReader:
     """
     A (very) basic video iterator
     """
-    def __init__(self, video_path, h=None, w=None, every_n_frames=1, start_frame=0, end_frame=None):
+    def __init__(self, video_path, h=None, w=None, every_n_frames=1, start_frame=0, end_frame=None, verbose=False):
         """
         :param video_path: path to video
         :param target_resolution: (h, w) tuple of target resolution (must have common divisor with original resolution)
@@ -224,7 +236,7 @@ class VideoReader:
             .input(str(self.video_path))
             .filter('select', 'between(n, {}, {})*not(mod(n,{}))'.format(self.start_frame, self.end_frame, self.every_n_frames))
             .output('pipe:', format='rawvideo', pix_fmt='rgb24', fps_mode='passthrough')
-            .run_async(pipe_stdout=True, quiet=True)
+            .run_async(pipe_stdout=True, quiet=not verbose)
         )
 
     def __iter__(self):
