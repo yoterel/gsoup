@@ -51,7 +51,7 @@ def meshes_slide_view(v, f, v_attribute):
         
 def poses_slide_view(camera_poses):
     """
-    given a tensor of t x b x 4 x 4 camera poses, where t is time axis (or step number), b is batch axis, and 4x4 is the camera pose matrix,
+    given a tensor of t x b x 4 x 4 camera poses, where t is time axis (or step number), b is batch axis, and 4x4 is the c2w transform matrix,
     show the batch of poses and allow scrolling through the time axis using a slider.
     """
     if camera_poses.ndim != 4:
@@ -69,7 +69,8 @@ def poses_slide_view(camera_poses):
     v_aabb, e_aabb, c_aabb = structures.get_aabb_coords()
     ps_net = gviewer.ps.register_curve_network("aabb", v_aabb, e_aabb, radius=edge_rad)
     ps_net.add_color_quantity("color", c_aabb, defined_on='edges', enabled=True)
-    gviewer.register_pointcloud("center_of_world", np.zeros((1, 3)), c=np.array([1., 1., 1.])[None, :], radius=0.005, mode="sphere")
+    coa = np.zeros((1, 3))
+    gviewer.register_pointcloud("center_of_world", coa, c=np.array([1., 1., 1.])[None, :], radius=0.005, mode="sphere")
     v_tot, e_tot, c_tot = gviewer.register_camera("poses_orig", poses[0], edge_rad, group=True, alpha=0.3)
     gviewer.ps.show()
 
