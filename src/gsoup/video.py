@@ -30,6 +30,8 @@ def get_video_info(video_path):
     :return: height, width, fps
     """
     video_path = Path(video_path)
+    if not video_path.exists():
+        raise FileNotFoundError("Video file not found: {}".format(video_path))
     probe = ffmpeg.probe(str(video_path))
     video_stream = next((stream for stream in probe['streams'] if stream['codec_type'] == 'video'), None)
     width = int(video_stream['width'])
@@ -160,6 +162,9 @@ def slice_from_video(src, every_n_frames=2, start_frame=0, end_frame=None):
     :param end_frame: last frame to take
     :return: (n x h x w x 3) tensor of sliced video
     """
+    src = Path(src)
+    if not src.exists():
+        raise FileNotFoundError("Video file not found: {}".format(src))
     h, w, _, fc = get_video_info(src)
     if end_frame is None:
         end_frame = fc + 1
