@@ -191,7 +191,7 @@ def calibrate_procam(proj_height, proj_width, graycode_step, capture_dir,
                      chess_vert=10, chess_hori=7,
                      black_thr=40, white_thr=5, chess_block_size=10.0, verbose=True):
     """
-    calibrates a projection-camera pair
+    calibrates a projection-camera pair using local homographies
     :param proj_height projector pixel height
     :param proj_width projector pixel width
     :param chess_vert number of cross points of chessboard in vertical direction (not including the border, i.e. internal corners)
