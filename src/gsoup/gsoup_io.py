@@ -40,13 +40,15 @@ def save_animation(images, dst):
 def save_image(image, dst, force_grayscale: bool = False):
     """
     saves single image as png
-    :param image: (H x W x C) tensor
+    :param image: (H x W x C) tensor or (H x W) tensor
     :param dst: path to save image to (full path to destination, suffix not neccessary but allowed)
     :param force_grayscale: if True, saves image as grayscale
     :param file_name: if provided, saves image with this name
     """
+    if image.ndim == 2:
+        image = image[..., None]
     if image.ndim != 3:
-        raise ValueError("Image must be 3 dimensional")
+        raise ValueError("Image must be 2 or 3 dimensional")
     dst = Path(dst)
     dst.parent.mkdir(parents=True, exist_ok=True)
     save_images(image[None, ...], dst.parent, [dst.name], force_grayscale)
