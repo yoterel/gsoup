@@ -228,15 +228,13 @@ def resize_images_naive(images, H, W, channels_last=True, mode="mean"):
         raise ValueError("mode must be one of 'max', 'mean'")
     return small_images
 
-def change_brightness(input_img, brightness=255):
+def change_brightness(input_img, brightness=0):
     """
     changes brightness of an image
     :param input_img the numpy image
     :param brightness a number between -255 to 255 (0=no change)
     :return the new image
     """
-    brightness = map_range(brightness, 0, 510, -255, 255)
-
     if brightness != 0:
         if brightness > 0:
             shadow = brightness

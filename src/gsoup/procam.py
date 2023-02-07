@@ -158,33 +158,35 @@ def pix2pix_correspondence(proj_width, proj_height, step, captures,
             print('Amount of c2p correspondences :', len(c2p_list))
     return interpolated_c2p, interpolated_p2c
 
-def naive_color_compensate(target_image, all_white_image, all_black_image, cam_width, cam_height, brightness_decrease=-127, output_dir=None, debug=False):
+def naive_color_compensate(target_image, all_white_image, all_black_image, cam_width, cam_height, brightness_decrease=-127, output_path=None, debug=False):
     """
     color compensate a projected image such that it appears closer to a target image from the perspective of a camera
     loosly based on ***insert citation***
-    :param target_image the desired image from the perspective of the camera
-    :param all_white_image a picture taken by camera when projector had all pixels fully on
-    :param all_black_image a picture taken by camera when projector had all pixels fully off
+    :param target_image the desired image path from the perspective of the camera
+    :param all_white_image a path to picture taken by camera when projector had all pixels fully on (float32)
+    :param all_black_image a path to picture taken by camera when projector had all pixels fully off (float32)
     :param cam_width camera image width
     :param cam_height camera image height
     :param brightness_decrease a hyper parameter controlling how much the total brightness is decreased. without this, the result is saturated because of dividing by small numbers
-    :output_dir if passed, result will be saved here
-    :debug if true, will save debug info into outputdir 
+    :output_path if passed, result will be saved to this path
+    :debug if true, will save debug info into output_path 
     """
-    if output_dir is not None:
-        output_dir = Path(output_dir)
-        output_dir.mkdir(parents=True, exist_ok=True)
+    if output_path is not None:
+        output_path = Path(output_path)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
     target_image = load_image(target_image, to_float=True, resize_wh=(cam_width, cam_height))
     target_image = change_brightness(target_image, brightness_decrease)
     if debug:
-        save_image(target_image, "target_decrease_brightness.png") 
+        save_image(target_image, Path(output_path.parent, "decrease_brightness.png"))
+    all_white_image = load_image(all_white_image, to_float=True, resize_wh=(cam_width, cam_height))
+    all_black_image = load_image(all_black_image, to_float=True, resize_wh=(cam_width, cam_height))
     #unwarped_image = np.power(unwarped_image, -2.2)
     compensated = (target_image - all_black_image) / all_white_image
     compensated = np.power(compensated, (1/2.2))
     compensated = np.nan_to_num(compensated, nan=0.0, posinf=0.0, neginf=0.0)
     compensated = np.clip(compensated, 0, 1)
-    if output_dir:
-        save_image(compensated, "compensated.png")
+    if output_path:
+        save_image(compensated, output_path)
     return compensated
 
 def calibrate_procam(proj_height, proj_width, graycode_step, capture_dir, 
