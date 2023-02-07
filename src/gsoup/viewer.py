@@ -38,6 +38,7 @@ class gviewer():
             ps = PolyscopeStub()
             psim = PolyscopeStub()
         self.ps = ps
+        self.clean()
         self.psim = psim
         self.ps.set_up_dir(up_dir)
         if look_at is None:
@@ -154,5 +155,14 @@ class gviewer():
 
     def show(self):
         self.ps.show()
+    
+    def clean(self):
+        self.ps.remove_all_structures()
+    
+    def clear(self):
+        self.ps.clean()
+    
+    def remove_all_structures(self):
+        self.ps.clean()
 
 gviewer = gviewer()
