@@ -92,8 +92,9 @@ from .video import (
 from .procam import (
     warp_image,
     generate_gray_code,
+    calibrate_procam,
     pix2pix_correspondence,
-    calibrate_procam
+    naive_color_compensate,
 )
 
 from .sphere_trace import (
