@@ -100,6 +100,11 @@ def test_structures():
 def test_image():
     dst = Path("resource/voronoi.png")
     gsoup.generate_voronoi_diagram(512, 512, 1000, dst=dst)
+    gsoup.generate_gray_gradient(256, 256, grayscale=True, dst=Path("resource/gg_vert.png"))
+    gsoup.generate_gray_gradient(256, 256, vertical=False, dst=Path("resource/gg_horiz.png"))
+    gsoup.generate_gray_gradient(256, 256, flip=True, dst=Path("resource/gg_flip.png"))
+    gsoup.generate_gray_gradient(256, 256, bins=-65, dst=Path("resource/gg_bin_min.png"))
+    gsoup.generate_gray_gradient(256, 256, bins=6777, dst=Path("resource/gg_bin_max.png"))
     img = gsoup.load_image(dst)
     assert img.shape == (512, 512, 3)
     assert img.dtype == np.uint8

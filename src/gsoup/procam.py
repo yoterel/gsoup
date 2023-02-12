@@ -161,7 +161,7 @@ def pix2pix_correspondence(proj_width, proj_height, step, captures,
 def naive_color_compensate(target_image, all_white_image, all_black_image, cam_width, cam_height, brightness_decrease=-127, output_path=None, debug=False):
     """
     color compensate a projected image such that it appears closer to a target image from the perspective of a camera
-    loosly based on ***insert citation***
+    loosly based on "Embedded entertainment with smart projectors"
     :param target_image the desired image path from the perspective of the camera
     :param all_white_image a path to picture taken by camera when projector had all pixels fully on (float32)
     :param all_black_image a path to picture taken by camera when projector had all pixels fully off (float32)

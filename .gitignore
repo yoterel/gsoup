@@ -133,3 +133,4 @@ dmypy.json
 
 #local resource folder
 resource/
+data/

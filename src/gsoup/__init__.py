@@ -68,6 +68,7 @@ from .image import (
     draw_gizmo_on_image,
     merge_figures_with_line,
     generate_voronoi_diagram,
+    generate_gray_gradient,
     interpolate_single_channel,
     interpolate_multi_channel,
     image_grid,

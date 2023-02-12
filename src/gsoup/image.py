@@ -3,6 +3,7 @@ from PIL import Image, ImageDraw, ImageFont
 from scipy import interpolate, spatial
 from .core import to_8b, to_float, to_hom, homogenize, broadcast_batch, map_range
 from .structures import get_gizmo_coords
+from .gsoup_io import save_image
 
 def alpha_compose(images, bg_color=None):
     """
@@ -139,6 +140,39 @@ def generate_voronoi_diagram(height, width, num_cells=1000, bg_color="white", ds
     if dst is not None:
         img.save(str(dst))
     return np.array(img)
+
+def generate_gray_gradient(height, width, grayscale=False, vertical=True, flip=False, bins=10, dst=None):
+    """
+    generate a gray gradient image HxWx3
+    :param height: height of the image
+    :param width: width of the image
+    :param grayscale: if True, the image is grayscale
+    :param vertical: if True, the gradient is vertical
+    :param flip: if True, the gradient is flipped
+    :param bins: number of bins
+    :param dst: if not None, the image is written to this path
+    :return: (H x W x 3) numpy array
+    """
+    bins = np.clip(bins, 1, 256)
+    color_width = 256 // bins
+    colors = np.arange(0, 256, color_width).astype(np.uint8)
+    if vertical:
+        n_bins = height // bins
+        channel = colors.repeat(n_bins)[:height]
+        img = channel[:, None].repeat(width, axis=1)
+        if flip:
+            img = np.flip(img, axis=0)
+    else:
+        n_bins = (width // bins) + 1
+        channel = colors.repeat(n_bins)[:width]
+        img = channel[None, :].repeat(height, axis=0)
+        if flip:
+            img = np.flip(img, axis=1)
+    if not grayscale:
+        img = img[:, :, None].repeat(3, axis=-1)
+    if dst is not None:
+        save_image(img, dst)
+    return img
 
 def interpolate_single_channel(image: np.ndarray, mask: np.ndarray, method: str = "linear", fill_value: int = 0):
     """
