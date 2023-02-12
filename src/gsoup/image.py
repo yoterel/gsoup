@@ -154,17 +154,26 @@ def generate_gray_gradient(height, width, grayscale=False, vertical=True, flip=F
     :return: (H x W x 3) numpy array
     """
     bins = np.clip(bins, 1, 256)
-    color_width = 256 // bins
-    colors = np.arange(0, 256, color_width).astype(np.uint8)
+    colors = np.linspace(0, 255, num=bins).astype(np.uint8)
     if vertical:
         n_bins = height // bins
-        channel = colors.repeat(n_bins)[:height]
+        up_to_max_intensity = colors.repeat(n_bins)[:height]
+        pad_size = height - up_to_max_intensity.shape[0]
+        if pad_size > 0:
+            channel = np.concatenate((up_to_max_intensity, np.full(pad_size, 255, dtype=np.uint8)))
+        else:
+            channel = up_to_max_intensity
         img = channel[:, None].repeat(width, axis=1)
         if flip:
             img = np.flip(img, axis=0)
     else:
-        n_bins = (width // bins) + 1
-        channel = colors.repeat(n_bins)[:width]
+        n_bins = width // bins
+        up_to_max_intensity = colors.repeat(n_bins)[:width]
+        pad_size = width - up_to_max_intensity.shape[0]
+        if pad_size > 0:
+            channel = np.concatenate((up_to_max_intensity, np.full(pad_size, 255, dtype=np.uint8)))
+        else:
+            channel = up_to_max_intensity
         img = channel[None, :].repeat(height, axis=0)
         if flip:
             img = np.flip(img, axis=1)

@@ -100,11 +100,20 @@ def test_structures():
 def test_image():
     dst = Path("resource/voronoi.png")
     gsoup.generate_voronoi_diagram(512, 512, 1000, dst=dst)
-    gsoup.generate_gray_gradient(256, 256, grayscale=True, dst=Path("resource/gg_vert.png"))
-    gsoup.generate_gray_gradient(256, 256, vertical=False, dst=Path("resource/gg_horiz.png"))
-    gsoup.generate_gray_gradient(256, 256, flip=True, dst=Path("resource/gg_flip.png"))
-    gsoup.generate_gray_gradient(256, 256, bins=-65, dst=Path("resource/gg_bin_min.png"))
-    gsoup.generate_gray_gradient(256, 256, bins=6777, dst=Path("resource/gg_bin_max.png"))
+    gray1 = gsoup.generate_gray_gradient(256, 256, grayscale=True, dst=Path("resource/gg_vert.png"))
+    assert gray1.shape == (256, 256)
+    assert len(np.unique(gray1)) == 10
+    assert gray1.max() == 255
+    gray2 = gsoup.generate_gray_gradient(50, 800, vertical=False, dst=Path("resource/gg_horiz.png"))
+    assert gray2.shape == (50, 800, 3)
+    assert gray2.max() == 255
+    gray3 = gsoup.generate_gray_gradient(256, 256, bins=-65, dst=Path("resource/gg_bin_min.png"))
+    assert gray3.max() == 0
+    gray4 = gsoup.generate_gray_gradient(256, 256, bins=300, dst=Path("resource/gg_bin_max.png"))
+    assert gray4.max() == 255
+    gray5 = gsoup.generate_gray_gradient(1080, 1920, bins=300, dst=Path("resource/gg_highres.png"))
+    assert gray5.shape == (1080, 1920, 3)
+    assert gray5.max() == 255
     img = gsoup.load_image(dst)
     assert img.shape == (512, 512, 3)
     assert img.dtype == np.uint8
