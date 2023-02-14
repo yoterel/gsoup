@@ -48,7 +48,3 @@ push = false
 "src/gsoup/__init__.py" = [
     "{version}"
 ]
-"README.md" = [
-    "v{version}",
-]
-
