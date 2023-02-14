@@ -12,7 +12,18 @@ poses = None
 meshes_v = None
 meshes_f = None
 meshes_attribute = None
+pcs_v = None
+pcs_attribute = None
 #### globals
+
+def pcs_slider_callback():
+    global ui_float, pcs_v
+    changed, ui_float = gviewer.psim.SliderFloat("step", ui_float, v_min=0, v_max=len(pcs_v))
+    if changed:
+        if int(ui_float) >= len(pcs_v):
+            ui_float = len(pcs_v)-1
+        gviewer.register_pointcloud("pc", pcs_v[int(ui_float)],
+                                    s=pcs_attribute[int(ui_float)], radius=0.0006)
 
 def meshes_slider_callback():
     global ui_float, meshes_v, meshes_f
@@ -33,6 +44,20 @@ def poses_slider_callback():
             ui_float = len(poses)-1
         v_tot, e_tot, c_tot = gviewer.register_camera("poses", poses[int(ui_float)], edge_rad, group=True)
 
+def pcs_slide_view(v, v_attribute):
+    """
+    given some vertices tXVx3 and faces tXFx3
+    show the mesh as it changes through time t and allow scrolling through using a slider.
+    """
+    global pcs_v, pcs_attribute
+    gviewer.init()
+    pcs_v = v
+    pcs_attribute = v_attribute
+    gviewer.ps.set_user_callback(pcs_slider_callback)
+    gviewer.ps.set_up_dir("z_up")
+    gviewer.register_pointcloud("pc", pcs_v[0], s=pcs_attribute[0], radius=0.0006)
+    gviewer.show()
+
 def meshes_slide_view(v, f, v_attribute):
     """
     given some vertices tXVx3 and faces tXFx3
@@ -48,7 +73,7 @@ def meshes_slide_view(v, f, v_attribute):
     gviewer.register_mesh("mesh", meshes_v[0], meshes_f[0],
                 v_vertices=meshes_attribute[0], edge_width=1.0)
     gviewer.show()
-        
+
 def poses_slide_view(camera_poses):
     """
     given a tensor of t x b x 4 x 4 camera poses, where t is time axis (or step number), b is batch axis, and 4x4 is the c2w transform matrix,
@@ -72,7 +97,7 @@ def poses_slide_view(camera_poses):
     coa = np.zeros((1, 3))
     gviewer.register_pointcloud("center_of_world", coa, c=np.array([1., 1., 1.])[None, :], radius=0.005, mode="sphere")
     v_tot, e_tot, c_tot = gviewer.register_camera("poses_orig", poses[0], edge_rad, group=True, alpha=0.3)
-    gviewer.ps.show()
+    gviewer.show()
 
 def poses_static_view(camera_poses=None, meshes=None, pointclouds=None, group_cameras=True):
     """
