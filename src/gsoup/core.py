@@ -64,27 +64,40 @@ def broadcast_batch(*args):
                 new_args.append(np.broadcast_to(a, (batch_dim, *a.shape[1:])))
     return new_args
 
-def compose_rt(R: np.array, t: np.array):
+def compose_rt(R: np.array, t: np.array, square=False):
     """
     composes a n x 3 x 4 numpy array from rotation and translation.
     will broadcast upon batch dimension if necessary.
     :param R: nx3x3 numpy array
     :param t: nx3 numpy array
+    :param square: if True, output will be 4x4, otherwise 3x4
     :return: n x 3 x 4 composition of the rotation and translation
     """
     RR, tt = broadcast_batch(R, t)
-    return np.concatenate((RR, tt[:, :, None]), axis=-1)
+    Rt = np.concatenate((RR, tt[:, :, None]), axis=-1)
+    if square:
+        Rt = to_44(Rt)
+    return Rt
 
-def to_44(mat: np.array):
+def to_44(mat):
     """
     converts a 3x4 to a 4x4 matrix by concatenating 0 0 0 1
     :param mat: dimsx3x4 numpy array (dims can be any number of dims including 0)
     :return: dimsx4x4 numpy array
     """
+    if mat.shape[-2:] == (4, 4):
+        return mat
     if mat.shape[-2:] != (3, 4):
         raise ValueError("mat must be 3x4")
-    to_cat = np.broadcast_to(np.array([0, 0, 0, 1]), (*mat.shape[:-2], 1, 4))
-    new_mat = np.concatenate((mat, to_cat), axis=-2)
+    if type(mat) == torch.Tensor:
+        to_cat = torch.zeros((*mat.shape[:-2], 1, 4), dtype=mat.dtype, device=mat.device)
+        to_cat[..., -1] = 1
+        new_mat = torch.cat((mat, to_cat), dim=-2)
+    elif type(mat) == np.ndarray:
+        to_cat = np.broadcast_to(np.array([0, 0, 0, 1]), (*mat.shape[:-2], 1, 4))
+        new_mat = np.concatenate((mat, to_cat), axis=-2)
+    else:
+        raise ValueError("mat must be torch.Tensor or np.ndarray")
     return new_mat
 
 def to_34(mat: np.array):

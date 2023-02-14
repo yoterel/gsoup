@@ -170,8 +170,8 @@ def slice_from_video(src, every_n_frames=2, start_frame=0, end_frame=None, verbo
     slices a video into frames
     :param src: path to video
     :param every_n_frames: stride between selected frames
-    :param start_frame: first frame to take
-    :param end_frame: last frame to take
+    :param start_frame: first frame to take (inclusive)
+    :param end_frame: last frame to take (inclusive)
     :return: (n x h x w x 3) tensor of sliced video
     """
     src = Path(src)
@@ -183,7 +183,8 @@ def slice_from_video(src, every_n_frames=2, start_frame=0, end_frame=None, verbo
     out, _ = (
         ffmpeg
         .input(str(src))
-        .filter('select', 'between(n, {}, {})*not(mod(n,{}))'.format(start_frame, end_frame, every_n_frames))
+        .trim(start_frame=start_frame, end_frame=end_frame+1)
+        .filter('select', 'not(mod(n,{}))'.format(every_n_frames))
         .output('pipe:', format='rawvideo', pix_fmt='rgb24', fps_mode='passthrough')
         .run(capture_stdout=True, quiet=not verbose)
     )
@@ -234,7 +235,8 @@ class VideoReader:
         self.stream = (
             ffmpeg
             .input(str(self.video_path))
-            .filter('select', 'between(n, {}, {})*not(mod(n,{}))'.format(self.start_frame, self.end_frame, self.every_n_frames))
+            .trim(start_frame=self.start_frame, end_frame=self.end_frame)
+            .filter('select', 'not(mod(n,{}))'.format(self.every_n_frames))
             .output('pipe:', format='rawvideo', pix_fmt='rgb24', fps_mode='passthrough')
             .run_async(pipe_stdout=True, quiet=not verbose)
         )
