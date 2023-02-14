@@ -1,4 +1,4 @@
-# gsoup v0.0.6
+# gsoup
 
 ## In a nutshell
 A python library implementing various computational geometry / graphics algorithms with focus on clarity rather than performance.
