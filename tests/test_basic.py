@@ -4,6 +4,15 @@ import torch
 import gsoup
 from pathlib import Path
 
+def test_rotations():
+    qvecs = gsoup.random_qvec(10)
+    rotmats = gsoup.batch_qvec2mat(qvecs)
+    assert rotmats.shape == (10, 3, 3)
+    rotmats = gsoup.batch_qvec2mat(torch.tensor(qvecs))
+    assert rotmats.shape == (10, 3, 3)
+    rotmat = gsoup.qvec2mat(torch.tensor(qvecs[0]))
+    assert rotmat.shape == (3, 3)
+
 def test_homogenize():
     x = np.random.rand(100, 2)
     hom_x = gsoup.to_hom(x)

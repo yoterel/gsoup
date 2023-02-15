@@ -218,121 +218,6 @@ def ray_sphere_intersection(sphere_origin, sphere_radius, ray_origin, ray_direct
     t0[mask] = t1[mask]
     return t0
 
-def vec2skew(v):
-    """
-    returns the skew operator matrix given a vector
-    :param v:  (3, ) torch tensor
-    :return:   (3, 3)
-    """
-    return batch_vec2skew(v[None, :])[0]
-
-def batch_vec2skew(v):
-    """
-    returns a batch of skew operator matrices given a batch of vectors
-    :param v:  (B, 3) torch tensor
-    :return:   (B, 3, 3)
-    """
-    zero = torch.zeros_like(v[:, 0:1])
-    skew_v0 = torch.cat([zero, -v[:, 2:3], v[:, 1:2]], dim=1)  # (B, 3)
-    skew_v1 = torch.cat([v[:, 2:3], zero, -v[:, 0:1]], dim=1)
-    skew_v2 = torch.cat([-v[:, 1:2], v[:, 0:1], zero], dim=1)
-    skew_v = torch.stack([skew_v0, skew_v1, skew_v2], dim=1)  # (B, 3, 3)
-    return skew_v  # (B, 3, 3)
-
-def batch_rotvec2mat(r: torch.Tensor):
-    """so(3) vector to SO(3) matrix
-    :param r: (3, ) axis-angle, torch tensor
-    :return:  (3, 3)
-    """
-    if r.ndim != 2:
-        raise ValueError("r must be 2D tensor.")
-    skew_r = batch_vec2skew(r)  # (3, 3)
-    norm_r = r.norm(dim=-1, keepdim=True)[:, :, None] + 1e-15
-    eye = torch.eye(3, dtype=torch.float32, device=r.device)[None, :]
-    R = eye + (torch.sin(norm_r) / norm_r) * skew_r + ((1 - torch.cos(norm_r)) / norm_r ** 2) * (skew_r @ skew_r)
-    return R
-
-def rotvec2mat(r: torch.Tensor):
-    """so(3) vector to SO(3) matrix
-    :param r: (3, ) axis-angle, torch tensor
-    :return:  (3, 3)
-    """
-    return batch_rotvec2mat(r[None, :])[0]
-
-def mat2rotvec(r: torch.Tensor):
-    """SO(3) matrix to so(3) vector
-    :param r: (3, ) axis-angle, torch tensor
-    :return:  (3, 3)
-    """
-    e, v = torch.linalg.eig(r)
-    rotvec = v.real[:, torch.isclose(e.real, torch.ones(1))].squeeze()
-    up = torch.tensor([0, 1, 0], dtype=torch.float)
-    # ortho = torch.cross(rotvec, up)
-    # ortho = ortho / ortho.norm(keepdim=True)
-    # angle1 = torch.arccos(ortho.dot(r @ ortho))
-    angle2 = torch.arccos((torch.trace(r) - 1) / 2)
-    raise NotImplementedError("please verify this function implementation before usage")
-    return rotvec * angle2
-
-def qvec2rotmat(qvec: np.array):
-    """
-    converts a quaternions to a rotation matrix
-    :param qvec: np array (4,) xyzw
-    :return: 3x3 np array
-    """
-    rot_mat = np.array([
-        [1 - 2 * qvec[2] ** 2 - 2 * qvec[3] ** 2,
-         2 * qvec[1] * qvec[2] - 2 * qvec[0] * qvec[3],
-         2 * qvec[3] * qvec[1] + 2 * qvec[0] * qvec[2]],
-        [2 * qvec[1] * qvec[2] + 2 * qvec[0] * qvec[3],
-         1 - 2 * qvec[1] ** 2 - 2 * qvec[3] ** 2,
-         2 * qvec[2] * qvec[3] - 2 * qvec[0] * qvec[1]],
-        [2 * qvec[3] * qvec[1] - 2 * qvec[0] * qvec[2],
-         2 * qvec[2] * qvec[3] + 2 * qvec[0] * qvec[1],
-         1 - 2 * qvec[1] ** 2 - 2 * qvec[2] ** 2]])
-    raise NotImplementedError("please verify this function implementation before usage")
-    return rot_mat
-
-def rotmat2qvec(R: np.array):
-    """
-    converts a rotation matrix to a quaternion
-    :param R: np array of size 3x3
-    :return: qvec (4,) xyzw
-    """
-    q = np.empty((R.shape[0], 4), dtype=R.dtype)
-    trace = np.trace(R)
-    expanded_trace = np.concatenate((np.diag(R), trace), axis=0)
-    choice = np.argmax(expanded_trace, axis=-1)
-    mask = choice != 3
-    i = choice[mask]
-    j = (i+1) % 3
-    k = (j+1) % 3
-    ii = np.concatenate((i, i), axis=1)
-    ij = np.concatenate((i, j), axis=1)
-    ik = np.concatenate((i, k), axis=1)
-    jk = np.concatenate((j, k), axis=1)
-    q[:, 0] = R[:, 2, 1] - R[:, 1, 2]
-    q[:, 1] = R[:, 0, 2] - R[:, 2, 0]
-    q[:, 2] = R[:, 1, 0] - R[:, 0, 1]
-    q[:, 3] = 1 + trace
-    q[mask, 0] = 1 - trace + 2*R[ii]
-    q[mask, 1] = R[np.flip(ij)] + R[ij]
-    q[mask, 2] = R[np.flip(ik)] + R[ik]
-    q[mask, 3] = R[np.flip(jk)] - R[jk]
-    raise NotImplementedError("please verify this function implementation before usage")
-    # Rxx, Ryx, Rzx, Rxy, Ryy, Rzy, Rxz, Ryz, Rzz = R.flat
-    # K = np.array([
-    #     [Rxx - Ryy - Rzz, 0, 0, 0],
-    #     [Ryx + Rxy, Ryy - Rxx - Rzz, 0, 0],
-    #     [Rzx + Rxz, Rzy + Ryz, Rzz - Rxx - Ryy, 0],
-    #     [Ryz - Rzy, Rzx - Rxz, Rxy - Ryx, Rxx + Ryy + Rzz]]) / 3.0
-    # eigvals, eigvecs = np.linalg.eigh(K)
-    # qvec = eigvecs[[3, 0, 1, 2], np.argmax(eigvals)]
-    # if qvec[0] < 0:
-    #     qvec *= -1
-    # return qvec
-    return q
-
 def qslerp(qa, qb, t):
     """
     interpolates between two quanternions
@@ -378,7 +263,6 @@ def ray_ray_intersection(oa, da, ob, db):
     if tb < 0:
         tb = 0
     return (oa + ta * da + ob + tb * db) * 0.5, denom
-
 
 def get_center_of_attention(c2w):
     """

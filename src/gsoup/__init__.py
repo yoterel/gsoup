@@ -21,6 +21,13 @@ from .core import (
     opengl_c2w_to_opencv_c2w,
     opencv_c2w_to_opengl_c2w,
     opengl_project_from_opencv_intrinsics,
+    vec2skew,
+    batch_vec2skew,
+    rotvec2mat,
+    batch_rotvec2mat,
+    random_qvec,
+    qvec2mat,
+    batch_qvec2mat,
 )
 
 from .geometry_basic import (
@@ -36,8 +43,6 @@ from .geometry_basic import (
     get_center_of_attention,
     scale_poses,
     find_princple_componenets,
-    rotmat2qvec,
-    qvec2rotmat,
     qslerp
 )
 
