@@ -6,12 +6,21 @@ from pathlib import Path
 
 def test_rotations():
     qvecs = gsoup.random_qvec(10)
+    torch_qvecs = torch.tensor(qvecs)
     rotmats = gsoup.batch_qvec2mat(qvecs)
     assert rotmats.shape == (10, 3, 3)
-    rotmats = gsoup.batch_qvec2mat(torch.tensor(qvecs))
+    rotmats = gsoup.batch_qvec2mat(torch_qvecs)
     assert rotmats.shape == (10, 3, 3)
-    rotmat = gsoup.qvec2mat(torch.tensor(qvecs[0]))
+    new_qvecs = gsoup.batch_mat2qvec(rotmats)
+    mask1 = (torch.abs(new_qvecs - torch_qvecs) < 1e-6)
+    mask2 = (torch.abs(new_qvecs + torch_qvecs) < 1e-6)
+    assert torch.all(mask1 | mask2)
+    rotmat = gsoup.qvec2mat(torch_qvecs[0])
     assert rotmat.shape == (3, 3)
+    new_qvec = gsoup.mat2qvec(rotmat)
+    mask1 = (torch.abs(new_qvec - torch_qvecs[0]) < 1e-6)
+    mask2 = (torch.abs(new_qvec + torch_qvecs[0]) < 1e-6)
+    assert torch.all(mask1 | mask2)
 
 def test_homogenize():
     x = np.random.rand(100, 2)

@@ -28,6 +28,8 @@ from .core import (
     random_qvec,
     qvec2mat,
     batch_qvec2mat,
+    mat2qvec,
+    batch_mat2qvec,
 )
 
 from .geometry_basic import (
