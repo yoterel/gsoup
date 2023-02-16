@@ -51,6 +51,15 @@ def pcs_slide_view(v, v_attribute):
     """
     global pcs_v, pcs_attribute
     gviewer.init()
+    gviewer.ps.set_up_dir("z_up")
+    gviewer.ps.set_ground_plane_mode("none")
+    edge_rad = 0.0005
+    v_aabb, e_aabb, c_aabb = structures.get_aabb_coords()
+    aabb_network = gviewer.ps.register_curve_network("aabb", v_aabb, e_aabb, radius=edge_rad)
+    aabb_network.add_color_quantity("color", c_aabb, defined_on='edges', enabled=True)
+    v_gizmo, e_gizmo, c_gizmo = structures.get_gizmo_coords(0.1)
+    gizmo_network = gviewer.ps.register_curve_network("gizmo", v_gizmo, e_gizmo, radius=edge_rad)
+    gizmo_network.add_color_quantity("color", c_gizmo, defined_on='edges', enabled=True)
     pcs_v = v
     pcs_attribute = v_attribute
     gviewer.ps.set_user_callback(pcs_slider_callback)
@@ -92,8 +101,11 @@ def poses_slide_view(camera_poses):
     edge_rad = 0.0005
     point_rad = 0.002
     v_aabb, e_aabb, c_aabb = structures.get_aabb_coords()
-    ps_net = gviewer.ps.register_curve_network("aabb", v_aabb, e_aabb, radius=edge_rad)
-    ps_net.add_color_quantity("color", c_aabb, defined_on='edges', enabled=True)
+    aabb_network = gviewer.ps.register_curve_network("aabb", v_aabb, e_aabb, radius=edge_rad)
+    aabb_network.add_color_quantity("color", c_aabb, defined_on='edges', enabled=True)
+    v_gizmo, e_gizmo, c_gizmo = structures.get_gizmo_coords(0.1)
+    gizmo_network = gviewer.ps.register_curve_network("gizmo", v_gizmo, e_gizmo, radius=edge_rad)
+    gizmo_network.add_color_quantity("color", c_gizmo, defined_on='edges', enabled=True)
     coa = np.zeros((1, 3))
     gviewer.register_pointcloud("center_of_world", coa, c=np.array([1., 1., 1.])[None, :], radius=0.005, mode="sphere")
     v_tot, e_tot, c_tot = gviewer.register_camera("poses_orig", poses[0], edge_rad, group=True, alpha=0.3)

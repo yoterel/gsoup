@@ -61,6 +61,7 @@ class gviewer():
             ps_pointcloud.add_color_quantity("colors", c, enabled=True)
         if s is not None:
             s = (s - np.min(s)) / (np.max(s) - np.min(s))
+            s = np.nan_to_num(s, nan=1.0, posinf=1.0, neginf=1.0)
             ps_pointcloud.add_scalar_quantity("scalar_value", s,
                                             enabled=True,
                                             vminmax=(0., 1.),

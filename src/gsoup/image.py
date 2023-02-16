@@ -69,7 +69,7 @@ def draw_gizmo_on_image(np_images, w2c, isOpenGL=False, scale=.05):
         pil_image = Image.fromarray(to_8b(np_image))
         W, H = pil_image.size
         # W, H = image.shape[1], image.shape[0]
-        gizmo_cords = get_gizmo_coords(scale)
+        gizmo_cords, _, _ = get_gizmo_coords(scale)
         gizmo_hom = to_hom(gizmo_cords)  #  = np.concatenate((gizmo_cords, np.ones_like(gizmo_cords[:, 0:1])), axis=-1)
         verts_clip = (w2c[i] @ gizmo_hom.T).T
         verts_clip = homogenize(verts_clip) # verts_screen_xy = verts_screen[:, :2] / verts_screen[:, 2:3]

@@ -88,7 +88,17 @@ def get_gizmo_coords(scale=1.0):
         [0, 0, 1],
     ]).astype(np.float32)
     vertices *= scale
-    return vertices
+    edges = np.array([
+        [0, 1],
+        [0, 2],
+        [0, 3]
+    ])
+    colors = np.array([
+        [1, 0, 0],
+        [0, 1, 0],
+        [0, 0, 1]
+    ])
+    return vertices, edges, colors
 
 def get_camera_coords(scale=0.1):
     vertices = np.array([
