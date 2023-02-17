@@ -141,6 +141,52 @@ def generate_voronoi_diagram(height, width, num_cells=1000, bg_color="white", ds
         img.save(str(dst))
     return np.array(img)
 
+def generate_dot_pattern(height, width, background="black", radius=5, spacing=50, dst=None):
+    """
+    generates an image with colored circles in a grid
+    :param height: height of the image
+    :param width: width of the image
+    :param background: background color
+    :param radius: radius of the circles in pixels
+    :param spacing: spacing between the circles in pixels
+    :param dst: if not None, the image is written to this path
+    :return: (H x W x 3) numpy array (uint8)
+    """
+    img = Image.new("RGB", (width, height), background)
+    img1 = ImageDraw.Draw(img)
+    for i in range(0, width, spacing):
+        for j in range(0, height, spacing):
+            img1.ellipse([i, j, i + radius*2, j + radius*2], fill=tuple(np.random.randint(0, 255, size=(3,))))
+    if dst is not None:
+        img.save(str(dst))
+    return np.array(img)
+
+def generate_stripe_pattern(height, width, background="black", direction="vert", thickness=5, spacing=50, dst=None):
+    """
+    generates an image with colored stripes in a certain direction
+    :param height: height of the image
+    :param width: width of the image
+    :param background: background color
+    :param direction: direction of the stripes ("vert" or "hor")
+    :param thickness: thickness of the stripes
+    :param spacing: spacing between the stripes
+    :param dst: if not None, the image is written to this path
+    :return: (H x W x 3) numpy array (uint8)
+    """
+    img = Image.new("RGB", (width, height), background)
+    img1 = ImageDraw.Draw(img)
+    if direction == "vert":
+        for i in range(0, width, spacing):
+            img1.rectangle([i, 0, i + thickness, height], fill=tuple(np.random.randint(0, 255, size=(3,))))
+    elif direction == "hor":
+        for i in range(0, height, spacing):
+            img1.rectangle([0, i, width, i + thickness], fill=tuple(np.random.randint(0, 255, size=(3,))))
+    else:
+        raise ValueError("direction must be either 'vert' or 'hor'")
+    if dst is not None:
+        img.save(str(dst))
+    return np.array(img)
+
 def generate_gray_gradient(height, width, grayscale=False, vertical=True, flip=False, bins=10, dst=None):
     """
     generate a gray gradient image HxWx3

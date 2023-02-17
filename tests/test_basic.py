@@ -116,8 +116,8 @@ def test_structures():
     assert f.shape[0] == 12
 
 def test_image():
-    dst = Path("resource/voronoi.png")
-    gsoup.generate_voronoi_diagram(512, 512, 1000, dst=dst)
+    gsoup.generate_stripe_pattern(256, 512, direction="hor", dst=Path("resource/stripe.png"))
+    gsoup.generate_dot_pattern(512, 256, dst=Path("resource/dots.png"))
     gray1 = gsoup.generate_gray_gradient(256, 256, grayscale=True, dst=Path("resource/gg_vert.png"))
     assert gray1.shape == (256, 256)
     assert len(np.unique(gray1)) == 10
@@ -132,6 +132,8 @@ def test_image():
     gray5 = gsoup.generate_gray_gradient(1080, 1920, bins=300, dst=Path("resource/gg_highres.png"))
     assert gray5.shape == (1080, 1920, 3)
     assert gray5.max() == 255
+    dst = Path("resource/voronoi.png")
+    gsoup.generate_voronoi_diagram(512, 512, 1000, dst=dst)
     img = gsoup.load_image(dst)
     assert img.shape == (512, 512, 3)
     assert img.dtype == np.uint8

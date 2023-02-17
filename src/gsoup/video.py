@@ -10,11 +10,14 @@ def get_ffmpeg_version():
     returns ffmpeg version
     :return: ffmpeg version
     """
-    ffmpeg_output = subprocess.run(["ffmpeg", "-version"], capture_output=True, text=True).stdout
-    parts = ffmpeg_output.split()
-    version = parts[parts.index("version") + 1]
-    if version[0] != "5":
-        print("Warning, detected ffmpeg version: {}. Video module May fail for versions lower than 5".format(version))
+    try:
+        ffmpeg_output = subprocess.run(["ffmpeg", "-version"], capture_output=True, text=True).stdout
+        parts = ffmpeg_output.split()
+        version = parts[parts.index("version") + 1]
+        if version[0] != "5":
+            print("Warning, detected ffmpeg version: {}. Video module May fail for versions lower than 5".format(version))
+    except ValueError:
+        print("Warning, could not detect ffmpeg version. Video module May fail")
 get_ffmpeg_version()
 
 class FPS:

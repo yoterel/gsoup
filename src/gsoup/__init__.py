@@ -76,6 +76,8 @@ from .image import (
     merge_figures_with_line,
     generate_voronoi_diagram,
     generate_gray_gradient,
+    generate_dot_pattern,
+    generate_stripe_pattern,
     interpolate_single_channel,
     interpolate_multi_channel,
     image_grid,
