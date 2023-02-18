@@ -167,7 +167,7 @@ def generate_stripe_pattern(height, width, background="black", direction="vert",
     :param height: height of the image
     :param width: width of the image
     :param background: background color
-    :param direction: direction of the stripes ("vert" or "hor")
+    :param direction: direction of the stripes ("vert", "hor", "both")
     :param thickness: thickness of the stripes
     :param spacing: spacing between the stripes
     :param dst: if not None, the image is written to this path
@@ -181,8 +181,13 @@ def generate_stripe_pattern(height, width, background="black", direction="vert",
     elif direction == "hor":
         for i in range(0, height, spacing):
             img1.rectangle([0, i, width, i + thickness], fill=tuple(np.random.randint(0, 255, size=(3,))))
+    elif direction == "both":
+        for i in range(0, width, spacing):
+            img1.rectangle([i, 0, i + thickness, height], fill=tuple(np.random.randint(0, 255, size=(3,))))
+        for i in range(0, height, spacing):
+            img1.rectangle([0, i, width, i + thickness], fill=tuple(np.random.randint(0, 255, size=(3,))))
     else:
-        raise ValueError("direction must be either 'vert' or 'hor'")
+        raise ValueError("direction must be either 'vert', 'hor' or 'both'")
     if dst is not None:
         img.save(str(dst))
     return np.array(img)

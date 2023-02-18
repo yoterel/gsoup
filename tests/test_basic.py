@@ -116,7 +116,7 @@ def test_structures():
     assert f.shape[0] == 12
 
 def test_image():
-    gsoup.generate_stripe_pattern(256, 512, direction="hor", dst=Path("resource/stripe.png"))
+    gsoup.generate_stripe_pattern(256, 512, direction="both", dst=Path("resource/stripe.png"))
     gsoup.generate_dot_pattern(512, 256, dst=Path("resource/dots.png"))
     gray1 = gsoup.generate_gray_gradient(256, 256, grayscale=True, dst=Path("resource/gg_vert.png"))
     assert gray1.shape == (256, 256)
