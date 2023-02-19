@@ -192,6 +192,27 @@ def generate_stripe_pattern(height, width, background="black", direction="vert",
         img.save(str(dst))
     return np.array(img)
 
+def generate_concentric_circles(height, width, background="black", n=15, dst=None):
+    """
+    generates an image with colored concentric circles
+    :param height: height of the image
+    :param width: width of the image
+    :param background: background color
+    :param n: number of circles to draw
+    :param dst: if not None, the image is written to this path
+    """
+    spacing_x = width // (2*n)
+    spacing_y = height // (2*n)
+    img = Image.new("RGB", (width, height), background)
+    img1 = ImageDraw.Draw(img)
+    for i in range(n):
+        x0 = spacing_x * i
+        y0 = spacing_y * i
+        img1.ellipse([x0, y0, width - x0, height - y0], fill=tuple(np.random.randint(0, 255, size=(3,))))
+    if dst is not None:
+        img.save(str(dst))
+    return np.array(img)
+
 def generate_gray_gradient(height, width, grayscale=False, vertical=True, flip=False, bins=10, dst=None):
     """
     generate a gray gradient image HxWx3
