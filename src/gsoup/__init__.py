@@ -79,6 +79,7 @@ from .image import (
     generate_dot_pattern,
     generate_stripe_pattern,
     generate_concentric_circles,
+    generate_lollipop_pattern,
     interpolate_single_channel,
     interpolate_multi_channel,
     image_grid,
