@@ -340,6 +340,8 @@ def to_8b(x, clip=True):
             if clip:
                 x = torch.clamp(x, 0, 1)
             return (255 * x).round().type(torch.uint8)
+        elif x.dtype == torch.bool:
+            return x.type(torch.uint8) * 255
         elif x.dtype == torch.uint8:
             return x
     else:
@@ -347,21 +349,39 @@ def to_8b(x, clip=True):
             if clip:
                 x = np.clip(x, 0, 1)
             return (255 * x).round().astype(np.uint8)
+        elif x.dtype == bool:
+            return x.astype(np.uint8) * 255
         elif x.dtype == np.uint8:
             return x
 
-def to_float(x: np.array, clip=True):
+def to_float(x, clip=True):
     """
-    convert a numpy (8bit) array to float
+    convert a 8bit or bool array to float
     """
-    if x.dtype == np.uint8:
-        return x.astype(np.float32) / 255
-    elif x.dtype == np.float32:
-        if clip:
-            x = np.clip(x, 0, 1)
-        return x
+    if type(x) == np.ndarray:
+        if x.dtype == np.uint8:
+            return x.astype(np.float32) / 255
+        elif x.dtype == np.float32:
+            if clip:
+                x = np.clip(x, 0, 1)
+            return x
+        elif x.dtype == bool:
+            return x.astype(np.float32)
+        else:
+            raise ValueError("unsupported dtype")
+    elif type(x) == torch.Tensor:
+        if x.dtype == torch.uint8:
+            return x.to(torch.float32) / 255
+        elif x.dtype == torch.float32:
+            if clip:
+                x = torch.clamp(x, 0, 1)
+            return x
+        elif x.dtype == torch.bool:
+            return x.to(torch.float32)
+        else:
+            raise ValueError("unsupported dtype")
     else:
-        raise ValueError("unsupported dtype")
+        raise ValueError("unsupported type")
 
 def to_PIL(x: np.array):
     """

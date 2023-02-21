@@ -4,6 +4,27 @@ import torch
 import gsoup
 from pathlib import Path
 
+def test_type_conversions():
+    test_numpy_bool = np.array([1, 0, 0, 1], dtype=bool)
+    test_torch_bool = gsoup.to_torch(test_numpy_bool)
+
+    test_float_from_bool = gsoup.to_float(test_numpy_bool)
+    assert test_float_from_bool.dtype == np.float32
+    test_8bit_from_bool = gsoup.to_8b(test_numpy_bool)
+    assert test_8bit_from_bool.dtype == np.uint8
+    test_8bit_from_float = gsoup.to_8b(test_float_from_bool)
+    assert test_8bit_from_float.dtype == np.uint8
+    test_float_from_8bit = gsoup.to_float(test_8bit_from_float)
+    assert test_float_from_8bit.dtype == np.float32
+    test_float_from_bool = gsoup.to_float(test_torch_bool)
+    assert test_float_from_bool.dtype == torch.float32
+    test_8bit_from_bool = gsoup.to_8b(test_torch_bool)
+    assert test_8bit_from_bool.dtype == torch.uint8
+    test_8bit_from_float = gsoup.to_8b(test_float_from_bool)
+    assert test_8bit_from_float.dtype == torch.uint8
+    test_float_from_8bit = gsoup.to_float(test_8bit_from_float)
+    assert test_float_from_8bit.dtype == torch.float32
+
 def test_rotations():
     qvecs = gsoup.random_qvec(10)
     torch_qvecs = torch.tensor(qvecs)
