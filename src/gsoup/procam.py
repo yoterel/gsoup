@@ -18,21 +18,23 @@ def warp_image(p2c, cam_image, cam_h=None, cam_w=None, output_path=None):
     :return: warped image np array uint8
     """
     if type(cam_image) == np.ndarray:
-        if cam_image.dtype != np.float32 or cam_image.dtype != np.float64:
-            raise ValueError("cam_image must be float32 or float64")
-        if cam_image.ndim != 3:
-            raise ValueError("cam_image must be 3D")
-        if cam_image.shape[2] != 3:
-            raise ValueError("cam_image must be a channels last image.")
-        if cam_h is None:
-            if cam_image.shape[0] != cam_h:
-                raise ValueError("cam_image must be of shape cam_h, cam_w, 3")
-        if cam_w is None:
-            if cam_image.shape[1] != cam_w:
-                raise ValueError("cam_image must be of shape cam_h, cam_w, 3")
         unwarped = torch.tensor(cam_image)
+    elif type(cam_image) == torch.Tensor:
+        unwarped = cam_image
     else:
         unwarped = load_image(cam_image, to_float=True, to_torch=True, resize_wh=(cam_w, cam_h))
+    if unwarped.dtype != torch.float32 and unwarped.dtype != torch.float64:
+        raise ValueError("cam_image must be float32 or float64")
+    if unwarped.ndim != 3:
+        raise ValueError("cam_image must be 3D")
+    if unwarped.shape[2] != 3:
+        raise ValueError("cam_image must be a channels last image.")
+    if cam_h is not None:
+        if unwarped.shape[0] != cam_h:
+            raise ValueError("cam_image must be of shape cam_h, cam_w, 3")
+    if cam_w is not None:
+        if unwarped.shape[1] != cam_w:
+            raise ValueError("cam_image must be of shape cam_h, cam_w, 3")
     #print(p2c.shape)
     #p2c = Image.open(Path(interpolated_p2c_path))
     if type(p2c) != np.ndarray:
