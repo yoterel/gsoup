@@ -288,9 +288,9 @@ def create_random_cameras_on_unit_sphere(n, r, device="cuda"):
     matrices = torch.empty((n, 4, 4), dtype=torch.float32, device=device)
     for i in range(len(locs)):
         matrices[i] = look_at_torch(locs[i],
-                                       torch.zeros(3, dtype=torch.float32, device=device),
-                                       torch.tensor([0.,1.,0.], device=device),
-                                       device=device)
+                                    torch.zeros(3, dtype=torch.float32, device=device),
+                                    torch.tensor([0.,1.,0.], device=device),
+                                    device=device)
     v2w = matrices  # c2w
     w2v = torch.inverse(v2w)
     v2c = torch.tensor(perspective_projection(), dtype=torch.float32, device=device)
@@ -522,6 +522,24 @@ def random_qvec(n: int):
     denom = np.copysign(np.sqrt(s), o[:, 0])[:, None]
     o = o / denom
     return o
+
+def random_vectors_on_hemisphere(n, normal=None, device="cpu"):
+    """
+    creates a batch of random vectors on a hemisphere, possibly oriented by a normal
+    :param n: number of vectors
+    :param normal: normals to orient the hemisphere (,3) or (n,3)
+    :param device: device to put the tensors on
+    :return: tensor of shape (n, 3)
+    """
+    locs = torch.randn((n, 3), device=device)
+    locs = torch.nn.functional.normalize(locs, dim=1, eps=1e-6)
+    if normal is not None:
+        if normal.ndim == 1:
+            normal = normal[None, :]
+        normal = torch.nn.functional.normalize(normal, dim=-1, eps=1e-6)
+        dot_product = (locs[:, None, :] @ normal[:, :, None]).squeeze()
+        locs[dot_product < 0] *= -1
+    return locs
 
 def qvec2mat(qvec):
     """
