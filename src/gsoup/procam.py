@@ -2,6 +2,7 @@ import numpy as np
 import torch
 import cv2
 from .gsoup_io import save_image, save_images, load_images, load_image
+from .core import to_8b
 from .image import interpolate_multi_channel, change_brightness
 from pathlib import Path
 
@@ -10,15 +11,28 @@ def warp_image(p2c, cam_image, cam_h=None, cam_w=None, output_path=None):
     given a 2D dense mapping between pixels from optical device 1 to optical device 2,
     warp an image from optical device 1 to optical device 2
     :param p2c: 2D dense mapping between pixels from optical device 1 to optical device 2
-    :param cam_image: path to image from optical device 1
+    :param cam_image: path to image from optical device 1, or float np array channels last, or pytorch tensor channels last
     :param cam_h: camera height, if not supplied assumes cam_image is in the correct dimensions in relation to p2c
     :param cam_w: camera width, if not supplied assumes cam_image is in the correct dimensions in relation to p2c
     :param output_path: path to save warped image to
+    :return: warped image np array uint8
     """
     if type(cam_image) == np.ndarray:
-        unwarped = cam_image
+        if cam_image.dtype != np.float32 or cam_image.dtype != np.float64:
+            raise ValueError("cam_image must be float32 or float64")
+        if cam_image.ndim != 3:
+            raise ValueError("cam_image must be 3D")
+        if cam_image.shape[2] != 3:
+            raise ValueError("cam_image must be a channels last image.")
+        if cam_h is None:
+            if cam_image.shape[0] != cam_h:
+                raise ValueError("cam_image must be of shape cam_h, cam_w, 3")
+        if cam_w is None:
+            if cam_image.shape[1] != cam_w:
+                raise ValueError("cam_image must be of shape cam_h, cam_w, 3")
+        unwarped = torch.tensor(cam_image)
     else:
-        unwarped = load_image(cam_image, to_float=True, resize_wh=(cam_w, cam_h))
+        unwarped = load_image(cam_image, to_float=True, to_torch=True, resize_wh=(cam_w, cam_h))
     #print(p2c.shape)
     #p2c = Image.open(Path(interpolated_p2c_path))
     if type(p2c) != np.ndarray:
@@ -32,7 +46,7 @@ def warp_image(p2c, cam_image, cam_h=None, cam_w=None, output_path=None):
     grid = torch.tensor(p2c.astype(np.float32)).unsqueeze(0)
     input = torch.tensor(unwarped).permute(2, 0, 1).unsqueeze(0)
     warped = torch.nn.functional.grid_sample(input, grid).squeeze().permute(1, 2, 0).numpy()
-    warped_int = (warped * 255).astype(np.uint8)
+    warped_int = to_8b(warped)
     if output_path is not None:
         output_path.parent.mkdir(exist_ok=True, parents=True)
         save_image(warped_int, output_path)
@@ -45,7 +59,7 @@ def generate_gray_code(height, width, step, output_dir=None):
     :param width: width of the pattern
     :param step: step size of the pattern (e.g. 2 means the patterns are half the resolution)
     :param output_dir: directory to save the patterns to
-    :return: list of patterns
+    :return: n x height x width array of patterns
     """
     gc_height = int((height-1)/step)+1
     gc_width = int((width-1)/step)+1
@@ -70,7 +84,7 @@ def generate_gray_code(height, width, step, output_dir=None):
     return exp_patterns
 
 def pix2pix_correspondence(proj_width, proj_height, step, captures,
-                           BLACKTHR = 2, WHITETHR = 30, output_dir=None, debug=False):
+                           BLACKTHR = 2, WHITETHR = 30, output_dir=None, verbose=True, debug=False):
     """
     finds dense pixel to pixel pix2pix_correspondence between a projector and a camera
     note: assumes gray code patterns used for projections were generated using generate_gray_code
@@ -81,7 +95,8 @@ def pix2pix_correspondence(proj_width, proj_height, step, captures,
     :param BLACKTHR: threshold for black pixels
     :param WHITETHR: threshold for white pixels
     :param output_dir: directory to save results to
-    :param debug: if True, saves debug images
+    :param verbose: if True, prints progress and status
+    :param debug: if True, saves debug images (must provide output_dir)
     """
     if output_dir is not None:
         output_dir = Path(output_dir)
@@ -107,7 +122,8 @@ def pix2pix_correspondence(proj_width, proj_height, step, captures,
         diff_pic = white.astype(np.uint64) - black.astype(np.uint64)
         diff_pic[diff_pic < 0] = 0
         save_image(diff_pic[..., None].astype(np.uint8), Path(output_dir, "white_black_diff.png"))
-        print('camera image size :', white.shape)
+        if verbose:
+            print('camera image size :', white.shape)
     # initialize
     viz_c2p = np.zeros((cam_height, cam_width, 3), np.float32)
     ragged_p2c = np.empty((proj_height, proj_width), dtype=object)
@@ -131,7 +147,8 @@ def pix2pix_correspondence(proj_width, proj_height, step, captures,
     counter = 0
     for i in range(proj_height):
         for j in range(proj_width):
-            print("{} / {}".format(counter, total_size), end="\r", flush=True)
+            if verbose:
+                print("{} / {}".format(counter, total_size), end="\r", flush=True)
             val = np.mean(ragged_p2c[i, j], dtype=np.float32, axis=0)
             if np.isnan(val).any():
                 val = np.zeros(2)
@@ -155,7 +172,8 @@ def pix2pix_correspondence(proj_width, proj_height, step, captures,
             save_image(interpolated_p2c, Path(output_dir, "interpolated_p2c.png"))
             save_image(viz_c2p, Path(output_dir, "c2p.png"))
             save_image(viz_p2c, Path(output_dir, "p2c.png"))
-            print('Amount of c2p correspondences :', len(c2p_list))
+            if verbose:
+                print('Amount of c2p correspondences :', len(c2p_list))
     return interpolated_c2p, interpolated_p2c
 
 def naive_color_compensate(target_image, all_white_image, all_black_image, cam_width, cam_height, brightness_decrease=-127, output_path=None, debug=False):

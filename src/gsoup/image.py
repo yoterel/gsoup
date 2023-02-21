@@ -106,7 +106,6 @@ def merge_figures_with_line(img1, img2, lower_intersection=0.6, angle=np.pi/2, l
     else:
         line_color = np.array(line_color, dtype=np.uint8)
     combined = np.ascontiguousarray(np.broadcast_to(line_color, img1.shape))
-    # combined = np.ones_like(img1)*255
     y, x, _ = img1.shape
     yy, xx = np.mgrid[:y, :x]
     img1_positions = (xx-lower_intersection*x)*np.tan(angle)-line_width//2>(yy-y)

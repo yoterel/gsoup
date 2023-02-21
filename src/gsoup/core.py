@@ -331,16 +331,24 @@ def to_torch(arr: np.array, device="cpu", dtype=None):
     else:
         return torch.tensor(arr, dtype=dtype, device=device)
 
-def to_8b(x: np.array, clip=True):
+def to_8b(x, clip=True):
     """
-    convert a numpy (float, double) array to 8 bit
+    convert an array (float, double) array to 8 bit
     """
-    if x.dtype == np.float32 or x.dtype == np.float64:
-        if clip:
-            x = np.clip(x, 0, 1)
-        return (255 * x).astype(np.uint8)
-    elif x.dtype == np.uint8:
-        return x
+    if type(x) == torch.Tensor:
+        if x.dtype == torch.float32 or x.dtype == torch.float64:
+            if clip:
+                x = torch.clamp(x, 0, 1)
+            return (255 * x).round().type(torch.uint8)
+        elif x.dtype == torch.uint8:
+            return x
+    else:
+        if x.dtype == np.float32 or x.dtype == np.float64:
+            if clip:
+                x = np.clip(x, 0, 1)
+            return (255 * x).round().astype(np.uint8)
+        elif x.dtype == np.uint8:
+            return x
 
 def to_float(x: np.array, clip=True):
     """

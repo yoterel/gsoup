@@ -208,8 +208,16 @@ def test_video():
     assert timestamps[0] == 0
 
 def test_procam():
-    gc_patterns = gsoup.generate_gray_code(512, 512, 1)
-    # todo test more functions from this module
+    gc_patterns = gsoup.generate_gray_code(128, 128, 1)
+    c2p, p2c = gsoup.pix2pix_correspondence(gc_patterns.shape[2], gc_patterns.shape[1],
+                                            1, gc_patterns[..., None].repeat(3, axis=-1),
+                                            verbose=False, debug=True, output_dir=Path("resource/pix2pix"))
+    desired = gsoup.generate_lollipop_pattern(128, 128)
+    desired = gsoup.to_float(desired)
+    warp_image = gsoup.warp_image(p2c, desired, output_path=Path("resource/warp.png"))
+    assert warp_image.shape == (128, 128, 3)
+    assert warp_image.dtype == np.uint8
+    assert np.mean(np.abs(gsoup.to_8b(desired) - warp_image)) < 50  # surely an identity corrospondence & warp can't be too bad
 
 def test_qem():
     v, f = gsoup.structures.cube()
