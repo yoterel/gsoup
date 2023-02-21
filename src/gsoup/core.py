@@ -519,15 +519,17 @@ def random_vectors_on_hemisphere(n, normal=None, device="cpu"):
     """
     creates a batch of random vectors on a hemisphere, possibly oriented by a normal
     :param n: number of vectors
-    :param normal: normal to orient the hemisphere (,3)
+    :param normal: normals to orient the hemisphere (,3) or (n,3)
     :param device: device to put the tensors on
     :return: tensor of shape (n, 3)
     """
     locs = torch.randn((n, 3), device=device)
     locs = torch.nn.functional.normalize(locs, dim=1, eps=1e-6)
     if normal is not None:
-        normal = torch.nn.functional.normalize(normal, eps=1e-6)
-        dot_product = locs @ normal
+        if normal.ndim == 1:
+            normal = normal[None, :]
+        normal = torch.nn.functional.normalize(normal, dim=-1, eps=1e-6)
+        dot_product = (locs[:, None, :] @ normal[:, :, None]).squeeze()
         locs[dot_product < 0] *= -1
     return locs
 
