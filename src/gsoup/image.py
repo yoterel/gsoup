@@ -371,7 +371,7 @@ def resize_images_naive(images, H, W, channels_last=True, mode="mean"):
 def change_brightness(input_img, brightness=0):
     """
     changes brightness of an image
-    :param input_img the numpy image
+    :param input_img a numpy or torch tensor of float values between 0 and 1
     :param brightness a number between -255 to 255 (0=no change)
     :return the new image
     """
@@ -383,7 +383,7 @@ def change_brightness(input_img, brightness=0):
             shadow = 0
             highlight = 255 + brightness
         alpha_b = (highlight - shadow)/255
-        gamma_b = shadow
+        gamma_b = shadow / 255
     else:
         alpha_b = 1
         gamma_b = 0
