@@ -22,14 +22,16 @@ def warp_image(p2c, cam_image, cam_h=None, cam_w=None, output_path=None):
     #print(p2c.shape)
     #p2c = Image.open(Path(interpolated_p2c_path))
     if type(p2c) != np.ndarray:
-        p2c = np.load(p2c)
-    p2c = np.asarray(p2c)[:, :, :2]
+        p2c_data = np.load(p2c)
+    else:
+        p2c_data = p2c.copy()
+    p2c_data = np.asarray(p2c_data)[:, :, :2]
     #p2c = p2c/255
-    p2c[:, :, 0] = (p2c[:, :, 0] * 2) - 1
-    p2c[:, :, 1] = (p2c[:, :, 1] * 2) - 1
-    p2c[:, :, [1, 0]] = p2c[:, :, [0, 1]]
+    p2c_data[:, :, 0] = (p2c_data[:, :, 0] * 2) - 1
+    p2c_data[:, :, 1] = (p2c_data[:, :, 1] * 2) - 1
+    p2c_data[:, :, [1, 0]] = p2c_data[:, :, [0, 1]]
     # p2c = np.round(p2c).astype(np.int32)
-    grid = torch.tensor(p2c.astype(np.float32)).unsqueeze(0)
+    grid = torch.tensor(p2c_data.astype(np.float32)).unsqueeze(0)
     input = torch.tensor(unwarped).permute(2, 0, 1).unsqueeze(0)
     warped = torch.nn.functional.grid_sample(input, grid).squeeze().permute(1, 2, 0).numpy()
     warped_int = (warped * 255).astype(np.uint8)
