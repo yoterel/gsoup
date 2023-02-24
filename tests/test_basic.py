@@ -4,6 +4,27 @@ import torch
 import gsoup
 from pathlib import Path
 
+def test_type_conversions():
+    test_numpy_bool = np.array([1, 0, 0, 1], dtype=bool)
+    test_torch_bool = gsoup.to_torch(test_numpy_bool)
+
+    test_float_from_bool = gsoup.to_float(test_numpy_bool)
+    assert test_float_from_bool.dtype == np.float32
+    test_8bit_from_bool = gsoup.to_8b(test_numpy_bool)
+    assert test_8bit_from_bool.dtype == np.uint8
+    test_8bit_from_float = gsoup.to_8b(test_float_from_bool)
+    assert test_8bit_from_float.dtype == np.uint8
+    test_float_from_8bit = gsoup.to_float(test_8bit_from_float)
+    assert test_float_from_8bit.dtype == np.float32
+    test_float_from_bool = gsoup.to_float(test_torch_bool)
+    assert test_float_from_bool.dtype == torch.float32
+    test_8bit_from_bool = gsoup.to_8b(test_torch_bool)
+    assert test_8bit_from_bool.dtype == torch.uint8
+    test_8bit_from_float = gsoup.to_8b(test_float_from_bool)
+    assert test_8bit_from_float.dtype == torch.uint8
+    test_float_from_8bit = gsoup.to_float(test_8bit_from_float)
+    assert test_float_from_8bit.dtype == torch.float32
+
 def test_rotations():
     qvecs = gsoup.random_qvec(10)
     torch_qvecs = torch.tensor(qvecs)
@@ -21,6 +42,14 @@ def test_rotations():
     mask1 = (torch.abs(new_qvec - torch_qvecs[0]) < 1e-6)
     mask2 = (torch.abs(new_qvec + torch_qvecs[0]) < 1e-6)
     assert torch.all(mask1 | mask2)
+    normal = torch.tensor([0, 0, 1.0])
+    random_vectors = gsoup.random_vectors_on_hemisphere(10, normal=normal)
+    assert random_vectors.shape == (10, 3)
+    assert (random_vectors @ normal).all() > 0
+    normal = torch.tensor([[0, 0, 1.0]]).repeat(10, 1)
+    random_vectors = gsoup.random_vectors_on_hemisphere(10, normal=normal)
+    assert random_vectors.shape == (10, 3)
+    assert (random_vectors[:, None, :] @ normal[:, :, None]).all() > 0
 
 def test_homogenize():
     x = np.random.rand(100, 2)
@@ -116,8 +145,10 @@ def test_structures():
     assert f.shape[0] == 12
 
 def test_image():
-    dst = Path("resource/voronoi.png")
-    gsoup.generate_voronoi_diagram(512, 512, 1000, dst=dst)
+    gsoup.generate_lollipop_pattern(512, 512, dst=Path("resource/lollipop.png"))
+    gsoup.generate_concentric_circles(256, 512, dst=Path("resource/circles.png"))
+    gsoup.generate_stripe_pattern(256, 512, direction="both", dst=Path("resource/stripe.png"))
+    gsoup.generate_dot_pattern(512, 256, dst=Path("resource/dots.png"))
     gray1 = gsoup.generate_gray_gradient(256, 256, grayscale=True, dst=Path("resource/gg_vert.png"))
     assert gray1.shape == (256, 256)
     assert len(np.unique(gray1)) == 10
@@ -132,6 +163,8 @@ def test_image():
     gray5 = gsoup.generate_gray_gradient(1080, 1920, bins=300, dst=Path("resource/gg_highres.png"))
     assert gray5.shape == (1080, 1920, 3)
     assert gray5.max() == 255
+    dst = Path("resource/voronoi.png")
+    gsoup.generate_voronoi_diagram(512, 512, 1000, dst=dst)
     img = gsoup.load_image(dst)
     assert img.shape == (512, 512, 3)
     assert img.dtype == np.uint8
@@ -204,8 +237,16 @@ def test_video():
     assert timestamps[0] == 0
 
 def test_procam():
-    gc_patterns = gsoup.generate_gray_code(512, 512, 1)
-    # todo test more functions from this module
+    gc_patterns = gsoup.generate_gray_code(128, 128, 1)
+    c2p, p2c = gsoup.pix2pix_correspondence(gc_patterns.shape[2], gc_patterns.shape[1],
+                                            1, gc_patterns[..., None].repeat(3, axis=-1),
+                                            verbose=False, debug=True, output_dir=Path("resource/pix2pix"))
+    desired = gsoup.generate_lollipop_pattern(128, 128)
+    desired = gsoup.to_float(desired)
+    warp_image = gsoup.warp_image(p2c, desired, output_path=Path("resource/warp.png"))
+    assert warp_image.shape == (128, 128, 3)
+    assert warp_image.dtype == np.uint8
+    assert np.mean(np.abs(gsoup.to_8b(desired) - warp_image)) < 50  # surely an identity corrospondence & warp can't be too bad
 
 def test_qem():
     v, f = gsoup.structures.cube()

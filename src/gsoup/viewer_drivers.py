@@ -93,7 +93,7 @@ def poses_slide_view(camera_poses):
     if camera_poses.shape[2] != 4 or camera_poses.shape[3] != 4:
         raise ValueError("camera_poses must be t x b x 4 x 4")
     global poses
-    poses = camera_poses
+    poses = camera_poses[2:]
     gviewer.init()
     gviewer.ps.set_user_callback(poses_slider_callback)
     gviewer.ps.set_up_dir("z_up")
@@ -108,7 +108,8 @@ def poses_slide_view(camera_poses):
     gizmo_network.add_color_quantity("color", c_gizmo, defined_on='edges', enabled=True)
     coa = np.zeros((1, 3))
     gviewer.register_pointcloud("center_of_world", coa, c=np.array([1., 1., 1.])[None, :], radius=0.005, mode="sphere")
-    v_tot, e_tot, c_tot = gviewer.register_camera("poses_orig", poses[0], edge_rad, group=True, alpha=0.3)
+    v_tot, e_tot, c_tot = gviewer.register_camera("poses_init", camera_poses[0], edge_rad, group=True, alpha=0.3)
+    v_tot, e_tot, c_tot = gviewer.register_camera("poses_orig", camera_poses[1], edge_rad, group=True, alpha=0.3)
     gviewer.show()
 
 def poses_static_view(camera_poses=None, meshes=None, pointclouds=None, group_cameras=True):

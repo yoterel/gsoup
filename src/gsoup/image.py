@@ -106,7 +106,6 @@ def merge_figures_with_line(img1, img2, lower_intersection=0.6, angle=np.pi/2, l
     else:
         line_color = np.array(line_color, dtype=np.uint8)
     combined = np.ascontiguousarray(np.broadcast_to(line_color, img1.shape))
-    # combined = np.ones_like(img1)*255
     y, x, _ = img1.shape
     yy, xx = np.mgrid[:y, :x]
     img1_positions = (xx-lower_intersection*x)*np.tan(angle)-line_width//2>(yy-y)
@@ -137,6 +136,104 @@ def generate_voronoi_diagram(height, width, num_cells=1000, bg_color="white", ds
         if len(poly) > 0 and np.all(np.array(poly) > 0):
             img1 = ImageDraw.Draw(img)
             img1.polygon(list(map(tuple, polygon)), fill=tuple(np.random.randint(0, 255, size=(3,))))
+    if dst is not None:
+        img.save(str(dst))
+    return np.array(img)
+
+def generate_dot_pattern(height, width, background="black", radius=5, spacing=50, dst=None):
+    """
+    generates an image with colored circles in a grid
+    :param height: height of the image
+    :param width: width of the image
+    :param background: background color
+    :param radius: radius of the circles in pixels
+    :param spacing: spacing between the circles in pixels
+    :param dst: if not None, the image is written to this path
+    :return: (H x W x 3) numpy array (uint8)
+    """
+    img = Image.new("RGB", (width, height), background)
+    img1 = ImageDraw.Draw(img)
+    for i in range(0, width, spacing):
+        for j in range(0, height, spacing):
+            img1.ellipse([i, j, i + radius*2, j + radius*2], fill=tuple(np.random.randint(0, 255, size=(3,))))
+    if dst is not None:
+        img.save(str(dst))
+    return np.array(img)
+
+def generate_stripe_pattern(height, width, background="black", direction="vert", thickness=5, spacing=50, dst=None):
+    """
+    generates an image with colored stripes in a certain direction
+    :param height: height of the image
+    :param width: width of the image
+    :param background: background color
+    :param direction: direction of the stripes ("vert", "hor", "both")
+    :param thickness: thickness of the stripes
+    :param spacing: spacing between the stripes
+    :param dst: if not None, the image is written to this path
+    :return: (H x W x 3) numpy array (uint8)
+    """
+    img = Image.new("RGB", (width, height), background)
+    img1 = ImageDraw.Draw(img)
+    if direction == "vert":
+        for i in range(0, width, spacing):
+            img1.rectangle([i, 0, i + thickness, height], fill=tuple(np.random.randint(0, 255, size=(3,))))
+    elif direction == "hor":
+        for i in range(0, height, spacing):
+            img1.rectangle([0, i, width, i + thickness], fill=tuple(np.random.randint(0, 255, size=(3,))))
+    elif direction == "both":
+        for i in range(0, width, spacing):
+            img1.rectangle([i, 0, i + thickness, height], fill=tuple(np.random.randint(0, 255, size=(3,))))
+        for i in range(0, height, spacing):
+            img1.rectangle([0, i, width, i + thickness], fill=tuple(np.random.randint(0, 255, size=(3,))))
+    else:
+        raise ValueError("direction must be either 'vert', 'hor' or 'both'")
+    if dst is not None:
+        img.save(str(dst))
+    return np.array(img)
+
+def generate_lollipop_pattern(height, width, background="black", n=15, m=8, dst=None):
+    """
+    generates an image with a lollipop pattern
+    :param height: height of the image
+    :param width: width of the image
+    :param background: background color
+    :param n: number of circles in the pattern
+    :param m: number of lines in the pattern
+    :param dst: if not None, the image is written to this path
+    """
+    spacing_x = width // (2*n)
+    spacing_y = height // (2*n)
+    spacing_angle = 360 // m
+    img = Image.new("RGB", (width, height), background)
+    img1 = ImageDraw.Draw(img)
+    for j in range(m):
+        for i in range(n):
+            x0 = spacing_x * i
+            y0 = spacing_y * i
+            start_angle = j * spacing_angle
+            end_angle = 360
+            img1.pieslice([x0, y0, width - x0, height - y0], start=start_angle, end=end_angle, fill=tuple(np.random.randint(0, 255, size=(3,))))
+    if dst is not None:
+        img.save(str(dst))
+    return np.array(img)
+
+def generate_concentric_circles(height, width, background="black", n=15, dst=None):
+    """
+    generates an image with colored concentric circles
+    :param height: height of the image
+    :param width: width of the image
+    :param background: background color
+    :param n: number of circles to draw
+    :param dst: if not None, the image is written to this path
+    """
+    spacing_x = width // (2*n)
+    spacing_y = height // (2*n)
+    img = Image.new("RGB", (width, height), background)
+    img1 = ImageDraw.Draw(img)
+    for i in range(n):
+        x0 = spacing_x * i
+        y0 = spacing_y * i
+        img1.ellipse([x0, y0, width - x0, height - y0], fill=tuple(np.random.randint(0, 255, size=(3,))))
     if dst is not None:
         img.save(str(dst))
     return np.array(img)
@@ -274,7 +371,7 @@ def resize_images_naive(images, H, W, channels_last=True, mode="mean"):
 def change_brightness(input_img, brightness=0):
     """
     changes brightness of an image
-    :param input_img the numpy image
+    :param input_img a numpy or torch tensor of float values between 0 and 1
     :param brightness a number between -255 to 255 (0=no change)
     :return the new image
     """
@@ -286,7 +383,7 @@ def change_brightness(input_img, brightness=0):
             shadow = 0
             highlight = 255 + brightness
         alpha_b = (highlight - shadow)/255
-        gamma_b = shadow
+        gamma_b = shadow / 255
     else:
         alpha_b = 1
         gamma_b = 0

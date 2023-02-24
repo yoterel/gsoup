@@ -1,4 +1,4 @@
-__version__ = "0.0.6"
+__version__ = "0.0.7"
 
 from .core import (
     broadcast_batch,
@@ -18,6 +18,7 @@ from .core import (
     rotz,
     map_range,
     create_random_cameras_on_unit_sphere,
+    random_vectors_on_hemisphere,
     opengl_c2w_to_opencv_c2w,
     opencv_c2w_to_opengl_c2w,
     opengl_project_from_opencv_intrinsics,
@@ -76,6 +77,10 @@ from .image import (
     merge_figures_with_line,
     generate_voronoi_diagram,
     generate_gray_gradient,
+    generate_dot_pattern,
+    generate_stripe_pattern,
+    generate_concentric_circles,
+    generate_lollipop_pattern,
     interpolate_single_channel,
     interpolate_multi_channel,
     image_grid,

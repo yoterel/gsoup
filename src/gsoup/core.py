@@ -288,9 +288,9 @@ def create_random_cameras_on_unit_sphere(n, r, device="cuda"):
     matrices = torch.empty((n, 4, 4), dtype=torch.float32, device=device)
     for i in range(len(locs)):
         matrices[i] = look_at_torch(locs[i],
-                                       torch.zeros(3, dtype=torch.float32, device=device),
-                                       torch.tensor([0.,1.,0.], device=device),
-                                       device=device)
+                                    torch.zeros(3, dtype=torch.float32, device=device),
+                                    torch.tensor([0.,1.,0.], device=device),
+                                    device=device)
     v2w = matrices  # c2w
     w2v = torch.inverse(v2w)
     v2c = torch.tensor(perspective_projection(), dtype=torch.float32, device=device)
@@ -331,29 +331,57 @@ def to_torch(arr: np.array, device="cpu", dtype=None):
     else:
         return torch.tensor(arr, dtype=dtype, device=device)
 
-def to_8b(x: np.array, clip=True):
+def to_8b(x, clip=True):
     """
-    convert a numpy (float, double) array to 8 bit
+    convert an array (float, double) array to 8 bit
     """
-    if x.dtype == np.float32 or x.dtype == np.float64:
-        if clip:
-            x = np.clip(x, 0, 1)
-        return (255 * x).astype(np.uint8)
-    elif x.dtype == np.uint8:
-        return x
-
-def to_float(x: np.array, clip=True):
-    """
-    convert a numpy (8bit) array to float
-    """
-    if x.dtype == np.uint8:
-        return x.astype(np.float32) / 255
-    elif x.dtype == np.float32:
-        if clip:
-            x = np.clip(x, 0, 1)
-        return x
+    if type(x) == torch.Tensor:
+        if x.dtype == torch.float32 or x.dtype == torch.float64:
+            if clip:
+                x = torch.clamp(x, 0, 1)
+            return (255 * x).round().type(torch.uint8)
+        elif x.dtype == torch.bool:
+            return x.type(torch.uint8) * 255
+        elif x.dtype == torch.uint8:
+            return x
     else:
-        raise ValueError("unsupported dtype")
+        if x.dtype == np.float32 or x.dtype == np.float64:
+            if clip:
+                x = np.clip(x, 0, 1)
+            return (255 * x).round().astype(np.uint8)
+        elif x.dtype == bool:
+            return x.astype(np.uint8) * 255
+        elif x.dtype == np.uint8:
+            return x
+
+def to_float(x, clip=True):
+    """
+    convert a 8bit or bool array to float
+    """
+    if type(x) == np.ndarray:
+        if x.dtype == np.uint8:
+            return x.astype(np.float32) / 255
+        elif x.dtype == np.float32:
+            if clip:
+                x = np.clip(x, 0, 1)
+            return x
+        elif x.dtype == bool:
+            return x.astype(np.float32)
+        else:
+            raise ValueError("unsupported dtype")
+    elif type(x) == torch.Tensor:
+        if x.dtype == torch.uint8:
+            return x.to(torch.float32) / 255
+        elif x.dtype == torch.float32:
+            if clip:
+                x = torch.clamp(x, 0, 1)
+            return x
+        elif x.dtype == torch.bool:
+            return x.to(torch.float32)
+        else:
+            raise ValueError("unsupported dtype")
+    else:
+        raise ValueError("unsupported type")
 
 def to_PIL(x: np.array):
     """
@@ -514,6 +542,24 @@ def random_qvec(n: int):
     denom = np.copysign(np.sqrt(s), o[:, 0])[:, None]
     o = o / denom
     return o
+
+def random_vectors_on_hemisphere(n, normal=None, device="cpu"):
+    """
+    creates a batch of random vectors on a hemisphere, possibly oriented by a normal
+    :param n: number of vectors
+    :param normal: normals to orient the hemisphere (,3) or (n,3)
+    :param device: device to put the tensors on
+    :return: tensor of shape (n, 3)
+    """
+    locs = torch.randn((n, 3), device=device)
+    locs = torch.nn.functional.normalize(locs, dim=1, eps=1e-6)
+    if normal is not None:
+        if normal.ndim == 1:
+            normal = normal[None, :]
+        normal = torch.nn.functional.normalize(normal, dim=-1, eps=1e-6)
+        dot_product = (locs[:, None, :] @ normal[:, :, None]).squeeze()
+        locs[dot_product < 0] *= -1
+    return locs
 
 def qvec2mat(qvec):
     """

@@ -65,7 +65,7 @@ def save_images(images, dst, file_names: list = [], force_grayscale: bool = Fals
         images = to_np(images)
     if np.isnan(images).any():
         raise ValueError("Images must be finite")
-    if images.dtype == np.float32 or images.dtype == np.float64:
+    if images.dtype == np.float32 or images.dtype == np.float64 or images.dtype == bool:
         images = to_8b(images)
     if images.dtype != np.uint8:
         raise ValueError("Images must be of type uint8 (or float32/64, but will be converted to uint8)")
