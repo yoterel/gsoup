@@ -533,7 +533,7 @@ def mat2rotvec(r: torch.Tensor):
 
 def random_qvec(n: int):
     """
-    Generate random quaternions representing rotations
+    generate random quaternions representing rotations
     :param n: Number of quaternions in a batch to return.
     :return: Quaternions as tensor of shape (N, 4).
     """
@@ -543,9 +543,10 @@ def random_qvec(n: int):
     o = o / denom
     return o
 
-def random_vectors_on_hemisphere(n, normal=None, device="cpu"):
+def random_vectors_on_sphere(n, normal=None, device="cpu"):
     """
-    creates a batch of random vectors on a hemisphere, possibly oriented by a normal
+    create a batch of uniformly distributed random unit vectors on a sphere
+    note: if normal is provided, returns random unit vectors on the hemisphere around the normal, but isn't uniform anymore.
     :param n: number of vectors
     :param normal: normals to orient the hemisphere (,3) or (n,3)
     :param device: device to put the tensors on

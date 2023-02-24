@@ -43,11 +43,11 @@ def test_rotations():
     mask2 = (torch.abs(new_qvec + torch_qvecs[0]) < 1e-6)
     assert torch.all(mask1 | mask2)
     normal = torch.tensor([0, 0, 1.0])
-    random_vectors = gsoup.random_vectors_on_hemisphere(10, normal=normal)
+    random_vectors = gsoup.random_vectors_on_sphere(10, normal=normal)
     assert random_vectors.shape == (10, 3)
     assert (random_vectors @ normal).all() > 0
     normal = torch.tensor([[0, 0, 1.0]]).repeat(10, 1)
-    random_vectors = gsoup.random_vectors_on_hemisphere(10, normal=normal)
+    random_vectors = gsoup.random_vectors_on_sphere(10, normal=normal)
     assert random_vectors.shape == (10, 3)
     assert (random_vectors[:, None, :] @ normal[:, :, None]).all() > 0
 
