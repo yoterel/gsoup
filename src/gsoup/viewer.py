@@ -75,11 +75,11 @@ class gviewer():
                                             color=(0.2, 0.5, 0.5))
         return ps_pointcloud
 
-    def register_camera(self, name, poses, edge_rad, group=True, alpha=1.0):
+    def register_camera(self, name, poses, edge_rad, group=True, alpha=1.0, scale=0.1):
         """
         register a camera structure to polyscope
         """
-        v_cam, e_cam, c_cam = structures.get_camera_coords()
+        v_cam, e_cam, c_cam = structures.get_camera_coords(scale)
         v_tot = []
         e_tot = []
         c_tot = []

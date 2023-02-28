@@ -279,7 +279,7 @@ def test_procam():
 def test_sphere_tracer():
     image_size = 512
     device = "cuda:0"
-    w2v, v2c = gsoup.create_random_cameras_on_unit_sphere(4, 1.0, opengl=True, device=device)
+    w2v, v2c = gsoup.create_random_cameras_on_unit_sphere(5, 1.0, opengl=True, device=device)
     ray_origins, ray_directions = gsoup.generate_rays(w2v, v2c[0], image_size, image_size, device=device)
     sdf = gsoup.structures.sphere_sdf(0.25)
     images = []
@@ -289,7 +289,7 @@ def test_sphere_tracer():
     images = gsoup.to_np(torch.stack(images))
     images = gsoup.alpha_compose(images)
     gizmo_images = gsoup.draw_gizmo_on_image(images, gsoup.to_np(v2c @ w2v), opengl=True)
-    gsoup.save_image(gizmo_images[0], Path("resource/sphere_tracer.png"))
+    gsoup.save_images(gizmo_images, Path("resource/sphere_trace"))
 
 def test_qem():
     v, f = gsoup.structures.cube()

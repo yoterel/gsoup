@@ -76,6 +76,7 @@ def draw_gizmo_on_image(np_images, w2c, opengl=False, scale=.05):
         if opengl:
             verts_clip = verts_clip[:, :2]
             verts_screen = np.array([W, H]) * (verts_clip + 1) / 2
+            verts_screen[:, 1] *= -1
         else:
             verts_screen = verts_clip
         desired_loc = np.array([W - 40, H - 40])

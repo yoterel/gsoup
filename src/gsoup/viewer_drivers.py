@@ -125,9 +125,13 @@ def poses_static_view(camera_poses=None, meshes=None, pointclouds=None, group_ca
     gviewer.ps.set_up_dir("z_up")
     edge_rad = 0.0005
     v_aabb, e_aabb, c_aabb = structures.get_aabb_coords()
-    ps_net = gviewer.ps.register_curve_network("aabb", v_aabb, e_aabb, radius=edge_rad)
-    ps_net.add_color_quantity("color", c_aabb, defined_on='edges', enabled=True)
-    gviewer.register_pointcloud("center_of_world", np.zeros((1, 3)), c=np.array([1., 1., 1.])[None, :], radius=0.005, mode="sphere")
+    aabb_network = gviewer.ps.register_curve_network("aabb", v_aabb, e_aabb, radius=edge_rad)
+    aabb_network.add_color_quantity("color", c_aabb, defined_on='edges', enabled=True)
+    v_gizmo, e_gizmo, c_gizmo = structures.get_gizmo_coords(0.1)
+    gizmo_network = gviewer.ps.register_curve_network("gizmo", v_gizmo, e_gizmo, radius=edge_rad)
+    gizmo_network.add_color_quantity("color", c_gizmo, defined_on='edges', enabled=True)
+    coa = np.zeros((1, 3))
+    gviewer.register_pointcloud("center_of_world", coa, c=np.array([1., 1., 1.])[None, :], radius=0.005, mode="sphere")
     if camera_poses is not None:
         v_tot, e_tot, c_tot = gviewer.register_camera("cameras", camera_poses, edge_rad, group_cameras)
     if meshes is not None:
