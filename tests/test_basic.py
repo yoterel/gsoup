@@ -174,6 +174,8 @@ def test_structures():
 
 def test_image():
     lollipop = gsoup.generate_lollipop_pattern(512, 512, dst=Path("resource/lollipop.png"))
+    lollipop_pad = gsoup.pad_image_to_res(lollipop[None, ...], 1024, 1024)
+    assert lollipop_pad.shape == (1, 1024, 1024, 3)
     lollipop_srgb = gsoup.linear_to_srgb(lollipop)
     lollipop_linear = gsoup.srgb_to_linear(lollipop_srgb)
     assert np.allclose(lollipop, lollipop_linear)
