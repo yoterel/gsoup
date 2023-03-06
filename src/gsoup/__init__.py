@@ -92,6 +92,7 @@ from .image import (
     change_contrast,
     linear_to_srgb,
     srgb_to_linear,
+    pad_image_to_res
 )
 
 from .video import (

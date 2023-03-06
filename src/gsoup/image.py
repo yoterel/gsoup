@@ -366,6 +366,34 @@ def resize_images_naive(images, H, W, channels_last=True, mode="mean"):
         raise ValueError("mode must be one of 'max', 'mean'")
     return small_images
 
+def pad_image_to_res(images, res_w, res_h, bg_color=None):
+    """
+    pads a batch of numpy images to a specific resolution
+    :param image: numpy image b x h x w x c
+    :param res_w: width of the output image
+    :param res_h: height of the output image
+    :param bg_color: background color c (defaults to black)
+    :return: padded image b x res_h x res_w x c
+    """
+    if bg_color is None:
+        bg_color = np.zeros(images.shape[-1]).astype(np.float32)
+    if images.ndim != 4:
+        raise ValueError("image must be a 4D array")
+    b, h, w, c = images.shape
+    if h > res_h or w > res_w:
+        raise ValueError("images dimensions is larger than the output resolution")
+    if h == res_h and w == res_w:
+        return images
+    if bg_color.shape[0] != c:
+        raise ValueError("background color must have the same number of channels as the image")
+    bg_color = bg_color[None, None, None, :]
+    output = np.zeros((b, res_h, res_w, c), dtype=images.dtype)
+    output[:, :, :, :] = bg_color
+    corner_left = (res_w - w) // 2
+    corner_top = (res_h - h) // 2
+    output[:, corner_top:corner_top + h, corner_left:corner_left + w, :] = images
+    return output
+
 def change_brightness(input_img, brightness=0):
     """
     changes brightness of an image
