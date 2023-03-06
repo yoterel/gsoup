@@ -86,7 +86,8 @@ from .image import (
     image_grid,
     resize_images_naive,
     change_brightness,
-    change_contrast
+    change_contrast,
+    pad_image_to_res
 )
 
 from .video import (
