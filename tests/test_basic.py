@@ -173,7 +173,10 @@ def test_structures():
     assert f.shape[0] == 12
 
 def test_image():
-    gsoup.generate_lollipop_pattern(512, 512, dst=Path("resource/lollipop.png"))
+    lollipop = gsoup.generate_lollipop_pattern(512, 512, dst=Path("resource/lollipop.png"))
+    lollipop_srgb = gsoup.linear_to_srgb(lollipop)
+    lollipop_linear = gsoup.srgb_to_linear(lollipop_srgb)
+    assert np.allclose(lollipop, lollipop_linear)
     gsoup.generate_concentric_circles(256, 512, dst=Path("resource/circles.png"))
     gsoup.generate_stripe_pattern(256, 512, direction="both", dst=Path("resource/stripe.png"))
     gsoup.generate_dot_pattern(512, 256, dst=Path("resource/dots.png"))

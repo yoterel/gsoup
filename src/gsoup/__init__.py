@@ -89,7 +89,9 @@ from .image import (
     image_grid,
     resize_images_naive,
     change_brightness,
-    change_contrast
+    change_contrast,
+    linear_to_srgb,
+    srgb_to_linear,
 )
 
 from .video import (

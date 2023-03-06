@@ -403,3 +403,24 @@ def change_contrast(input_img, contrast=127):
         alpha_c = 1
         gamma_c = 0
     return input_img*alpha_c + gamma_c
+
+def linear_to_srgb(linear):
+    """
+    converts linear RGB to sRGB, see https://en.wikipedia.org/wiki/SRGB.
+    note: linear is expected to be in the range [0, 1]
+    """
+    eps = np.finfo(np.float32).eps
+    srgb0 = 323 / 25 * linear
+    srgb1 = (211 * np.maximum(eps, linear)**(5 / 12) - 11) / 200
+    return np.where(linear <= 0.0031308, srgb0, srgb1)
+
+
+def srgb_to_linear(srgb):
+    """
+    converts linear RGB to sRGB, see https://en.wikipedia.org/wiki/SRGB.
+    note: srgb is expected to be in the range [0, 1]
+    """
+    eps = np.finfo(np.float32).eps
+    linear0 = 25 / 323 * srgb
+    linear1 = np.maximum(eps, ((200 * srgb + 11) / (211)))**(12 / 5)
+    return np.where(srgb <= 0.04045, linear0, linear1)
