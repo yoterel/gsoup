@@ -107,7 +107,7 @@ def calc_face_normals(vertices: torch.Tensor, faces: torch.Tensor, normalize: bo
     v0, v1, v2 = full_vertices.unbind(dim=1)  # F,3
     face_normals = torch.cross(v1 - v0, v2 - v0, dim=1)  # F,3
     if normalize:
-        face_normals = torch.nn.functional.normalize(face_normals, eps=1e-6, dim=1)  # TODO inplace?
+        face_normals = torch.nn.functional.normalize(face_normals, eps=1e-6, dim=1)
     return face_normals  # F,3
 
 def calc_vertex_normals(vertices: torch.Tensor, faces: torch.Tensor, face_normals: torch.Tensor = None):
@@ -148,7 +148,7 @@ def calc_edges(faces: torch.Tensor, with_edge_to_face: bool = False, with_dummie
     # make full edges, lower vertex index first
     face_edges = torch.stack((faces, faces.roll(-1, 1)), dim=-1)  # F*3,3,2
     full_edges = face_edges.reshape(F * 3, 2)
-    sorted_edges, _ = full_edges.sort(dim=-1)  # F*3,2 TODO min/max faster?
+    sorted_edges, _ = full_edges.sort(dim=-1)  # F*3,2 todo min/max faster?
 
     # make unique edges
     edges, full_to_unique = torch.unique(input=sorted_edges, return_inverse=True, dim=0)  # (E,2),(F*3)

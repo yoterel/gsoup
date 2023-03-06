@@ -49,13 +49,14 @@ def draw_text_on_image(images, text_per_image, fill_white=True):
         rgbs = to_float(rgbs)
     return rgbs
 
-def draw_gizmo_on_image(np_images, w2c, isOpenGL=False, scale=.05):
+def draw_gizmo_on_image(np_images, w2c, opengl=False, scale=.05):
     """
     adds a gizmo to a batch of np images.
     note: will broadcast np_images and w2c against eachother.
     :param np_images: b x H x W x 3
     :param w2c: b x 3 x 4 w2c transforms (opencv conventions)
-    :param isOpenGL: if True, the w2c transforms are assumed to be in OpenGL conventions, else OpenCV conventions
+    :param opengl: if True, the w2c transforms are assumed to be in OpenGL conventions, else OpenCV conventions
+    for opengl, w2c should be a bx4x4 matrix converting from world to *CLIP* space.
     :param scale: scale of the gizmo
     :return: b x H x W x 3
     """
@@ -68,17 +69,14 @@ def draw_gizmo_on_image(np_images, w2c, isOpenGL=False, scale=.05):
     for i, np_image in enumerate(np_images):
         pil_image = Image.fromarray(to_8b(np_image))
         W, H = pil_image.size
-        # W, H = image.shape[1], image.shape[0]
         gizmo_cords, _, _ = get_gizmo_coords(scale)
-        gizmo_hom = to_hom(gizmo_cords)  #  = np.concatenate((gizmo_cords, np.ones_like(gizmo_cords[:, 0:1])), axis=-1)
+        gizmo_hom = to_hom(gizmo_cords)
         verts_clip = (w2c[i] @ gizmo_hom.T).T
-        verts_clip = homogenize(verts_clip) # verts_screen_xy = verts_screen[:, :2] / verts_screen[:, 2:3]
-        if isOpenGL:
-            raise NotImplementedError("OpenGL convention is not supported for now")
-            # if not (np.abs(verts_screen_xy[:, 2]) <= 1).all():
-            #    raise ValueError("OpenGL convention is not followed")
-            # verts_clip = verts_clip[:, :2]
-            # verts_screen = np.array([W, H]) * (verts_clip + 1) / 2
+        verts_clip = homogenize(verts_clip)
+        if opengl:
+            verts_clip = verts_clip[:, :2]
+            verts_screen = np.array([W, H]) * (verts_clip + 1) / 2
+            verts_screen[:, 1] *= -1
         else:
             verts_screen = verts_clip
         desired_loc = np.array([W - 40, H - 40])

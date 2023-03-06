@@ -50,14 +50,13 @@ def save_image(image, dst, force_grayscale: bool = False):
     if image.ndim != 3:
         raise ValueError("Image must be 2 or 3 dimensional")
     dst = Path(dst)
-    dst.parent.mkdir(parents=True, exist_ok=True)
     save_images(image[None, ...], dst.parent, [dst.name], force_grayscale)
 
 def save_images(images, dst, file_names: list = [], force_grayscale: bool = False, overwrite: bool = True):
     """
     saves images as png
     :param images: (b x H x W x C) tensor
-    :param dst: path to save images to
+    :param dst: path to save images to (will create folder if it does not exist)
     :param force_grayscale: if True, saves images as grayscale
     :param file_names: if provided, saves images with these names (list of length b)
     """
@@ -75,6 +74,8 @@ def save_images(images, dst, file_names: list = [], force_grayscale: bool = Fals
         if images.shape[0] != len(file_names):
             raise ValueError("Number of images and length of file names list must match")
         file_names = [Path(x).stem for x in file_names]  # remove suffix
+    dst = Path(dst)
+    dst.mkdir(parents=True, exist_ok=True)
     for i, image in enumerate(images):
         if force_grayscale or images.shape[-1] == 1:
             if images.shape[-1] == 3:
@@ -82,18 +83,14 @@ def save_images(images, dst, file_names: list = [], force_grayscale: bool = Fals
             pil_image = Image.fromarray(image[..., 0], mode="L")
         else:
             pil_image = Image.fromarray(image)
-        if file_names is not None:
+        if file_names:
             cur_dst = Path(dst, "{}.png".format(file_names[i]))
-            if not overwrite:
-                if cur_dst.exists():
-                    continue
-            pil_image.save(str(cur_dst))
         else:
             cur_dst = Path(dst, "{:05d}.png".format(i))
-            if not overwrite:
-                if cur_dst.exists():
-                    continue
-            pil_image.save(str(cur_dst))
+        if not overwrite:
+            if cur_dst.exists():
+                continue
+        pil_image.save(str(cur_dst))
 
 def load_image(path, to_float=False, channels_last=True, to_torch=False, device=None, resize_wh=None, as_grayscale=False):
     """

@@ -25,58 +25,6 @@ def test_type_conversions():
     test_float_from_8bit = gsoup.to_float(test_8bit_from_float)
     assert test_float_from_8bit.dtype == torch.float32
 
-def test_rotations():
-    qvecs = gsoup.random_qvec(10)
-    torch_qvecs = torch.tensor(qvecs)
-    rotmats = gsoup.batch_qvec2mat(qvecs)
-    assert rotmats.shape == (10, 3, 3)
-    rotmats = gsoup.batch_qvec2mat(torch_qvecs)
-    assert rotmats.shape == (10, 3, 3)
-    new_qvecs = gsoup.batch_mat2qvec(rotmats)
-    mask1 = (torch.abs(new_qvecs - torch_qvecs) < 1e-6)
-    mask2 = (torch.abs(new_qvecs + torch_qvecs) < 1e-6)
-    assert torch.all(mask1 | mask2)
-    rotmat = gsoup.qvec2mat(torch_qvecs[0])
-    assert rotmat.shape == (3, 3)
-    new_qvec = gsoup.mat2qvec(rotmat)
-    mask1 = (torch.abs(new_qvec - torch_qvecs[0]) < 1e-6)
-    mask2 = (torch.abs(new_qvec + torch_qvecs[0]) < 1e-6)
-    assert torch.all(mask1 | mask2)
-    normal = torch.tensor([0, 0, 1.0])
-    random_vectors = gsoup.random_vectors_on_hemisphere(10, normal=normal)
-    assert random_vectors.shape == (10, 3)
-    assert (random_vectors @ normal).all() > 0
-    normal = torch.tensor([[0, 0, 1.0]]).repeat(10, 1)
-    random_vectors = gsoup.random_vectors_on_hemisphere(10, normal=normal)
-    assert random_vectors.shape == (10, 3)
-    assert (random_vectors[:, None, :] @ normal[:, :, None]).all() > 0
-
-def test_homogenize():
-    x = np.random.rand(100, 2)
-    hom_x = gsoup.to_hom(x)
-    assert hom_x.shape == (100, 3)
-    hom_x = gsoup.to_hom(hom_x)
-    assert hom_x.shape == (100, 4)
-    dehom_x = gsoup.homogenize(hom_x)
-    assert dehom_x.shape == (100, 3)
-    dehom_x = gsoup.homogenize(dehom_x, keepdim=True)
-    assert dehom_x.shape == (100, 3)
-    x = np.random.rand(3)
-    hom_x = gsoup.to_hom(x)
-    assert hom_x.shape == (4,)
-    dehom_x = gsoup.homogenize(hom_x)
-    assert dehom_x.shape == (3,)
-
-def test_sphere_tracer():
-    w2v, v2c = gsoup.create_random_cameras_on_unit_sphere(4, 1.0, "cuda:0")
-    ray_origins, ray_directions = gsoup.generate_rays(w2v, v2c, 512, 512, "cuda:0")
-    sdf = gsoup.structures.sphere_sdf(0.5)
-    images = []
-    for o, d in zip(ray_origins, ray_directions):
-        result = gsoup.render(sdf, o.view(-1, 3), d.view(-1, 3))
-        images.append(result.view(512, 512, 4))
-    images = torch.stack(images)
-
 def test_broadcast_batch():
     R = np.random.randn(1, 3, 3)
     t = np.random.randn(1, 3)
@@ -113,18 +61,98 @@ def test_broadcast_batch():
     with pytest.raises(ValueError):
         R, t = gsoup.broadcast_batch(R, t)
 
-def test_compose_rt():
+def test_transforms():
     R = np.random.randn(2, 3, 3)
     t = np.random.randn(1, 3)
     Rt = gsoup.compose_rt(R, t)
     assert Rt.shape == (2, 3, 4)
 
-def test_normalize_vertices_np():
+    eye = np.array([1, 0, 0], dtype=np.float32)
+    at = np.array([0, 0, 0], dtype=np.float32)
+    up = np.array([0, 0, 1], dtype=np.float32)
+    transform_np = gsoup.look_at_np(eye, at, up)
+    transform_torch = gsoup.look_at_torch(gsoup.to_torch(eye), gsoup.to_torch(at), gsoup.to_torch(up))
+    assert np.allclose(transform_np, gsoup.to_numpy(transform_torch))
+    transform_np_opengl = gsoup.look_at_np(eye, at, up, opengl=True)
+    transform_torch_opengl = gsoup.look_at_torch(gsoup.to_torch(eye), gsoup.to_torch(at), gsoup.to_torch(up), opengl=True)
+    assert np.allclose(transform_np_opengl, gsoup.to_numpy(transform_torch_opengl))
+    normal = torch.tensor([0, 0, 1.0])
+
+    location3d = np.array([0.1, 0.1, 0.1])
+    location3d_noise = location3d + np.random.randn(3) * 0.01
+    location4d = gsoup.to_hom(location3d)
+    location4d_noise = gsoup.to_hom(location3d_noise)
+    # sanity on opengl projection
+    v2w = gsoup.look_at_np(np.array([1., 0, 0]), location3d, np.array([0, 0, 1.0]), opengl=True)[0]
+    w2v = np.linalg.inv(v2w)
+    v2c = gsoup.perspective_projection()
+    opengl_location = v2c @ w2v @ location4d
+    opengl_location = gsoup.homogenize(opengl_location)
+    assert np.allclose(opengl_location[:2], np.zeros(2))
+    # sanity on opencv projection
+    c2w = gsoup.look_at_np(np.array([1., 0, 0]), location3d, np.array([0, 0, 1.0]))[0]
+    w2c = np.linalg.inv(c2w)
+    K = gsoup.opencv_intrinsics_from_opengl_project(v2c, 1, 1)
+    opencv_location = K @ gsoup.to_34(w2c) @ location4d
+    opencv_location = gsoup.homogenize(opencv_location)
+    assert np.allclose(opencv_location[:2], np.ones(2)*0.5)
+    # test opencv / opengl conversion
+    opengl_location = v2c @ w2v @ location4d_noise
+    opengl_location = gsoup.homogenize(opengl_location)
+    opencv_location = K @ gsoup.to_34(w2c) @ location4d_noise
+    opencv_location = gsoup.homogenize(opencv_location)
+    # x is in same direction, but opengl screen is -1 to 1 (while opencv is 0 to 1)
+    assert np.allclose((opencv_location[0] - opengl_location[0]/2), 0.5)
+    # y is in opposite direction, but opengl screen is -1 to 1 (while opencv is 0 to 1)
+    assert np.allclose((opencv_location[1] + opengl_location[1]/2), 0.5)
+
+def test_rotations():
+    qvecs = gsoup.random_qvec(10)
+    torch_qvecs = torch.tensor(qvecs)
+    rotmats = gsoup.batch_qvec2mat(qvecs)
+    assert rotmats.shape == (10, 3, 3)
+    rotmats = gsoup.batch_qvec2mat(torch_qvecs)
+    assert rotmats.shape == (10, 3, 3)
+    new_qvecs = gsoup.batch_mat2qvec(rotmats)
+    mask1 = (torch.abs(new_qvecs - torch_qvecs) < 1e-6)
+    mask2 = (torch.abs(new_qvecs + torch_qvecs) < 1e-6)
+    assert torch.all(mask1 | mask2)
+    rotmat = gsoup.qvec2mat(torch_qvecs[0])
+    assert rotmat.shape == (3, 3)
+    new_qvec = gsoup.mat2qvec(rotmat)
+    mask1 = (torch.abs(new_qvec - torch_qvecs[0]) < 1e-6)
+    mask2 = (torch.abs(new_qvec + torch_qvecs[0]) < 1e-6)
+    assert torch.all(mask1 | mask2)
+    normal = torch.tensor([0, 0, 1.0])
+    random_vectors = gsoup.random_vectors_on_sphere(10, normal=normal)
+    assert random_vectors.shape == (10, 3)
+    assert (random_vectors @ normal).all() > 0
+    normal = torch.tensor([[0, 0, 1.0]]).repeat(10, 1)
+    random_vectors = gsoup.random_vectors_on_sphere(10, normal=normal)
+    assert random_vectors.shape == (10, 3)
+    assert (random_vectors[:, None, :] @ normal[:, :, None]).all() > 0
+
+def test_homogenize():
+    x = np.random.rand(100, 2)
+    hom_x = gsoup.to_hom(x)
+    assert hom_x.shape == (100, 3)
+    hom_x = gsoup.to_hom(hom_x)
+    assert hom_x.shape == (100, 4)
+    dehom_x = gsoup.homogenize(hom_x)
+    assert dehom_x.shape == (100, 3)
+    dehom_x = gsoup.homogenize(dehom_x, keepdim=True)
+    assert dehom_x.shape == (100, 3)
+    x = np.random.rand(3)
+    hom_x = gsoup.to_hom(x)
+    assert hom_x.shape == (4,)
+    dehom_x = gsoup.homogenize(hom_x)
+    assert dehom_x.shape == (3,)
+
+def test_normalize_vertices():
     v = np.random.rand(100, 3) * 100
     v_normalized = gsoup.normalize_vertices(v)
     assert (v_normalized < 1.0).all()
 
-def test_normalize_vertices_torch():
     v = torch.rand(100, 3) * 100
     v_normalized = gsoup.normalize_vertices(v)
     assert (v_normalized < 1.0).all()
@@ -247,6 +275,21 @@ def test_procam():
     assert warp_image.shape == (128, 128, 3)
     assert warp_image.dtype == np.uint8
     assert np.mean(np.abs(gsoup.to_8b(desired) - warp_image)) < 50  # surely an identity corrospondence & warp can't be too bad
+
+def test_sphere_tracer():
+    image_size = 512
+    device = "cuda:0"
+    w2v, v2c = gsoup.create_random_cameras_on_unit_sphere(5, 1.0, opengl=True, device=device)
+    ray_origins, ray_directions = gsoup.generate_rays(w2v, v2c[0], image_size, image_size, device=device)
+    sdf = gsoup.structures.sphere_sdf(0.25)
+    images = []
+    for o, d in zip(ray_origins, ray_directions):
+        result = gsoup.render(sdf, o.view(-1, 3), d.view(-1, 3))
+        images.append(result.view(image_size, image_size, 4))
+    images = gsoup.to_np(torch.stack(images))
+    images = gsoup.alpha_compose(images)
+    gizmo_images = gsoup.draw_gizmo_on_image(images, gsoup.to_np(v2c @ w2v), opengl=True)
+    gsoup.save_images(gizmo_images, Path("resource/sphere_trace"))
 
 def test_qem():
     v, f = gsoup.structures.cube()

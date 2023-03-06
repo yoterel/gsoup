@@ -115,8 +115,8 @@ def compute_normal(
 def generate_rays(w2v, v2c, resx=512, resy=512, device="cuda:0"):
     """
     generates batch of rays for a batch of cameras
-    :param w2v: world to view matrix
-    :param v2c: view to clip matrix
+    :param w2v: a batch of world to view matrices (nx4x4)
+    :param v2c: view to clip matrix (4x4)
     :param resx: resolution x
     :param resy: resolution y
     :param device: device

@@ -115,59 +115,56 @@ def to_34(mat: np.array):
             raise ValueError("mat must be 4x4")
         return mat[:-1, :]
 
-def look_at_np(from_, to_, up_, openGL=False):
+def look_at_np(eye, at, up, opengl=False):
     """
     returns a batch of look_at transforms 4x4 (camera->world, the inverse of a ModelView matrix)
     will broadcast upon batch dimension if necessary.
-    :param from_: n x 3 from vectors in world space
-    :param to_: n x 3 at vector in world space
-    :param up_: n x 3 up vector in world space
-    :param is_openGL: if True, output will be in opengl coordinates (z backward, y up) otherwise (z forward, y down)
+    :param eye: n x 3 from vectors in world space
+    :param at: n x 3 at vector in world space
+    :param up: n x 3 up vector in world space
+    :param opengl: if True, output will be in OpenGL coordinates (z backward, y up) otherwise (z forward, y down)
     :return: n x 4 x 4 transformation matrices (camera->world, the inverse of a ModelView matrix)
     """
-    from_, to_, up_ = broadcast_batch(from_, to_, up_)
-    forward = to_ - from_
+    eye, at, up = broadcast_batch(eye, at, up)
+    forward = at - eye
     forward = forward / np.linalg.norm(forward, axis=-1, keepdims=True)
-    right = np.cross(forward, up_)
+    right = np.cross(forward, up)
     right = right / np.linalg.norm(right, axis=-1, keepdims=True)
     up = np.cross(forward, right)
     up = up / np.linalg.norm(up, axis=-1, keepdims=True)
     rot = np.concatenate((right[..., None], up[..., None], forward[..., None]), axis=-1)
-    c2w = np.concatenate((rot, from_[..., None]), axis=-1)
-    c2w = to_44(c2w)
-    if openGL:
-        c2w[:, :, 1] *= -1
-        c2w[:, :, 2] *= -1
+    c2w = compose_rt(rot, eye, square=True)
+    if opengl:
+        c2w = opencv_c2w_to_opengl_c2w(c2w)
     return c2w
 
 def look_at_torch(
         eye:torch.Tensor, #3
         at:torch.Tensor, #3
         up:torch.Tensor, #3
-        device:torch.device,
-        openGL:bool=False
+        opengl:bool=False
     ) -> torch.Tensor: #4,4
     """
-    creates a lookat transform matrix (OpenCV convention)
+    creates a lookat transform matrix
     :param eye: where the camera is
     :param at: where the camera is looking
     :param up: the up vector of world space
-    :param device: the device to put the matrix on
+    :param opengl: if True, output will be in OpenGL coordinates (z backward, y up) otherwise (z forward, y down)
     :return: 4x4 lookat transform matrix
     """
-    if openGL:
-        z = (eye - at).type(torch.float32).to(device)
-    else:
-        z = (at - eye).type(torch.float32).to(device)
+    # todo batch support
+    z = (at - eye).type(torch.float32)
     z /= torch.norm(z)
-    x = torch.cross(up, z).type(torch.float32).to(device)
+    x = torch.cross(z, up).type(torch.float32)
     x /= torch.norm(x)
-    y = torch.cross(z, x).type(torch.float32).to(device)
+    y = torch.cross(z, x).type(torch.float32)
     y /= torch.norm(y)
-    T = torch.eye(4, device=device)
-    T[:3,:3] = torch.stack([x,y,z],dim=1)
-    T[:3,3] = eye
-    return T
+    c2w = torch.eye(4, device=z.device)
+    c2w[:3,:3] = torch.stack([x,y,z],dim=1)
+    c2w[:3,3] = eye
+    if opengl:
+        c2w = opencv_c2w_to_opengl_c2w(c2w)
+    return c2w
 
 def orthographic_projection(l, r, b, t, n, f):
     """
@@ -233,13 +230,13 @@ def frustum_projection(x0, x1, y0, y1, z0, z1):
 
 def opengl_project_from_opencv_intrinsics(opencv_intrinsics, width, height, near=0.1, far=100.0):
     """
-    given a matrix K from opencv, returns the corresponding projection matrix for opengl ("Eye/Camera/View space -> Clip Space")
-    :param opencv_project: 3x3 projection matrix from opencv
+    given a matrix K from opencv, returns the corresponding projection matrix for OpenGL ("Eye/Camera/View space -> Clip Space")
+    :param opencv_intrinsics: 3x3 intrinsics matrix from opencv
     :param width: width of the image
     :param height: height of the image
     :param near: near plane
     :param far: far plane
-    :return: 4x4 projection matrix for opengl (note: column major)
+    :return: 4x4 projection matrix for OpenGL (note: column major)
     """
     fx = opencv_intrinsics[0, 0]
     fy = opencv_intrinsics[1, 1]
@@ -250,6 +247,24 @@ def opengl_project_from_opencv_intrinsics(opencv_intrinsics, width, height, near
                            [0.0, 0.0, (-far - near) / (far - near), -2.0*far*near/(far-near)],
                            [0.0, 0.0, -1.0, 0.0]])
     return opengl_mtx
+
+def opencv_intrinsics_from_opengl_project(opengl_project, width, height):
+    """
+    given a projection matrix from OpenGL ("Eye/Camera/View space -> Clip Space"), returns a matrix K for opencv
+    :param opengl_project: 4x4 projection matrix from OpenGL
+    :param width: width of the image
+    :param height: height of the image
+    :return: 3x3 intrinsics matrix for opencv
+    note: assumes camera center is middle of image
+    """
+    fx = opengl_project[0, 0] * width / 2
+    fy = opengl_project[1, 1] * height / 2
+    cx = width / 2
+    cy = height / 2
+    opencv_mtx = np.array([[fx, 0.0, cx],
+                           [0.0, fy, cy],
+                           [0.0, 0.0, 1]])
+    return opencv_mtx
 
 def opengl_c2w_to_opencv_c2w(opengl_transforms):
     """
@@ -270,30 +285,40 @@ def opengl_c2w_to_opencv_c2w(opengl_transforms):
 
 def opencv_c2w_to_opengl_c2w(opencv_transform):
     """
-    converts coordinates of "vision" (opencv) to opengl coordinates by flipping y and z axes
+    converts coordinates of "vision" (opencv) to OpenGL coordinates by flipping y and z axes
     """
     return opengl_c2w_to_opencv_c2w(opencv_transform)
 
-def create_random_cameras_on_unit_sphere(n, r, device="cuda"):
+def create_random_cameras_on_unit_sphere(n_cams, radius, normal=None, opengl=False, device="cpu"):
     """
     creates a batch of world2view ("ModelView" matrix) and view2clip ("Projection" matrix) transforms on a unit sphere looking at the center
-    :param n: number of cameras
-    :param r: radius of the sphere
+    :param n_cams: number of cameras
+    :param radius: radius of the sphere
+    :param normal: if provided, only the hemisphere in the direction of the normal is sampled
+    :param opengl: if True, the coordinate system is converted to openGL convention (z backward, y up)
     :param device: device to put the tensors on
-    :return: world2view, view2clip
+    :return: world2view (world2cam), view2clip (requires further processing if opengl=False)
     """
-    locs = torch.randn((n, 3), device=device)
+    locs = torch.randn((n_cams, 3), device=device)
     locs = torch.nn.functional.normalize(locs, dim=1, eps=1e-6)
-    locs = locs * r
-    matrices = torch.empty((n, 4, 4), dtype=torch.float32, device=device)
+    if normal is not None:
+        if normal.ndim == 1:
+            normal = normal[None, :]
+        normal = torch.nn.functional.normalize(normal, dim=-1, eps=1e-6)
+        dot_product = (locs[:, None, :] @ normal[:, :, None]).squeeze()
+        locs[dot_product < 0] *= -1
+    locs = locs * radius
+    matrices = torch.empty((n_cams, 4, 4), dtype=torch.float32, device=device)
     for i in range(len(locs)):
         matrices[i] = look_at_torch(locs[i],
                                     torch.zeros(3, dtype=torch.float32, device=device),
-                                    torch.tensor([0.,1.,0.], device=device),
-                                    device=device)
+                                    torch.tensor([0.,0.,1.], device=device),
+                                    opengl=opengl)
     v2w = matrices  # c2w
     w2v = torch.inverse(v2w)
-    v2c = torch.tensor(perspective_projection(), dtype=torch.float32, device=device)
+    v2c = perspective_projection()
+    v2c = np.tile(v2c[None, :], (n_cams, 1, 1))
+    v2c = torch.tensor(v2c, dtype=torch.float32, device=device)
     return w2v, v2c
 
 def to_np(arr: torch.Tensor):
@@ -533,7 +558,7 @@ def mat2rotvec(r: torch.Tensor):
 
 def random_qvec(n: int):
     """
-    Generate random quaternions representing rotations
+    generate random quaternions representing rotations
     :param n: Number of quaternions in a batch to return.
     :return: Quaternions as tensor of shape (N, 4).
     """
@@ -543,9 +568,10 @@ def random_qvec(n: int):
     o = o / denom
     return o
 
-def random_vectors_on_hemisphere(n, normal=None, device="cpu"):
+def random_vectors_on_sphere(n, normal=None, device="cpu"):
     """
-    creates a batch of random vectors on a hemisphere, possibly oriented by a normal
+    create a batch of uniformly distributed random unit vectors on a sphere
+    note: if normal is provided, returns random unit vectors on the hemisphere around the normal, but isn't uniform anymore.
     :param n: number of vectors
     :param normal: normals to orient the hemisphere (,3) or (n,3)
     :param device: device to put the tensors on
