@@ -8,6 +8,7 @@ from pathlib import Path
 
 def warp_image(p2c, cam_image, cam_h=None, cam_w=None, output_path=None):
     """
+    todo: explain p2c structure
     given a 2D dense mapping between pixels from optical device 1 to optical device 2,
     warp an image from optical device 1 to optical device 2
     :param p2c: 2D dense mapping between pixels from optical device 1 to optical device 2
