@@ -233,6 +233,11 @@ def test_image():
     assert img.shape == (4, 512, 512, 3)
     resized_img = gsoup.resize_images_naive(img, 256, 256, mode="mean")
     assert resized_img.shape == (4, 256, 256, 3)
+    resized_img_float = gsoup.resize_images_naive(gsoup.to_float(img), 256, 256, mode="mean")
+    assert resized_img_float.shape == (4, 256, 256, 3)
+    assert resized_img_float.dtype == np.float32
+    resized_img_gray = gsoup.resize_images_naive(img[..., 0:1], 256, 256, mode="mean")
+    assert resized_img_gray.shape == (4, 256, 256, 1)
     grid = gsoup.image_grid(resized_img, 2, 2)
     assert grid.shape == (512, 512, 3)
     img = gsoup.load_images([dst, dst, dst, dst], as_grayscale=True)

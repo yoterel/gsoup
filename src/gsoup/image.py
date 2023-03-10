@@ -355,14 +355,16 @@ def resize_images_naive(images, H, W, channels_last=True, mode="mean"):
         raise ValueError("images must be square")
     if not channels_last:
         raise NotImplementedError("only channels last is supported")
+    channels_size = images.shape[-1]
     input_size = np.array(images.shape[1:3])
     output_size = np.array([H, W])
     bin_size = input_size // output_size
     if mode == "max":
-        small_images = images.reshape((images.shape[0], output_size[0], bin_size[0], output_size[1], bin_size[1], 3)).max(4).max(2)
+        small_images = images.reshape((images.shape[0], output_size[0], bin_size[0], output_size[1], bin_size[1], channels_size)).max(4).max(2)
     elif mode == "mean":
-        small_images = images.reshape((images.shape[0], output_size[0], bin_size[0], output_size[1], bin_size[1], 3)).mean(4).mean(2)
-        small_images = small_images.astype(np.uint8)
+        small_images = images.reshape((images.shape[0], output_size[0], bin_size[0], output_size[1], bin_size[1], channels_size)).mean(4).mean(2)
+        if images.dtype == np.uint8:
+            small_images = small_images.astype(np.uint8)
     else:
         raise ValueError("mode must be one of 'max', 'mean'")
     return small_images
@@ -377,7 +379,7 @@ def pad_image_to_res(images, res_w, res_h, bg_color=None):
     :return: padded image b x res_h x res_w x c
     """
     if bg_color is None:
-        bg_color = np.zeros(images.shape[-1]).astype(np.float32)
+        bg_color = np.zeros(images.shape[-1], dtype=images.dtype)
     if images.ndim != 4:
         raise ValueError("image must be a 4D array")
     b, h, w, c = images.shape
@@ -422,6 +424,8 @@ def adjust_contrast_brightness(img, alpha, beta=None):
     :param beta: bias factor ("brightness") between -inf and inf (but typically between -1 and 1)
     :return: the new image
     """
+    if img.dtype != np.float32:
+        raise ValueError("img must be a float32 numpy array (0-1)")
     if beta is None:  # if beta is not provided, set to factor of alpha
         beta = 0.5 - alpha / 2
     new_img = img * alpha + beta
@@ -436,6 +440,8 @@ def change_brightness(input_img, brightness=0):
     :param brightness a number between -255 to 255 (0=no change)
     :return the new image
     """
+    if input_img.dtype != np.float32:
+        raise ValueError("input_img must be a float32 numpy array (0-1)")
     if brightness != 0:
         if brightness > 0:
             shadow = brightness
