@@ -414,15 +414,16 @@ def mask_regions(images, start_h, end_h, start_w, end_w):
     output[:, start_h:end_h, start_w:end_w, :] = images[start_h:end_h, start_w:end_w, :]
     return output
 
-def convert_scale(img, alpha, beta):
+def adjust_contrast_brightness(img, alpha, beta=None):
     """
-    Add bias and gain to an image
+    adjusts image contrast and brightness using naive gain and bias factors
     :param img: input image numpy array (n x h x w x 3), float values between 0 and 1
     :param alpha: gain factor ("contrast") between 0 and inf
     :param beta: bias factor ("brightness") between -inf and inf (but typically between -1 and 1)
     :return: the new image
     """
-
+    if beta is None:  # if beta is not provided, set to factor of alpha
+        beta = 0.5 - alpha / 2
     new_img = img * alpha + beta
     new_img[new_img < 0] = 0
     new_img[new_img > 1] = 1
