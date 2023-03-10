@@ -1,4 +1,5 @@
 import numpy as np
+import torch
 from PIL import Image, ImageDraw, ImageFont
 from scipy import interpolate, spatial
 from .core import to_8b, to_float, to_hom, homogenize, broadcast_batch, map_range
@@ -440,8 +441,8 @@ def change_brightness(input_img, brightness=0):
     :param brightness a number between -255 to 255 (0=no change)
     :return the new image
     """
-    if input_img.dtype != np.float32:
-        raise ValueError("input_img must be a float32 numpy array (0-1)")
+    if input_img.dtype != np.float32 and input_img.dtype != torch.float32:
+        raise ValueError("input_img must be a float32 array (0-1)")
     if brightness != 0:
         if brightness > 0:
             shadow = brightness
