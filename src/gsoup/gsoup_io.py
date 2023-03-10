@@ -67,7 +67,7 @@ def save_images(images, dst, file_names: list = [], force_grayscale: bool = Fals
     if images.dtype == np.float32 or images.dtype == np.float64 or images.dtype == bool:
         images = to_8b(images)
     if images.dtype != np.uint8:
-        raise ValueError("Images must be of type uint8 (or float32/64, but will be converted to uint8)")
+        raise ValueError("Images must be of type uint8 (or float32/64, which will be converted to uint8)")
     if images.ndim != 4:
         raise ValueError("Images must be of shape (b x H x W x C)")
     if file_names:

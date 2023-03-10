@@ -173,7 +173,12 @@ def test_structures():
     assert f.shape[0] == 12
 
 def test_image():
-    lollipop = gsoup.generate_lollipop_pattern(512, 512, dst=Path("resource/lollipop.png"))
+    lollipop_path = Path("resource/lollipop.png")
+    lollipop = gsoup.generate_lollipop_pattern(512, 512, dst=lollipop_path)
+    gsoup.save_image(lollipop, lollipop_path)
+    lollipop2 = gsoup.load_image(lollipop_path)
+    assert np.allclose(lollipop, lollipop2)
+    gsoup.save_images(lollipop[None, ...], lollipop_path.parent, file_names=["test_save.png"])
     lollipop_pad = gsoup.pad_image_to_res(lollipop[None, ...], 1024, 1024)
     assert lollipop_pad.shape == (1, 1024, 1024, 3)
     lollipop_srgb = gsoup.linear_to_srgb(lollipop)

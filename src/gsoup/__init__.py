@@ -88,8 +88,8 @@ from .image import (
     interpolate_multi_channel,
     image_grid,
     resize_images_naive,
+    convert_scale,
     change_brightness,
-    change_contrast,
     linear_to_srgb,
     srgb_to_linear,
     pad_image_to_res

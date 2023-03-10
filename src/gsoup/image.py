@@ -198,6 +198,7 @@ def generate_lollipop_pattern(height, width, background="black", n=15, m=8, dst=
     :param n: number of circles in the pattern
     :param m: number of lines in the pattern
     :param dst: if not None, the image is written to this path
+    :return: (H x W x 3) numpy array (uint8)
     """
     spacing_x = width // (2*n)
     spacing_y = height // (2*n)
@@ -394,10 +395,43 @@ def pad_image_to_res(images, res_w, res_h, bg_color=None):
     output[:, corner_top:corner_top + h, corner_left:corner_left + w, :] = images
     return output
 
+def mask_regions(images, start_h, end_h, start_w, end_w):
+    """
+    masks a batch of numpy image with black background outside of region of interest (roi)
+    :param image: numpy image b x h x w x c
+    :param start_h: where does the roi height start
+    :param end_h: where does the roi height end
+    :param start_w: where does the roi width start
+    :param end_w: where does the roi width end
+    :return: masked image
+    """
+    if images.ndim != 4:
+        raise ValueError("image must be a 4D array")
+    _, h, w, _ = images.shape
+    if start_h < 0 or start_w < 0 or end_h > h or end_w > w:
+        raise ValueError("Values exceed image resolution")
+    output = np.zeros_like(images)
+    output[:, start_h:end_h, start_w:end_w, :] = images[start_h:end_h, start_w:end_w, :]
+    return output
+
+def convert_scale(img, alpha, beta):
+    """
+    Add bias and gain to an image
+    :param img: input image numpy array (n x h x w x 3), float values between 0 and 1
+    :param alpha: gain factor ("contrast") between 0 and inf
+    :param beta: bias factor ("brightness") between -inf and inf (but typically between -1 and 1)
+    :return: the new image
+    """
+
+    new_img = img * alpha + beta
+    new_img[new_img < 0] = 0
+    new_img[new_img > 1] = 1
+    return new_img.astype(np.uint8)
+
 def change_brightness(input_img, brightness=0):
     """
-    changes brightness of an image
-    :param input_img a numpy or torch tensor of float values between 0 and 1
+    changes brightness of an image or batch of images
+    :param input_img a numpy or torch tensor of float values between 0 and 1 (n x h x w x 3)
     :param brightness a number between -255 to 255 (0=no change)
     :return the new image
     """
@@ -415,23 +449,6 @@ def change_brightness(input_img, brightness=0):
         gamma_b = 0
     return input_img*alpha_b + gamma_b
 
-def change_contrast(input_img, contrast=127):
-    """
-    changes brightness of an image
-    :param input_img the numpy image
-    :param brightness a number between -127 to 127 (0=no change)
-    :return the new image
-    """
-    contrast = map_range(contrast, 0, 254, -127, 127)
-    if contrast != 0:
-        f = float(131 * (contrast + 127)) / (127 * (131 - contrast))
-        alpha_c = f
-        gamma_c = 127*(1-f)
-    else:
-        alpha_c = 1
-        gamma_c = 0
-    return input_img*alpha_c + gamma_c
-
 def linear_to_srgb(linear):
     """
     converts linear RGB to sRGB, see https://en.wikipedia.org/wiki/SRGB.
@@ -441,7 +458,6 @@ def linear_to_srgb(linear):
     srgb0 = 323 / 25 * linear
     srgb1 = (211 * np.maximum(eps, linear)**(5 / 12) - 11) / 200
     return np.where(linear <= 0.0031308, srgb0, srgb1)
-
 
 def srgb_to_linear(srgb):
     """
