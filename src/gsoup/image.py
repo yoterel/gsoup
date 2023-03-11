@@ -398,6 +398,26 @@ def pad_image_to_res(images, res_w, res_h, bg_color=None):
     output[:, corner_top:corner_top + h, corner_left:corner_left + w, :] = images
     return output
 
+def crop_center(images, dst_h, dst_w):
+    """
+    crops a batch of images to a specific resolution, but the crop comes from the center of the image
+    :param image: numpy (or torch) array b x h x w x c
+    :param dst_h: height of the output image
+    :param dst_w: width of the output image
+    :return: cropped image b x dst_h x dst_w x c
+    """
+    if images.ndim != 4:
+        raise ValueError("image must be a 4D array")
+    _, h, w, _ = images.shape
+    if h < dst_h or w < dst_w:
+        raise ValueError("images dimensions is smaller than the output resolution")
+    if h == dst_h and w == dst_w:
+        return images
+    corner_left = (w - dst_w) // 2
+    corner_top = (h - dst_h) // 2
+    output = images[:, corner_top:corner_top + dst_h, corner_left:corner_left + dst_w, :]
+    return output
+
 def mask_regions(images, start_h, end_h, start_w, end_w):
     """
     masks a batch of numpy image with black background outside of region of interest (roi)

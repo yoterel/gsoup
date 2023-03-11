@@ -93,7 +93,8 @@ from .image import (
     linear_to_srgb,
     srgb_to_linear,
     pad_image_to_res,
-    mask_regions
+    mask_regions,
+    crop_center
 )
 
 from .video import (
