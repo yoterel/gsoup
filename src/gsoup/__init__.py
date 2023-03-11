@@ -1,6 +1,7 @@
 __version__ = "0.0.7"
 
 from .core import (
+    is_np,
     broadcast_batch,
     to_hom,
     homogenize,

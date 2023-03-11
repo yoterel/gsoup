@@ -2,24 +2,35 @@ import torch
 import numpy as np
 from PIL import Image
 
+def is_np(x):
+    """
+    checks if x is a numpy array or torch tensor (will raise an error if x is neither)
+    :param x: object to check
+    :return: True if x is a numpy array, False if x is a torch tensor
+    """
+    if type(x) == np.ndarray:
+        return True
+    elif type(x) == torch.Tensor:
+        return False
+    else:
+        raise ValueError("input must be torch.Tensor or np.ndarray")
+
 def to_hom(x):
     """
     converts a vector to homogeneous coordinates
     :param x: nxc numpy array
     :return: nxc+1 numpy array
     """
-    if type(x) == torch.Tensor:
-        if x.ndim == 1:
-            return torch.cat((x, torch.ones(1, device=x.device)))
-        else:
-            return torch.cat((x, torch.ones(x.shape[0], 1, device=x.device)), dim=-1)
-    elif type(x) == np.ndarray:
+    if is_np(x):
         if x.ndim == 1:
             return np.concatenate((x, np.array([1], dtype=x.dtype)))
         else:
             return np.concatenate((x, np.ones((x.shape[0], 1), dtype=x.dtype)), axis=-1)
     else:
-        raise ValueError("x must be torch.Tensor or np.ndarray")
+        if x.ndim == 1:
+            return torch.cat((x, torch.ones(1, device=x.device)))
+        else:
+            return torch.cat((x, torch.ones(x.shape[0], 1, device=x.device)), dim=-1)
 
 def homogenize(x, keepdim=False):
     """
@@ -33,10 +44,11 @@ def homogenize(x, keepdim=False):
     return x
 
 def normalize(x, eps=1e-7):
-    if type(x) == torch.Tensor:
-        return x / (torch.norm(x, dim=-1, keepdim=True) + eps)
-    elif type(x) == np.ndarray:
+
+    if is_np(x):
         return x / (np.linalg.norm(x, axis=-1, keepdims=True) + eps)
+    else:
+        return x / (torch.norm(x, dim=-1, keepdim=True) + eps)
 
 
 def broadcast_batch(*args):
@@ -89,15 +101,13 @@ def to_44(mat):
         return mat
     if mat.shape[-2:] != (3, 4):
         raise ValueError("mat must be 3x4")
-    if type(mat) == torch.Tensor:
-        to_cat = torch.zeros((*mat.shape[:-2], 1, 4), dtype=mat.dtype, device=mat.device)
-        to_cat[..., -1] = 1
-        new_mat = torch.cat((mat, to_cat), dim=-2)
-    elif type(mat) == np.ndarray:
+    if is_np(mat):
         to_cat = np.broadcast_to(np.array([0, 0, 0, 1]), (*mat.shape[:-2], 1, 4))
         new_mat = np.concatenate((mat, to_cat), axis=-2)
     else:
-        raise ValueError("mat must be torch.Tensor or np.ndarray")
+        to_cat = torch.zeros((*mat.shape[:-2], 1, 4), dtype=mat.dtype, device=mat.device)
+        to_cat[..., -1] = 1
+        new_mat = torch.cat((mat, to_cat), dim=-2)
     return new_mat
 
 def to_34(mat: np.array):
@@ -359,17 +369,11 @@ def to_torch(arr: np.array, device="cpu", dtype=None):
 def to_8b(x, clip=True):
     """
     convert an array (float, double) array to 8 bit
+    :param x: array
+    :param clip: if True, clips values to [0,1]
+    :return: 8 bit array
     """
-    if type(x) == torch.Tensor:
-        if x.dtype == torch.float32 or x.dtype == torch.float64:
-            if clip:
-                x = torch.clamp(x, 0, 1)
-            return (255 * x).round().type(torch.uint8)
-        elif x.dtype == torch.bool:
-            return x.type(torch.uint8) * 255
-        elif x.dtype == torch.uint8:
-            return x
-    else:
+    if is_np(x):
         if x.dtype == np.float32 or x.dtype == np.float64:
             if clip:
                 x = np.clip(x, 0, 1)
@@ -378,12 +382,24 @@ def to_8b(x, clip=True):
             return x.astype(np.uint8) * 255
         elif x.dtype == np.uint8:
             return x
+    else:
+        if x.dtype == torch.float32 or x.dtype == torch.float64:
+            if clip:
+                x = torch.clamp(x, 0, 1)
+            return (255 * x).round().type(torch.uint8)
+        elif x.dtype == torch.bool:
+            return x.type(torch.uint8) * 255
+        elif x.dtype == torch.uint8:
+            return x
 
 def to_float(x, clip=True):
     """
     convert a 8bit or bool array to float
+    :param x: array
+    :param clip: if True, clips values to [0,1]
+    :return: float array
     """
-    if type(x) == np.ndarray:
+    if is_np(x):
         if x.dtype == np.uint8:
             return x.astype(np.float32) / 255
         elif x.dtype == np.float32:
@@ -394,7 +410,7 @@ def to_float(x, clip=True):
             return x.astype(np.float32)
         else:
             raise ValueError("unsupported dtype")
-    elif type(x) == torch.Tensor:
+    else:
         if x.dtype == torch.uint8:
             return x.to(torch.float32) / 255
         elif x.dtype == torch.float32:
@@ -405,8 +421,6 @@ def to_float(x, clip=True):
             return x.to(torch.float32)
         else:
             raise ValueError("unsupported dtype")
-    else:
-        raise ValueError("unsupported type")
 
 def to_PIL(x: np.array):
     """
@@ -607,14 +621,12 @@ def batch_qvec2mat(qvecs):
         qvecs = qvecs[None, :]
     if qvecs.ndim > 2:
         raise ValueError("quaternions must be of shape (..., 4)")
-    if type(qvecs) == torch.Tensor:
-        r, i, j, k = torch.unbind(qvecs, -1)
-        stacking_func = torch.stack
-    elif type(qvecs) == np.ndarray:
+    if is_np(qvecs):
         r, i, j, k = [x[0] for x in np.split(qvecs, 4, -1)]
         stacking_func = np.stack
     else:
-        raise ValueError("quaternions must be of type torch.Tensor or np.ndarray")
+        r, i, j, k = torch.unbind(qvecs, -1)
+        stacking_func = torch.stack
     two_s = 2.0 / (qvecs * qvecs).sum(-1)
     o = stacking_func([1 - two_s * (j * j + k * k),
                        two_s * (i * j - k * r),

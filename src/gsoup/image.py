@@ -2,7 +2,7 @@ import numpy as np
 import torch
 from PIL import Image, ImageDraw, ImageFont
 from scipy import interpolate, spatial
-from .core import to_8b, to_float, to_hom, homogenize, broadcast_batch, map_range
+from .core import to_8b, to_float, to_hom, homogenize, broadcast_batch, is_np
 from .structures import get_gizmo_coords
 from .gsoup_io import save_image
 
@@ -380,7 +380,10 @@ def pad_image_to_res(images, res_w, res_h, bg_color=None):
     :return: padded image b x res_h x res_w x c
     """
     if bg_color is None:
-        bg_color = np.zeros(images.shape[-1], dtype=images.dtype)
+        if is_np(images):
+            bg_color = np.zeros(images.shape[-1], dtype=images.dtype)
+        else:
+            bg_color = torch.zeros(images.shape[-1], dtype=images.dtype)
     if images.ndim != 4:
         raise ValueError("image must be a 4D array")
     b, h, w, c = images.shape
@@ -391,7 +394,10 @@ def pad_image_to_res(images, res_w, res_h, bg_color=None):
     if bg_color.shape[0] != c:
         raise ValueError("background color must have the same number of channels as the image")
     bg_color = bg_color[None, None, None, :]
-    output = np.zeros((b, res_h, res_w, c), dtype=images.dtype)
+    if is_np(images):
+        output = np.zeros((b, res_h, res_w, c), dtype=images.dtype)
+    else:
+        output = torch.zeros((b, res_h, res_w, c), dtype=images.dtype)
     output[:, :, :, :] = bg_color
     corner_left = (res_w - w) // 2
     corner_top = (res_h - h) // 2

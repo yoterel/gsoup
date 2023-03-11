@@ -1,5 +1,6 @@
 import torch
 import numpy as np
+from .core import is_np
 
 def duplicate_faces(f):
     """
@@ -8,14 +9,14 @@ def duplicate_faces(f):
     :param f: faces of the mesh (Nx3)
     :return: faces of the mesh with duplicated faces
     """
-    if type(f) != np.ndarray:
-        new_faces = f.detach().cpu().numpy()
-    else:
+    if is_np(f):
         new_faces = f
+    else:
+        new_faces = f.detach().cpu().numpy()
     swapped_f = new_faces.copy()
     swapped_f[:, [1, 2]] = swapped_f[:, [2, 1]]
     f_new = np.concatenate([new_faces, swapped_f])
-    if type(f) != np.ndarray:
+    if not is_np(f):
         f_new = torch.tensor(f_new, dtype=f.dtype, device=f.device)
     return f_new
 
@@ -26,13 +27,13 @@ def remove_duplicate_faces(f):
     :param f: faces of the mesh (Nx3)
     :return: vertices and faces of the mesh without duplicate faces
     """
-    if type(f) != np.ndarray:
-        f_new = f.detach().cpu().numpy()
-    else:
+    if is_np(f):
         f_new = f
+    else:
+        f_new = f.detach().cpu().numpy()
     f_new = np.sort(f_new, axis=1)
     f_new = np.unique(f_new, axis=0)
-    if type(f) != np.ndarray:
+    if not is_np(f):
         f_new = torch.tensor(f_new, dtype=f.dtype, device=f.device)
     return f_new
     
@@ -74,22 +75,19 @@ def normalize_vertices(vertices, mode="unit_sphere"):
     shift and resize mesh to fit into a bounding volume
     """
     eps = 1e-7
-    if type(vertices) == np.ndarray:
+    if is_np(vertices):
         vertices -= (vertices.min(axis=0) + vertices.max(axis=0)) / 2
         if mode == "unit_sphere":
             vertices = vertices / (np.linalg.norm(vertices, axis=-1).max() + eps)
         elif mode == "unit_cube":
             vertices = vertices / (np.abs(vertices).max(dim=-1) + eps)
             raise NotImplementedError
-        
-    elif type(vertices) == torch.Tensor:
+    else:
         if mode == "unit_sphere":
             vertices -= (vertices.min(dim=0)[0] + vertices.max(dim=0)[0]) / 2
             vertices = vertices / (torch.norm(vertices, dim=-1).max() + eps)
         elif mode == "unit_cube":
             raise NotImplementedError
-    else:
-        raise TypeError("vertices must be either np.ndarray or torch.Tensor")
     return vertices
 
 def calc_face_normals(vertices: torch.Tensor, faces: torch.Tensor, normalize: bool = False):
