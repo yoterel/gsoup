@@ -305,7 +305,7 @@ def parse_obj(path: Path, verbose=True):
     # vt = np.stack(vertexTextureList)
     return v, f #, vn, vt
 
-def save_obj(path: Path, vertices, faces):
+def save_obj(vertices, faces, path: Path):
     """"
     :param path: path to save obj file to
     :param vertices: (n x 3) tensor of vertices
@@ -336,10 +336,10 @@ def save_obj(path: Path, vertices, faces):
         for f in faces:
             file.write("f {} {} {}\n".format(f[0] + 1, f[1] + 1, f[2] + 1))  # obj indices start at 1
 
-def save_ply(path: Path, vertices, faces):
+def save_ply(vertices, faces, path: Path):
     raise NotImplementedError
 
-def save_mesh(path, vertices, faces):
+def save_mesh(vertices, faces, path):
     """
     saves a mesh to a file
     :param path: path to save mesh to
@@ -351,18 +351,18 @@ def save_mesh(path, vertices, faces):
         raise ValueError("Only .obj is supported")
     else:
         if path.suffix == ".obj":
-            save_obj(path, vertices, faces)
+            save_obj(vertices, faces, path)
         # elif path.suffix == ".ply":
         #     save_ply(path, vertices, faces)
 
-def save_pointcloud(path: Path, vertices):
+def save_pointcloud(vertices, path: Path):
     path = Path(path)
     if path.suffix != ".ply":
         raise ValueError("Only .ply are supported")
     else:
-        save_ply(path, vertices, None)
+        save_ply(vertices, None, path)
 
-def save_meshes(path, vertices, faces, file_names: list = []):
+def save_meshes(vertices, faces, path, file_names: list = []):
     """
     saves a list of meshes to a folder
     :param path: path to save meshes to
@@ -380,6 +380,6 @@ def save_meshes(path, vertices, faces, file_names: list = []):
     path = Path(path)
     for i, (v, f) in enumerate(zip(vertices, faces)):
         if file_names:
-            save_mesh(path / "{}.obj".format(file_names[i]), v, f)
+            save_mesh(v, f, path / "{}.obj".format(file_names[i]))
         else:
-            save_mesh(path / "{:05d}.obj".format(i), v, f)
+            save_mesh(v, f, path / "{:05d}.obj".format(i))

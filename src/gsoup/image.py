@@ -370,12 +370,12 @@ def resize_images_naive(images, H, W, channels_last=True, mode="mean"):
         raise ValueError("mode must be one of 'max', 'mean'")
     return small_images
 
-def pad_image_to_res(images, res_w, res_h, bg_color=None):
+def pad_image_to_res(images, res_h, res_w, bg_color=None):
     """
     pads a batch of numpy images to a specific resolution
     :param image: numpy image b x h x w x c
-    :param res_w: width of the output image
     :param res_h: height of the output image
+    :param res_w: width of the output image
     :param bg_color: background color c (defaults to black)
     :return: padded image b x res_h x res_w x c
     """
