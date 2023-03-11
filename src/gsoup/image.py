@@ -383,7 +383,7 @@ def pad_image_to_res(images, res_w, res_h, bg_color=None):
         if is_np(images):
             bg_color = np.zeros(images.shape[-1], dtype=images.dtype)
         else:
-            bg_color = torch.zeros(images.shape[-1], dtype=images.dtype)
+            bg_color = torch.zeros(images.shape[-1], dtype=images.dtype, device=images.device)
     if images.ndim != 4:
         raise ValueError("image must be a 4D array")
     b, h, w, c = images.shape
@@ -397,7 +397,7 @@ def pad_image_to_res(images, res_w, res_h, bg_color=None):
     if is_np(images):
         output = np.zeros((b, res_h, res_w, c), dtype=images.dtype)
     else:
-        output = torch.zeros((b, res_h, res_w, c), dtype=images.dtype)
+        output = torch.zeros((b, res_h, res_w, c), dtype=images.dtype, device=images.device)
     output[:, :, :, :] = bg_color
     corner_left = (res_w - w) // 2
     corner_top = (res_h - h) // 2
