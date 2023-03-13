@@ -13,14 +13,20 @@ def alpha_compose(images, bg_color=None):
     :param bg_color: 3 or b x 3
     :return: b x H x W x 3 or H x W x 3
     """
-    if bg_color is None:
-        bg_color = np.array([0., 0., 0.]).astype(np.float32)
     if images.ndim != 3 and images.ndim != 4:
         raise ValueError("image must be 3 or 4 dimensional")
     if images.shape[-1] != 4:
         raise ValueError("image must have 4 channels")
-    if images.dtype != np.float32:
-        images = to_float(images)
+    if is_np(images):
+        if bg_color is None:
+            bg_color = np.array([0., 0., 0.]).astype(np.float32)
+        if images.dtype != np.float32:
+            images = to_float(images)
+    else:
+        if bg_color is None:
+            bg_color = torch.tensor([0., 0., 0.], dtype=images.dtype, device=images.device)
+        if images.dtype != torch.float32:
+            images = to_float(images)
     alpha = images[..., 3:4]
     rgb = images[..., :3]
     return alpha * rgb + (1 - alpha) * bg_color
