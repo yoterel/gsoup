@@ -159,6 +159,20 @@ def generate_dot_pattern(height, width, background="black", radius=5, spacing=50
         img.save(str(dst))
     return np.array(img)
 
+def generate_checkerboard(w, h, blocksize):
+    """
+    generates a checkerboard pattern
+    note: if blocksize is not a divisor of w or h, the pattern will have extra "crops" at the edges
+    :param w: width of the image
+    :param h: height of the image
+    :param blocksize: size of the squares
+    :return: (H x W x 1) numpy array (np.bool)
+    """
+    c0, c1 = 0, 1  # color of the squares, for binary these are just 0,1
+    tile = np.array([[c0, c1],[c1, c0]], dtype=np.bool).repeat(blocksize, axis=0).repeat(blocksize, axis=1)[..., None]
+    grid = np.tile(tile, ( h//(2*blocksize)+1, w//(2*blocksize)+1, 1))
+    return grid[:h,:w]
+
 def generate_stripe_pattern(height, width, background="black", direction="vert", thickness=5, spacing=50, dst=None):
     """
     generates an image with colored stripes in a certain direction

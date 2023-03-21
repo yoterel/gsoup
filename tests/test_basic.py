@@ -173,6 +173,8 @@ def test_structures():
     assert f.shape[0] == 12
 
 def test_image():
+    checkboard = gsoup.generate_checkerboard(512, 512, 8)
+    gsoup.save_image(checkboard, "resource/checkboard.png")
     lollipop_path = Path("resource/lollipop.png")
     lollipop = gsoup.generate_lollipop_pattern(512, 512, dst=lollipop_path)
     gsoup.save_image(lollipop, lollipop_path)

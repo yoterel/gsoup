@@ -79,6 +79,7 @@ from .image import (
     draw_text_on_image,
     draw_gizmo_on_image,
     merge_figures_with_line,
+    generate_checkerboard,
     generate_voronoi_diagram,
     generate_gray_gradient,
     generate_dot_pattern,
