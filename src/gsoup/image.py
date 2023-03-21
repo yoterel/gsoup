@@ -165,12 +165,12 @@ def generate_dot_pattern(height, width, background="black", radius=5, spacing=50
         img.save(str(dst))
     return np.array(img)
 
-def generate_checkerboard(w, h, blocksize):
+def generate_checkerboard(h, w, blocksize):
     """
     generates a checkerboard pattern
     note: if blocksize is not a divisor of w or h, the pattern will have extra "crops" at the edges
-    :param w: width of the image
     :param h: height of the image
+    :param w: width of the image
     :param blocksize: size of the squares
     :return: (H x W x 1) numpy array (np.bool)
     """
