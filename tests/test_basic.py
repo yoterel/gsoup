@@ -131,6 +131,8 @@ def test_rotations():
     random_vectors = gsoup.random_vectors_on_sphere(10, normal=normal)
     assert random_vectors.shape == (10, 3)
     assert (random_vectors[:, None, :] @ normal[:, :, None]).all() > 0
+    rotx = gsoup.rotx(np.pi/2, degrees=False)
+    assert np.allclose(rotx, np.array([[1., 0, 0, 0], [0, 0, -1, 0], [0, 1, 0, 0], [0, 0, 0, 1]]))
 
 def test_homogenize():
     x = np.random.rand(100, 2)

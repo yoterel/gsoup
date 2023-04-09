@@ -459,13 +459,13 @@ def scale(s):
     mat = np.diag(s)
     return to_44(mat)
 
-def sincos(a, degree=True):
+def sincos(a, degrees=True):
     """
     sin and cos of an angle
     :param a: angle
-    :param degree: if True, a is in degrees
+    :param degrees: if True, a is in degrees
     """
-    if degree:
+    if degrees:
         a = np.deg2rad(a)
     return np.sin(a), np.cos(a)
 
@@ -482,37 +482,37 @@ def rotate(a, r):
                       [x*z*nc - y*s, y*z*nc + x*s, z*z*nc +   c, 0],
                       [           0,            0,            0, 1]])
 
-def rotx(a, degree=True):
+def rotx(a, degrees=True):
     """
-    creates a rotation matrix around the x axis
+    creates a homogeneous 3D rotation matrix around the x axis
     a: angle
-    degree: if True, a is in degrees, else radians
+    degrees: if True, a is in degrees, else radians
     """
-    s, c = sincos(a, degree)
+    s, c = sincos(a, degrees)
     return np.array([[1,0,0,0],
                       [0,c,-s,0],
                       [0,s,c,0],
                       [0,0,0,1]])
 
-def roty(a, degree=True):
+def roty(a, degrees=True):
     """
-    creates a rotation matrix around the y axis
+    creates a homogeneous 3D rotation matrix around the y axis
     a: angle
-    degree: if True, a is in degrees, else radians
+    degrees: if True, a is in degrees, else radians
     """
-    s, c = sincos(a, degree)
+    s, c = sincos(a, degrees)
     return np.array([[c,0,s,0],
                       [0,1,0,0],
                       [-s,0,c,0],
                       [0,0,0,1]])
 
-def rotz(a, degree=True):
+def rotz(a, degrees=True):
     """
-    creates a rotation matrix around the z axis
+    creates a homogeneous 3D rotation matrix around the z axis
     a: angle
-    degree: if True, a is in degrees, else radians
+    degrees: if True, a is in degrees, else radians
     """
-    s, c = sincos(a, degree)
+    s, c = sincos(a, degrees)
     return np.array([[c,-s,0,0],
                       [s,c,0,0],
                       [0,0,1,0],
