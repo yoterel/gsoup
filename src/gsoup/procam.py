@@ -192,12 +192,12 @@ def naive_color_compensate(target_image, all_white_image, all_black_image, cam_w
     :param cam_height camera image height
     :param brightness_decrease a hyper parameter controlling how much the total brightness is decreased. without this, the result is saturated because of dividing by small numbers
     :output_path if passed, result will be saved to this path
-    :debug if true, will save debug info into output_path 
+    :debug if true, will save debug info into output_path parent directory
     """
     if output_path is not None:
         output_path = Path(output_path)
         output_path.parent.mkdir(parents=True, exist_ok=True)
-    target_image = load_image(target_image, to_float=True, resize_wh=(cam_width, cam_height))
+    target_image = load_image(target_image, to_float=True, resize_wh=(cam_width, cam_height))[..., :3]
     target_image = change_brightness(target_image, brightness_decrease)
     if debug:
         save_image(target_image, Path(output_path.parent, "decrease_brightness.png"))
