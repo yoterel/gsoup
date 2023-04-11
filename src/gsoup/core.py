@@ -459,13 +459,19 @@ def scale(s):
     mat = np.diag(s)
     return to_44(mat)
 
-def sincos(a):
-    a = np.deg2rad(a)
+def sincos(a, degrees=True):
+    """
+    sin and cos of an angle
+    :param a: angle
+    :param degrees: if True, a is in degrees
+    """
+    if degrees:
+        a = np.deg2rad(a)
     return np.sin(a), np.cos(a)
 
 def rotate(a, r):
     """
-    creates a rotation matrix from an angle and an axis
+    creates a rotation matrix from an angle a and an axis of rotation r
     """
     s, c = sincos(a)
     r = normalize(r)
@@ -476,31 +482,37 @@ def rotate(a, r):
                       [x*z*nc - y*s, y*z*nc + x*s, z*z*nc +   c, 0],
                       [           0,            0,            0, 1]])
 
-def rotx(a):
+def rotx(a, degrees=True):
     """
-    creates a rotation matrix around the x axis
+    creates a homogeneous 3D rotation matrix around the x axis
+    a: angle
+    degrees: if True, a is in degrees, else radians
     """
-    s, c = sincos(a)
+    s, c = sincos(a, degrees)
     return np.array([[1,0,0,0],
                       [0,c,-s,0],
                       [0,s,c,0],
                       [0,0,0,1]])
 
-def roty(a):
+def roty(a, degrees=True):
     """
-    creates a rotation matrix around the y axis
+    creates a homogeneous 3D rotation matrix around the y axis
+    a: angle
+    degrees: if True, a is in degrees, else radians
     """
-    s, c = sincos(a)
+    s, c = sincos(a, degrees)
     return np.array([[c,0,s,0],
                       [0,1,0,0],
                       [-s,0,c,0],
                       [0,0,0,1]])
 
-def rotz(a):
+def rotz(a, degrees=True):
     """
-    creates a rotation matrix around the z axis
+    creates a homogeneous 3D rotation matrix around the z axis
+    a: angle
+    degrees: if True, a is in degrees, else radians
     """
-    s, c = sincos(a)
+    s, c = sincos(a, degrees)
     return np.array([[c,-s,0,0],
                       [s,c,0,0],
                       [0,0,1,0],
