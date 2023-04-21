@@ -72,12 +72,15 @@ def generate_gray_code(height, width, step, output_dir=None):
     patterns = graycode.generate()[1]
     # decrease pattern resolution
     exp_patterns = []
-    for pat in patterns:
-        img = np.zeros((height, width), np.uint8)
-        for y in range(height):
-            for x in range(width):
-                img[y, x] = pat[int(y/step), int(x/step)]
-        exp_patterns.append(img)
+    if step != 1:
+        for pat in patterns:
+            img = np.zeros((height, width), np.uint8)
+            for y in range(height):
+                for x in range(width):
+                    img[y, x] = pat[int(y/step), int(x/step)]
+            exp_patterns.append(img)
+    else:
+        exp_patterns = list(patterns)
     exp_patterns.append(255*np.ones((height, width), np.uint8))  # white
     exp_patterns.append(np.zeros((height, width), np.uint8))    # black
     exp_patterns = np.stack(exp_patterns)
@@ -91,7 +94,7 @@ def generate_gray_code(height, width, step, output_dir=None):
 def pix2pix_correspondence(proj_width, proj_height, step, captures,
                            BLACKTHR = 2, WHITETHR = 30, output_dir=None, verbose=True, debug=False):
     """
-    finds dense pixel to pixel pix2pix_correspondence between a projector and a camera
+    finds dense pixel to pixel correspondence between a projector and a camera
     note: assumes gray code patterns used for projections were generated using generate_gray_code
     :param proj_width: width of projector
     :param proj_height: height of projector
@@ -181,7 +184,7 @@ def pix2pix_correspondence(proj_width, proj_height, step, captures,
                 print('Amount of c2p correspondences :', len(c2p_list))
     return interpolated_c2p, interpolated_p2c
 
-def naive_color_compensate(target_image, all_white_image, all_black_image, cam_width, cam_height, brightness_decrease=-127, output_path=None, debug=False):
+def naive_color_compensate(target_image, all_white_image, all_black_image, cam_width, cam_height, brightness_decrease=-127, projector_gamma=2.2, output_path=None, debug=False):
     """
     color compensate a projected image such that it appears closer to a target image from the perspective of a camera
     loosly based on "Embedded entertainment with smart projectors"
@@ -191,6 +194,7 @@ def naive_color_compensate(target_image, all_white_image, all_black_image, cam_w
     :param cam_width camera image width
     :param cam_height camera image height
     :param brightness_decrease a hyper parameter controlling how much the total brightness is decreased. without this, the result is saturated because of dividing by small numbers
+    :param projector_gamma under normal circumstances the projector does not actually output linear values, so we need to compensate for that
     :output_path if passed, result will be saved to this path
     :debug if true, will save debug info into output_path parent directory
     """
@@ -203,9 +207,8 @@ def naive_color_compensate(target_image, all_white_image, all_black_image, cam_w
         save_image(target_image, Path(output_path.parent, "decrease_brightness.png"))
     all_white_image = load_image(all_white_image, to_float=True, resize_wh=(cam_width, cam_height))
     all_black_image = load_image(all_black_image, to_float=True, resize_wh=(cam_width, cam_height))
-    #unwarped_image = np.power(unwarped_image, -2.2)
     compensated = (target_image - all_black_image) / all_white_image
-    compensated = np.power(compensated, (1/2.2))
+    compensated = np.power(compensated, (1/projector_gamma))
     compensated = np.nan_to_num(compensated, nan=0.0, posinf=0.0, neginf=0.0)
     compensated = np.clip(compensated, 0, 1)
     if output_path:
