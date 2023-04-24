@@ -114,10 +114,10 @@ from .video import (
 
 from .procam import (
     warp_image,
-    generate_gray_code,
     calibrate_procam,
-    pix2pix_correspondence,
+    compute_backward_map,
     naive_color_compensate,
+    GrayCode
 )
 
 from .sphere_trace import (

@@ -5,184 +5,61 @@ from .gsoup_io import save_image, save_images, load_images, load_image
 from .core import to_8b
 from .image import interpolate_multi_channel, change_brightness
 from pathlib import Path
+from scipy.interpolate import LinearNDInterpolator
 
-def warp_image(p2c, cam_image, cam_h=None, cam_w=None, output_path=None):
+def warp_image(backward_map, desired_image, cam_wh=None, output_path=None):
     """
-    todo: explain p2c structure
-    given a 2D dense mapping between pixels from optical device 1 to optical device 2,
-    warp an image from optical device 1 to optical device 2
-    :param p2c: 2D dense mapping between pixels from optical device 1 to optical device 2
-    :param cam_image: path to image from optical device 1, or float np array channels last, or pytorch tensor channels last
-    :param cam_h: camera height, if not supplied assumes cam_image is in the correct dimensions in relation to p2c
-    :param cam_w: camera width, if not supplied assumes cam_image is in the correct dimensions in relation to p2c
+    given a 2D dense map of corresponding pixels between projector and camera, computes a warped image such that if projected, the desired image appears when observed using camera
+    :param backward_map: 2D dense mapping between pixels from projector 2 camera (proj_h x proj_w x 2) uint32
+    :param desired_image: path to desired image from camera, or float np array channels last (cam_h x cam_w x 3) uint8
+    :param cam_wh: device1 (width, height) as tuple, if not supplied assumes desired_image is in the correct dimensions in relation to backward_map
     :param output_path: path to save warped image to
-    :return: warped image np array uint8
+    :return: warped image (proj_h x proj_w x 3) uint8
     """
-    if type(cam_image) == np.ndarray:
-        unwarped = torch.tensor(cam_image)
-    elif type(cam_image) == torch.Tensor:
-        unwarped = cam_image
+    if backward_map.ndim != 3:
+        raise ValueError("backward_map must be 3D")
+    if backward_map.shape[-1] != 2:
+        raise ValueError("backward_map must have shape (cam_h, cam_w, 2)")
+    if type(desired_image) == np.ndarray:
+        if desired_image.ndim != 3:
+            raise ValueError("desired_image must be 3D")
     else:
-        unwarped = load_image(cam_image, to_float=True, to_torch=True, resize_wh=(cam_w, cam_h))
-    if unwarped.dtype != torch.float32 and unwarped.dtype != torch.float64:
-        raise ValueError("cam_image must be float32 or float64")
-    if unwarped.ndim != 3:
-        raise ValueError("cam_image must be 3D")
-    if unwarped.shape[2] != 3:
-        raise ValueError("cam_image must be a channels last image.")
-    if cam_h is not None:
-        if unwarped.shape[0] != cam_h:
-            raise ValueError("cam_image must be of shape cam_h, cam_w, 3")
-    if cam_w is not None:
-        if unwarped.shape[1] != cam_w:
-            raise ValueError("cam_image must be of shape cam_h, cam_w, 3")
-    #print(p2c.shape)
-    #p2c = Image.open(Path(interpolated_p2c_path))
-    if type(p2c) != np.ndarray:
-        p2c_data = np.load(p2c)
-    else:
-        p2c_data = p2c.copy()
-    p2c_data = np.asarray(p2c_data)[:, :, :2]
-    #p2c = p2c/255
-    p2c_data[:, :, 0] = (p2c_data[:, :, 0] * 2) - 1
-    p2c_data[:, :, 1] = (p2c_data[:, :, 1] * 2) - 1
-    p2c_data[:, :, [1, 0]] = p2c_data[:, :, [0, 1]]
-    # p2c = np.round(p2c).astype(np.int32)
-    grid = torch.tensor(p2c_data.astype(np.float32)).unsqueeze(0)
-    input = torch.tensor(unwarped).permute(2, 0, 1).unsqueeze(0)
-    warped = torch.nn.functional.grid_sample(input, grid).squeeze().permute(1, 2, 0).numpy()
-    warped_int = to_8b(warped)
+        if cam_wh is not None:
+            desired_image = load_image(desired_image, resize_wh=cam_wh)
+        else:
+            desired_image = load_image(desired_image)
+    warpped = desired_image[(backward_map[..., 0], backward_map[..., 1])]
     if output_path is not None:
-        output_path.parent.mkdir(exist_ok=True, parents=True)
-        save_image(warped_int, output_path)
-    return warped_int
+        output_path = Path(output_path)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        save_image(warpped, output_path)
+    return warpped
 
-def generate_gray_code(height, width, step, output_dir=None):
+def compute_backward_map(proj_wh, forward_map, foreground, output_dir=None, debug=False): 
     """
-    generate gray code patterns for structured light scanning
-    :param height: height of the pattern
-    :param width: width of the pattern
-    :param step: step size of the pattern (e.g. 2 means the patterns are half the resolution)
-    :param output_dir: directory to save the patterns to
-    :return: n x height x width array of patterns
-    """
-    gc_height = int((height-1)/step)+1
-    gc_width = int((width-1)/step)+1
-    graycode = cv2.structured_light_GrayCodePattern.create(gc_width, gc_height)
-    patterns = graycode.generate()[1]
-    # decrease pattern resolution
-    exp_patterns = []
-    if step != 1:
-        for pat in patterns:
-            img = np.zeros((height, width), np.uint8)
-            for y in range(height):
-                for x in range(width):
-                    img[y, x] = pat[int(y/step), int(x/step)]
-            exp_patterns.append(img)
-    else:
-        exp_patterns = list(patterns)
-    exp_patterns.append(255*np.ones((height, width), np.uint8))  # white
-    exp_patterns.append(np.zeros((height, width), np.uint8))    # black
-    exp_patterns = np.stack(exp_patterns)
-    if output_dir is not None:
-        output_dir = Path(output_dir)
-        output_dir.mkdir(exist_ok=True, parents=True)
-        file_names = ["pattern_{:02d}.png".format(i) for i in range(len(exp_patterns))]
-        save_images(exp_patterns[..., None], output_dir, file_names=file_names)
-    return exp_patterns
-
-def pix2pix_correspondence(proj_width, proj_height, step, captures,
-                           BLACKTHR = 2, WHITETHR = 30, output_dir=None, verbose=True, debug=False):
-    """
-    finds dense pixel to pixel correspondence between a projector and a camera
-    note: assumes gray code patterns used for projections were generated using generate_gray_code
-    :param proj_width: width of projector
-    :param proj_height: height of projector
-    :param step: step factor used for gray code patterns (e.g. 2 means half resolution)
-    :param captures: the actual n x cam_height x cam_width x 3 captured images, or a directory containing the images
-    :param BLACKTHR: threshold for black pixels
-    :param WHITETHR: threshold for white pixels
-    :param output_dir: directory to save results to
-    :param verbose: if True, prints progress and status
-    :param debug: if True, saves debug images (must provide output_dir)
-    """
+    computes the inverse map of forward_map by piece-wise interpolating a triangulated version of it.
+    :param proj_wh: projector (width, height) as a tuple
+    :param forward_map: forward map as a numpy array of shape (height, width, 2) of type int32
+    :param output_dir: directory to save the inverse map to
+    :param debug: if True, saves a visualization of the inverse map to output_dir
+    :return: inverse map as a numpy array of shape (projector_height, projector_width, 2) of type int32
+    """   
     if output_dir is not None:
         output_dir = Path(output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
-    # prep decoder
-    gc_width = int((proj_width-1)/step)+1
-    gc_height = int((proj_height-1)/step)+1
-    graycode = cv2.structured_light_GrayCodePattern.create(gc_width, gc_height)
-    graycode.setBlackThreshold(BLACKTHR)
-    graycode.setWhiteThreshold(WHITETHR)
-    correct_pattern_amount = graycode.getNumberOfPatternImages() + 2
-    if type(captures) != np.ndarray:
-        captures = load_images(captures)
-    captures = captures.mean(axis=-1).astype(np.uint8)  # convert to grayscale
-    if len(captures) != correct_pattern_amount:
-        raise ValueError('Number of images is not right (right number is {})'.format(correct_pattern_amount))
-    imgs = list(captures)
-    black = imgs.pop()
-    white = imgs.pop()
-    cam_height = white.shape[0]
-    cam_width = white.shape[1]
-    if debug:
-        diff_pic = white.astype(np.uint64) - black.astype(np.uint64)
-        diff_pic[diff_pic < 0] = 0
-        save_image(diff_pic[..., None].astype(np.uint8), Path(output_dir, "white_black_diff.png"))
-        if verbose:
-            print('camera image size :', white.shape)
-    # initialize
-    viz_c2p = np.zeros((cam_height, cam_width, 3), np.float32)
-    ragged_p2c = np.empty((proj_height, proj_width), dtype=object)
-    for i in np.ndindex(ragged_p2c.shape): ragged_p2c[i] = []
-    missing_values_c2p = np.ones((cam_height, cam_width), np.bool8)
-    # c2p
-    c2p_list = [] # [((cam x, y), (proj x, y))]
-    for y in range(cam_height):
-        for x in range(cam_width):
-            if int(white[y, x]) - int(black[y, x]) <= BLACKTHR:  # background
-                continue
-            err, proj_pix = graycode.getProjPixel(imgs, x, y)
-            if not err:
-                fixed_pix = step*(proj_pix[0]+0.5), step*(proj_pix[1]+0.5)  # x, y
-                ragged_p2c[int(fixed_pix[1]), int(fixed_pix[0])].append([y, x])
-                viz_c2p[y, x, :] = [fixed_pix[1] / proj_height, fixed_pix[0] / proj_width, 0.0]
-                missing_values_c2p[y, x] = False
-                c2p_list.append(((x, y), fixed_pix))
-    # p2c
-    total_size = ragged_p2c.size
-    counter = 0
-    for i in range(proj_height):
-        for j in range(proj_width):
-            if verbose:
-                print("{} / {}".format(counter, total_size), end="\r", flush=True)
-            val = np.mean(ragged_p2c[i, j], dtype=np.float32, axis=0)
-            if np.isnan(val).any():
-                val = np.zeros(2)
-            else:
-                val = np.round(val).astype(np.int32)
-            ragged_p2c[i, j] = val
-            counter += 1
-    viz_p2c = np.vstack(ragged_p2c.reshape(-1)).reshape(proj_height, proj_width, 2).astype(np.uint32)
-    viz_p2c = viz_p2c / np.array([cam_height, cam_width], dtype=np.float32)[None, None, :]
-    viz_p2c = np.concatenate((viz_p2c, np.zeros_like(viz_p2c)[:, :, 0:1]), axis=-1)
-    missing_values_p2c = (viz_p2c == 0).all(axis=-1)
-    # interpolate missing values
-    interpolated_c2p = interpolate_multi_channel(viz_c2p, missing_values_c2p)
-    interpolated_p2c = interpolate_multi_channel(viz_p2c, missing_values_p2c)
-    # save results
-    if output_dir is not None:
-        np.save(Path(output_dir, "c2p.npy"), interpolated_c2p) 
-        np.save(Path(output_dir, "p2c.npy"), interpolated_p2c) 
+    data = np.argwhere(foreground)
+    points = forward_map[foreground]
+    interp = LinearNDInterpolator(points, data, fill_value=0.0)
+    X, Y = np.meshgrid(np.arange(proj_wh[1]), np.arange(proj_wh[0]))
+    result = interp(X, Y).transpose(1, 0, 2)  # eww
+    if output_dir:
+        np.save(Path(output_dir, "backward_map.npy"), result)
         if debug:
-            save_image(interpolated_c2p, Path(output_dir, "interpolated_c2p.png"))
-            save_image(interpolated_p2c, Path(output_dir, "interpolated_p2c.png"))
-            save_image(viz_c2p, Path(output_dir, "c2p.png"))
-            save_image(viz_p2c, Path(output_dir, "p2c.png"))
-            if verbose:
-                print('Amount of c2p correspondences :', len(c2p_list))
-    return interpolated_c2p, interpolated_p2c
+            result_normalized = result / np.array([forward_map.shape[0], forward_map.shape[1]])
+            result_normalized_8b = to_8b(result_normalized)
+            result_normalized_8b_3c = np.concatenate((result_normalized_8b, np.zeros_like(result_normalized_8b[..., :1])), axis=-1)
+            save_image(result_normalized_8b_3c, Path(output_dir, "backward_map.png"))
+    return result.round().astype(np.uint32)
 
 def naive_color_compensate(target_image, all_white_image, all_black_image, cam_width, cam_height, brightness_decrease=-127, projector_gamma=2.2, output_path=None, debug=False):
     """
@@ -314,7 +191,7 @@ def calibrate_procam(proj_height, proj_width, graycode_step, capture_dir,
                         dst_points.append(gc_step*np.array(proj_pix))
             if len(src_points) < patch_size_half**2:
                 if verbose:
-                    print('corner {}, {} was skiped because too few decoded pixels found (check your images and threasholds)'.format(c_x, c_y))
+                    print('corner {}, {} was skiped because too few decoded pixels found (check your images and thresholds)'.format(c_x, c_y))
                 continue
             h_mat, inliers = cv2.findHomography(
                 np.array(src_points), np.array(dst_points))
@@ -362,3 +239,125 @@ def calibrate_procam(proj_height, proj_width, graycode_step, capture_dir,
         print('Projector distortion parameters: {}'.format(proj_dist))
         print('Rotation matrix / translation vector from camera to projector (cam2proj transform): {}, {}'.format(cam_proj_rmat, cam_proj_tvec))
     return cam_int, cam_dist, proj_int, proj_dist, cam_proj_rmat, cam_proj_tvec
+
+class GrayCode:
+    """
+    a class that handles encoding and decoding graycode patterns
+    """
+    def encode1d(self, length):
+        total_images = len(bin(length-1)[2:])
+
+        def xn_to_gray(n, x):
+            # infer a coordinate gray code from its position x and index n (the index of the image out of total_images)
+            # gray code is obtained by xoring the bits of x with itself shifted, and selecting the n-th bit
+            return (x^(x>>1))&(1<<(total_images-1-n))!=0
+        
+        imgs_code = 255*np.fromfunction(xn_to_gray, (total_images, length), dtype=int).astype(np.uint8)
+        return imgs_code
+    
+    def encode(self, proj_wh, flipped_patterns=True):
+        """
+        encode projector's width and height into gray code patterns
+        :param proj_wh: projector's (width, height) in pixels as a tuple
+        :param flipped_patterns: if True, each patterns fliipped bits is also generated for better binarization
+        :return: a 3D numpy array of shape (total_images, height, width) where total_images is the number of gray code patterns
+        """
+        width, height = proj_wh
+        codes_width_1d = self.encode1d(width)[:, None, :]
+        codes_width_2d = codes_width_1d.repeat(height, axis=1)
+        codes_height_1d = self.encode1d(height)[:, :, None]
+        codes_height_2d = codes_height_1d.repeat(width, axis=2)
+        
+        img_white = np.full((height, width), 255, dtype=np.uint8)[None, ...]
+        img_black = np.full((height, width),  0, dtype=np.uint8)[None, ...]
+        all_images = np.concatenate((codes_width_2d, codes_height_2d), axis=0)
+        if flipped_patterns:
+            all_images = np.concatenate((all_images, 255-codes_width_2d), axis=0)
+            all_images = np.concatenate((all_images, 255-codes_height_2d), axis=0)
+        all_images = np.concatenate((all_images, img_white, img_black), axis=0)
+        return all_images
+    
+    def binarize(self, captures, flipped_patterns=True, bg_threshold=5, bin_threshold=5):
+        """
+        binarize a batch of images
+        :param captures: a 4D numpy array of shape (n, height, width, 1) of captured images
+        :param flipped_patterns: if true, patterns also contain their flipped version for better binarization
+        :param bg_threshold: a threshold used for background detection using the all-white and all-black captures
+        :param bin_threshold: a threshold used for binarization between the flipped and non-flipped patterns
+        :return: a 4D numpy binary array for decoding (total_images, height, width, 1) where total_images is the number of gray code patterns
+        and a binary foreground mask (height, width, 1)
+        """
+        captures, bw = captures[:-2], captures[-2:]
+        foreground = np.abs(bw[0].astype(np.int32) - bw[1].astype(np.int32)) > bg_threshold
+        # img_bin = np.zeros_like(captures, dtype=np.uint8)
+        if flipped_patterns:
+            captures, flipped = captures[:len(captures)//2], captures[len(captures)//2:]
+            valid = np.abs(captures.astype(np.int32) - flipped.astype(np.int32)) > bin_threshold
+            binary = captures > flipped
+            foreground = foreground & np.all(valid, axis=0)  # do not use pixels that do not meet threshold in any of the images
+        else:  # slightly naive threhsolding
+            threhold = 0.5*(bw[1] + bw[0])
+            binary = captures >= threhold
+        return binary, foreground
+
+    def decode1d(self, gc_imgs):
+        # gray code to binary
+        n, h, w = gc_imgs.shape
+        binary_imgs = gc_imgs.copy()
+        for i in range(1, n):  # xor with previous image except MSB
+            binary_imgs[i, :, :] = np.bitwise_xor(binary_imgs[i, :, :], binary_imgs[i-1, :, :])
+        # decode binary
+        cofficient = np.fromfunction(lambda i,y,x: 2**(n-1-i), (n,h,w), dtype=int)
+        img_index = np.sum(binary_imgs * cofficient, axis=0)
+        return img_index
+
+    def decode(self, captures, proj_wh,
+               flipped_patterns=True, bg_threshold=10, bin_threshold=30,
+               mode="xy", output_dir=None, debug=False):
+        """
+        decodes a batch of images encoded with gray code
+        :param captures: a 4D numpy array of shape (n, height, width, c) of captured images
+        :param flipped_patterns: if true, patterns also contain their flipped version for better binarization
+        :param bg_threshold: a threshold used for background detection using teh all-white and all-black captures
+        :param bin_threshold: a threshold used for binarization
+        :param mode: "xy" or "ij" decides the order of last dimension coordinates (ij -> height first, xy -> width first)
+        :return: a 2D numpy array of shape (height, width, 2) specifying the coordinates of decoded result, and foreground mask (height, width)
+        """
+        if captures.ndim != 4:
+            raise ValueError("captures must be a 4D numpy array")
+        if captures.dtype != np.uint8:
+            raise ValueError("captures must be uint8")
+        if output_dir is not None:
+            output_dir = Path(output_dir)
+            output_dir.mkdir(parents=True, exist_ok=True)
+        b, _, _, c = captures.shape
+        b = b - 2 # dont count white and black images
+        if flipped_patterns:
+            b = b // 2  # dont count flipped patterns
+        encoded = self.encode(proj_wh, flipped_patterns)  # sanity: encode with same arguments to verify enough captures are present
+        if len(encoded) != len(captures):
+            raise ValueError("captures must have length of {}".format(len(encoded)))
+        if c != 1:  # naively convert to grayscale
+            captures = captures.mean(axis=-1, keepdims=True).astype(np.uint8)
+        imgs_binary, fg = self.binarize(captures, flipped_patterns, bg_threshold, bin_threshold)
+        imgs_binary = imgs_binary[:, :, :, 0]
+        fg = fg[:, :, 0]
+        x = self.decode1d(imgs_binary[:b // 2])
+        y = self.decode1d(imgs_binary[b // 2:])
+        if mode == "ij":
+            forward_map = np.concatenate((y[..., None], x[..., None]), axis=-1)
+        elif mode == "xy":
+            forward_map = np.concatenate((x[..., None], y[..., None]), axis=-1)
+        else:
+            raise ValueError("mode must be 'ij' or 'xy'")
+        if output_dir is not None:
+            np.save(Path(output_dir, "forward_map.npy"), forward_map)
+            if debug:
+                save_images(imgs_binary[..., None], Path(output_dir, "imgs_binary"))
+                composed = forward_map * fg[..., None]
+                composed_normalized = composed / np.array([proj_wh[1], proj_wh[0]])
+                composed_normalized_8b = to_8b(composed_normalized)
+                composed_normalized_8b_3c = np.concatenate((composed_normalized_8b, np.zeros_like(composed_normalized_8b[..., :1])), axis=-1)
+                save_image(composed_normalized_8b_3c, Path(output_dir, "forward_map.png"))
+        return forward_map, fg
+    
