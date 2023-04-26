@@ -102,7 +102,7 @@ def load_image(path, to_float=False, channels_last=True, to_torch=False, device=
     :param device: device to load tensor to
     :param resize_wh: a tuple (w, h) to resize the image using nearest neighbor interpolation
     :param as_grayscale: if True, loads image as grayscale by averaging over the channels
-    :return: (b x H x W x 3) tensor, and optionally a list of file names
+    :return: (H x W x C) tensor, and optionally a list of file names
     """
     path = Path(path)
     if not path.exists():
