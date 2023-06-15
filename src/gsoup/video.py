@@ -18,6 +18,8 @@ def get_ffmpeg_version():
             print("Warning, detected ffmpeg version: {}. Video module May fail for versions lower than 5".format(version))
     except ValueError:
         print("Warning, could not detect ffmpeg version. Video module May fail")
+    except FileNotFoundError:
+        print("Warning, ffmpeg not found. Video module May fail")
 get_ffmpeg_version()
 
 class FPS:
