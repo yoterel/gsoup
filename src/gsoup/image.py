@@ -357,7 +357,10 @@ def image_grid(images, rows, cols):
     if len(images) != rows * cols:
         raise ValueError("number of images must be equal to rows * cols")
     tmp = images.reshape(rows, cols, images.shape[1], images.shape[2], -1)
-    result = tmp.transpose(0, 2, 1, 3, 4).reshape(rows * images.shape[1], cols * images.shape[2], -1)
+    if type(tmp) == torch.Tensor:
+        result = tmp.permute(0, 2, 1, 3, 4).reshape(rows * images.shape[1], cols * images.shape[2], -1)
+    elif type(tmp) == np.ndarray:
+        result = tmp.transpose(0, 2, 1, 3, 4).reshape(rows * images.shape[1], cols * images.shape[2], -1)
     return result
 
 def resize_images_naive(images, H, W, channels_last=True, mode="mean"):
