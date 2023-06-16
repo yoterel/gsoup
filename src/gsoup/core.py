@@ -594,6 +594,38 @@ def random_qvec(n: int):
     o = o / denom
     return o
 
+def random_affine(ang_range=20.0, trans_range=10.0, scale=2.0):
+    """
+    generates a random 2D affine transformation matrix
+    """
+    R = np.eye(3)
+    ang_rot = np.random.uniform(ang_range)-ang_range/2
+    tx = trans_range*np.random.uniform()-trans_range/2
+    ty = trans_range*np.random.uniform()-trans_range/2
+    sx = np.random.rand() * scale
+    sy = np.random.rand() * scale
+    R[0, 0] = np.cos(ang_rot * np.pi / 180)
+    R[0, 1] = -np.sin(ang_rot * np.pi / 180)
+    R[1, 0] = np.sin(ang_rot * np.pi / 180)
+    R[1, 1] = np.cos(ang_rot * np.pi / 180)
+    T = np.eye(3)
+    T[0, 2] = tx
+    T[1, 2] = ty
+    S = np.eye(3)
+    S[0, 0] = sx
+    S[1, 1] = sy
+    H = T @ S @ R
+    return H
+
+def random_perspective():
+    """
+    generates a random 2D perspective transformation matrix
+    """
+    P = random_affine()
+    P[2, 0] = np.random.rand() / 100
+    P[2, 1] = np.random.rand() / 100
+    return P
+
 def random_vectors_on_sphere(n, normal=None, device="cpu"):
     """
     create a batch of uniformly distributed random unit vectors on a sphere

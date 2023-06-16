@@ -304,6 +304,18 @@ def test_procam():
     assert warp_image.shape == (128, 128, 3)
     assert warp_image.dtype == np.uint8
     assert np.mean(np.abs(desired - warp_image)) < 10  # surely an identity corrospondence & warp can't be too bad
+    calibration_dir = Path("resource/calibration")
+    calibration_dir.mkdir(exist_ok=True, parents=True)
+    checkerboard = gsoup.to_float(gsoup.generate_checkerboard(128, 128, 16))
+    # T = gsoup.random_perspective()
+    # T_opencv = T[:2, :]
+    # img_transformed = cv2.warpPerspective(checkerboard, T, (128, 128))
+    captures = np.bitwise_and(patterns==255, checkerboard[None, ...]==1.0)
+    gsoup.save_images(captures, Path(calibration_dir, "0"))
+    gsoup.save_images(captures, Path(calibration_dir, "1"))
+    cam_int, cam_dist,\
+    proj_int, proj_dist,\
+    cam_proj_rmat, cam_proj_tvec = gsoup.calibrate_procam(128, 128, 1, calibration_dir, chess_vert=7, chess_hori=7)
 
 def test_sphere_tracer():
     image_size = 512

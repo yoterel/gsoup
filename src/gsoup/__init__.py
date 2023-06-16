@@ -21,6 +21,8 @@ from .core import (
     map_range,
     create_random_cameras_on_unit_sphere,
     random_vectors_on_sphere,
+    random_affine,
+    random_perspective,
     opengl_c2w_to_opencv_c2w,
     opencv_c2w_to_opengl_c2w,
     opencv_intrinsics_from_opengl_project,

@@ -94,7 +94,7 @@ def naive_color_compensate(target_image, all_white_image, all_black_image, cam_w
 
 def calibrate_procam(proj_height, proj_width, graycode_step, capture_dir, 
                      chess_vert=10, chess_hori=7,
-                     black_thr=40, white_thr=5, chess_block_size=10.0, verbose=True):
+                     black_thr=40, chess_block_size=10.0, verbose=True):
     """
     calibrates a projection-camera pair using local homographies
     based on "Simple, accurate, and robust projector-camera calibration."
@@ -113,7 +113,6 @@ def calibrate_procam(proj_height, proj_width, graycode_step, capture_dir,
                 - 0000.png
                 - ...
     :param black_thr threshold for detecting black pixels in the chessboard
-    :param white_thr threshold for detecting white pixels in the chessboard
     :param chess_block_size size of blocks of chessboard in real world in any unit of measurement (will only effect the translation componenet between camera and projector)
     :param verbose if true, will print out the calibration results
     :return camera intrinsics, camera extrinsics, projector intrinsics, projector extrinsics, cam_proj_rmat, cam_proj_tvec
@@ -138,56 +137,45 @@ def calibrate_procam(proj_height, proj_width, graycode_step, capture_dir,
     dirnames = used_dirnames
     objps = np.zeros((chess_shape[0]*chess_shape[1], 3), np.float32)
     objps[:, :2] = chess_block_size * np.mgrid[0:chess_shape[0], 0:chess_shape[1]].T.reshape(-1, 2)
-    gc_height = int((proj_shape[0]-1)/gc_step)+1
-    gc_width = int((proj_shape[1]-1)/gc_step)+1
-    graycode = cv2.structured_light_GrayCodePattern.create(gc_width, gc_height)
-    graycode.setBlackThreshold(black_thr)
-    graycode.setWhiteThreshold(white_thr)
+    graycode = GrayCode()
+    patterns = graycode.encode((proj_shape[1], proj_shape[0]))
     cam_shape = load_image(gc_fname_lists[0][0], as_grayscale=True).shape
     patch_size_half = int(np.ceil(cam_shape[1] / 180))
-    # print('  patch size :', patch_size_half * 2 + 1)
-
     cam_corners_list = []
     cam_objps_list = []
     cam_corners_list2 = []
     proj_objps_list = []
     proj_corners_list = []
     for dname, gc_filenames in zip(dirnames, gc_fname_lists):
-        if len(gc_filenames) != graycode.getNumberOfPatternImages() + 2:
+        if len(gc_filenames) != len(patterns):
             raise ValueError("invalid number of images in " + dname)
-
-        imgs = []
-        for fname in gc_filenames:
-            img = load_image(fname, as_grayscale=True)
-            if cam_shape != img.shape:
-                raise ValueError("image size of {} does not match other images".format(fname))
-            imgs.append(img)
-        black_img = imgs.pop()
-        white_img = imgs.pop()
-
+        imgs = load_images(gc_filenames, as_grayscale=True)[..., None]
+        forwardmap, fg = graycode.decode(imgs, (proj_shape[1], proj_shape[0]), mode="ij")
+        black_img = imgs[-1]
+        white_img = imgs[-2]
+        imgs = imgs[:-2]
         res, cam_corners = cv2.findChessboardCorners(white_img, chess_shape)
         if not res:
             raise RuntimeError("chessboard was not found in {}".format(gc_filenames[-2]))
         cam_objps_list.append(objps)
         cam_corners_list.append(cam_corners)
-
         proj_objps = []
         proj_corners = []
         cam_corners2 = []
-        # viz_proj_points = np.zeros(proj_shape, np.uint8)
         for corner, objp in zip(cam_corners, objps):
             c_x = int(round(corner[0][0]))
             c_y = int(round(corner[0][1]))
             src_points = []
             dst_points = []
+            # todo: vectorize these loops
             for dx in range(-patch_size_half, patch_size_half + 1):
                 for dy in range(-patch_size_half, patch_size_half + 1):
                     x = c_x + dx
                     y = c_y + dy
                     if int(white_img[y, x]) - int(black_img[y, x]) <= black_thr:
                         continue
-                    err, proj_pix = graycode.getProjPixel(imgs, x, y)
-                    if not err:
+                    if fg[y, x]:
+                        proj_pix = forwardmap[y, x]  # backward map ?
                         src_points.append((x, y))
                         dst_points.append(gc_step*np.array(proj_pix))
             if len(src_points) < patch_size_half**2:
@@ -201,16 +189,11 @@ def calibrate_procam(proj_height, proj_width, graycode_step, capture_dir,
             proj_objps.append(objp)
             proj_corners.append([point_pix])
             cam_corners2.append(corner)
-            # viz_proj_points[int(round(point_pix[1])),
-            #                 int(round(point_pix[0]))] = 255
         if len(proj_corners) < 3:
             raise RuntimeError("too few corners were found in {} (less than 3)".format(dname))
         proj_objps_list.append(np.float32(proj_objps))
         proj_corners_list.append(np.float32(proj_corners))
         cam_corners_list2.append(np.float32(cam_corners2))
-        # cv2.imwrite('visualize_corners_projector_' +
-        #             str(cnt) + '.png', viz_proj_points)
-        # cnt += 1
 
     # Initial solution of camera's intrinsic parameters
     ret, cam_int, cam_dist, cam_rvecs, cam_tvecs = cv2.calibrateCamera(
