@@ -5,9 +5,9 @@ from pathlib import Path
 import ffmpeg
 from .image import resize_images_naive
 import subprocess
+
 def get_ffmpeg_version():
     """
-    returns ffmpeg version
     :return: ffmpeg version
     """
     try:

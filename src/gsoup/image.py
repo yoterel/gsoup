@@ -172,10 +172,10 @@ def generate_checkerboard(h, w, blocksize):
     :param h: height of the image
     :param w: width of the image
     :param blocksize: size of the squares
-    :return: (H x W x 1) numpy array (np.bool)
+    :return: (H x W x 1) numpy array (bool)
     """
     c0, c1 = 0, 1  # color of the squares, for binary these are just 0,1
-    tile = np.array([[c0, c1],[c1, c0]], dtype=np.bool).repeat(blocksize, axis=0).repeat(blocksize, axis=1)[..., None]
+    tile = np.array([[c0, c1],[c1, c0]], dtype=bool).repeat(blocksize, axis=0).repeat(blocksize, axis=1)[..., None]
     grid = np.tile(tile, ( h//(2*blocksize)+1, w//(2*blocksize)+1, 1))
     return grid[:h,:w]
 
@@ -393,7 +393,41 @@ def resize_images_naive(images, H, W, channels_last=True, mode="mean"):
         raise ValueError("mode must be one of 'max', 'mean'")
     return small_images
 
-def pad_image_to_res(images, res_h, res_w, bg_color=None):
+def pad_to_square(images, color=None):
+    """
+    pads a batch of images to a square shape
+    note: smaller dimension is padded
+    :param image: numpy image b x h x w x c
+    :param color: color to pad with
+    :return: padded image
+    """
+    if images.ndim != 4:
+        raise ValueError("image must be a 4D array")
+    diff = images.shape[1] - images.shape[2]
+    if diff == 0:
+        return images
+    if diff > 0:
+        return pad_to_res(images, images.shape[1], images.shape[1], color)
+    else:
+        return pad_to_res(images, images.shape[2], images.shape[2], color)
+
+def crop_to_square(images):
+    """
+    crops a batch of images to a square shape
+    note: bigger dimension is cropped
+    :param img: numpy image h x w x c
+    :return: the cropped square image
+    """
+    if images.ndim != 4:
+        raise ValueError("image must be a 4D array")
+    if images.shape[1] > images.shape[2]:
+        s = int((images.shape[1] - images.shape[2]) / 2)
+        return images[s:(s + images.shape[2])]
+    else:
+        s = int((images.shape[2] - images.shape[1]) / 2)
+        return images[:, :, s:(s + images.shape[1])]
+
+def pad_to_res(images, res_h, res_w, bg_color=None):
     """
     pads a batch of numpy images to a specific resolution
     :param image: numpy image b x h x w x c

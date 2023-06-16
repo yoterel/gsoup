@@ -125,7 +125,7 @@ def load_images(source, to_float=False, channels_last=True, return_paths=False, 
     :param as_grayscale: if True, loads images as grayscale by averaging over the channels
     :return: (b x H x W x C) tensor, and optionally a list of file names
     """
-    supported_suffixes = [".png", ".jpg", ".jpeg"]
+    supported_suffixes = [".png", ".jpg", ".jpeg", ".tiff"]
     if type(source) == list or type(source) == tuple or type(source) == np.ndarray:
         images = []
         file_paths = []

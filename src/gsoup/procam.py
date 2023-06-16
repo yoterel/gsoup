@@ -260,7 +260,7 @@ class GrayCode:
         """
         encode projector's width and height into gray code patterns
         :param proj_wh: projector's (width, height) in pixels as a tuple
-        :param flipped_patterns: if True, each patterns fliipped bits is also generated for better binarization
+        :param flipped_patterns: if True, flipped patterns are also generated for better binarization
         :return: a 3D numpy array of shape (total_images, height, width) where total_images is the number of gray code patterns
         """
         width, height = proj_wh
@@ -276,7 +276,7 @@ class GrayCode:
             all_images = np.concatenate((all_images, 255-codes_width_2d), axis=0)
             all_images = np.concatenate((all_images, 255-codes_height_2d), axis=0)
         all_images = np.concatenate((all_images, img_white, img_black), axis=0)
-        return all_images
+        return all_images[..., None]
     
     def binarize(self, captures, flipped_patterns=True, bg_threshold=5, bin_threshold=5):
         """

@@ -183,8 +183,12 @@ def test_image():
     lollipop2 = gsoup.load_image(lollipop_path)
     assert np.allclose(lollipop, lollipop2)
     gsoup.save_images(lollipop[None, ...], lollipop_path.parent, file_names=["test_save.png"])
-    lollipop_pad = gsoup.pad_image_to_res(lollipop[None, ...], 512, 1024)
+    lollipop_pad = gsoup.pad_to_res(lollipop[None, ...], 512, 1024)
     assert lollipop_pad.shape == (1, 512, 1024, 3)
+    lollipop_padded_square = gsoup.pad_to_square(lollipop_pad)
+    assert lollipop_padded_square.shape == (1, 1024, 1024, 3)
+    lollipop_cropped_square = gsoup.crop_to_square(lollipop_pad)
+    assert lollipop_cropped_square.shape == (1, 512, 512, 3)
     lollipop_srgb = gsoup.linear_to_srgb(lollipop)
     lollipop_linear = gsoup.srgb_to_linear(lollipop_srgb)
     assert np.allclose(lollipop, lollipop_linear)
@@ -256,6 +260,9 @@ def test_image():
     assert img.shape == (4, 256, 128)
 
 def test_video():
+    import os
+    # FFMPEG_DIR = os.path.join("/usr/bin")
+    # os.environ['PATH'] = FFMPEG_DIR + ":" + os.environ['PATH']
     frame_number = 100
     images = np.random.randint(0, 255, (frame_number, 512, 512, 3), dtype=np.uint8)
     # im1 = gsoup.generate_voronoi_diagram(512, 512, 1000)
@@ -284,16 +291,19 @@ def test_video():
     assert timestamps[0] == 0
 
 def test_procam():
-    gc_patterns = gsoup.generate_gray_code(128, 128, 1)
-    c2p, p2c = gsoup.pix2pix_correspondence(gc_patterns.shape[2], gc_patterns.shape[1],
-                                            1, gc_patterns[..., None].repeat(3, axis=-1),
-                                            verbose=False, debug=True, output_dir=Path("resource/pix2pix"))
+    gray = gsoup.GrayCode()
+    patterns = gray.encode((128, 128))
+    forward_map, fg = gray.decode(patterns, (128, 128),
+                                  output_dir=Path("resource/pix2pix"), mode="ij", debug=True)
+    backward_map = gsoup.compute_backward_map((128, 128), forward_map, fg,
+                                              output_dir=Path("resource/pix2pix"), debug=True)
     desired = gsoup.generate_lollipop_pattern(128, 128)
-    desired = gsoup.to_float(desired)
-    warp_image = gsoup.warp_image(p2c, desired, output_path=Path("resource/warp.png"))
+    # desired = gsoup.to_float(desired)
+    warp_image = gsoup.warp_image(backward_map, desired, cam_wh=(forward_map.shape[1], forward_map.shape[0]),
+                                  output_path=Path("resource/warp.png"))
     assert warp_image.shape == (128, 128, 3)
     assert warp_image.dtype == np.uint8
-    assert np.mean(np.abs(gsoup.to_8b(desired) - warp_image)) < 50  # surely an identity corrospondence & warp can't be too bad
+    assert np.mean(np.abs(desired - warp_image)) < 10  # surely an identity corrospondence & warp can't be too bad
 
 def test_sphere_tracer():
     image_size = 512

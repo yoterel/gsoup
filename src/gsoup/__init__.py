@@ -94,7 +94,9 @@ from .image import (
     change_brightness,
     linear_to_srgb,
     srgb_to_linear,
-    pad_image_to_res,
+    pad_to_res,
+    pad_to_square,
+    crop_to_square,
     mask_regions,
     crop_center
 )
