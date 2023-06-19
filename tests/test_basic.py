@@ -177,6 +177,11 @@ def test_structures():
 def test_image():
     checkboard = gsoup.generate_checkerboard(512, 512, 8)
     gsoup.save_image(checkboard, "resource/checkboard.png")
+    checkboard_RGBA = np.tile(checkboard, (1, 1, 4))
+    checkboard_RGB = gsoup.alpha_compose(checkboard_RGBA, ~checkboard_RGBA[..., :3])
+    assert (checkboard_RGB == 1.0).all()
+    checkboard_RGB = gsoup.alpha_compose(checkboard_RGBA, bg_color=np.array([0.0, 0.0, 1.0]))
+    assert (checkboard_RGB[..., -1] == 1.0).all()
     lollipop_path = Path("resource/lollipop.png")
     lollipop = gsoup.generate_lollipop_pattern(512, 512, dst=lollipop_path)
     gsoup.save_image(lollipop, lollipop_path)

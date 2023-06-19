@@ -6,17 +6,22 @@ from .core import to_8b, to_float, to_hom, homogenize, broadcast_batch, is_np
 from .structures import get_gizmo_coords
 from .gsoup_io import save_image
 
-def alpha_compose(images, bg_color=None):
+def alpha_compose(images, backgrounds=None, bg_color=None):
     """
-    composes a single or batch of RGBA images into a single or batch of RGB images
+    composes a single or batch of RGBA images into a single or batch of RGB images.
+    if no backgrounds or bg_color is provided, the background is assumed to be black.
     :param image: b x H x W x 4 or H x W x 4
-    :param bg_color: 3 or b x 3
+    :param background: b x H x W x 3 or H x W x 3
+    :param bg_color: 3 or b x 3 float32 array
     :return: b x H x W x 3 or H x W x 3
     """
     if images.ndim != 3 and images.ndim != 4:
         raise ValueError("image must be 3 or 4 dimensional")
     if images.shape[-1] != 4:
         raise ValueError("image must have 4 channels")
+    if backgrounds is not None:
+        if images.shape[:-1] != backgrounds.shape[:-1]:
+            raise ValueError("backgrounds must have same shape as images")
     if is_np(images):
         if bg_color is None:
             bg_color = np.array([0., 0., 0.]).astype(np.float32)
@@ -27,6 +32,10 @@ def alpha_compose(images, bg_color=None):
             bg_color = torch.tensor([0., 0., 0.], dtype=images.dtype, device=images.device)
         if images.dtype != torch.float32:
             images = to_float(images)
+    if backgrounds is not None:
+        if backgrounds.dtype != np.float32:
+            backgrounds = to_float(backgrounds)
+        bg_color = backgrounds
     alpha = images[..., 3:4]
     rgb = images[..., :3]
     return alpha * rgb + (1 - alpha) * bg_color
