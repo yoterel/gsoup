@@ -266,8 +266,8 @@ def test_image():
 
 def test_video():
     import os
-    # FFMPEG_DIR = os.path.join("/usr/bin")
-    # os.environ['PATH'] = FFMPEG_DIR + ":" + os.environ['PATH']
+    FFMPEG_DIR = os.path.join("/usr/bin")
+    os.environ['PATH'] = FFMPEG_DIR + ":" + os.environ['PATH']
     frame_number = 100
     images = np.random.randint(0, 255, (frame_number, 512, 512, 3), dtype=np.uint8)
     # im1 = gsoup.generate_voronoi_diagram(512, 512, 1000)
@@ -277,6 +277,7 @@ def test_video():
     # images = np.vstack([im1s, im2s])
     dst = Path("resource/noise.avi")
     gsoup.save_video(images, dst, fps=10)
+    gsoup.save_video(images, Path("resource/noise_lossy.avi"), lossy=True, fps=10)
     reader = gsoup.VideoReader(dst, h=512, w=512)
     fps = gsoup.FPS()
     for i, frame in enumerate(reader):
@@ -290,6 +291,8 @@ def test_video():
     sliced_frames = gsoup.slice_from_video(dst, every_n_frames=2, start_frame=0, end_frame=6)
     assert (sliced_frames == video_frames[:7:2, :, :, :]).all()
     gsoup.video_to_images(dst, Path("resource/noise"))
+    gsoup.save_video(Path("resource/noise"), Path("resource/noise2.avi"), fps=10)
+    gsoup.save_video(Path("resource/noise"), Path("resource/noise_lossy2.avi"), lossy=True, fps=10)
     discrete_images = gsoup.load_images(Path("resource/noise"))
     assert discrete_images.shape == (frame_number, 512, 512, 3)
     timestamps = gsoup.get_frame_timestamps(dst)

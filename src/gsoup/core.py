@@ -518,13 +518,20 @@ def rotz(a, degrees=True):
                       [0,0,1,0],
                       [0,0,0,1]])
 
-def map_range(x, in_min, in_max, out_min, out_max):
+def map_range(x, out_min, out_max):
     """
     given an input and a range, maps it to a new range
     """
-    if not in_min <= x <= in_max:
-        raise ValueError("input must be inside range ({} - {})".format(in_min, in_max))
-    return int((x-in_min) * (out_max-out_min) / (in_max-in_min) + out_min)
+    if type(x) == np.ndarray:
+        return np.clip((x-x.min()) * (out_max-out_min) / (x.max()-x.min()) + out_min, out_min, out_max)
+    elif type(x) == torch.Tensor:
+        return torch.clamp((x-x.min()) * (out_max-out_min) / (x.max()-x.min()) + out_min, out_min, out_max)
+    else:
+        raise ValueError("unsupported type")
+
+def map_to_01(x):
+    return map_range(x, 0, 1)
+
 
 def vec2skew(v):
     """

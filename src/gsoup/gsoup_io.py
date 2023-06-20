@@ -203,7 +203,11 @@ def load_images(source, to_float=False, channels_last=True, return_paths=False, 
     else:
         return images
 
-def load_mesh(path: Path, to_torch=False, device=None, verbose=True):
+def load_mesh(path: Path,
+              return_vert_uvs=False,
+              return_vert_norms=False,
+              return_vert_color=False,
+              to_torch=False, device=None, verbose=True):
     """
     loads a mesh from a file
     :param path: path to mesh file
@@ -214,9 +218,17 @@ def load_mesh(path: Path, to_torch=False, device=None, verbose=True):
     path = Path(path)
     if path.suffix != ".obj":
         raise ValueError("Only .obj are supported")
-    return load_obj(path, to_torch=to_torch, device=device, verbose=verbose)
+    return load_obj(path,
+                    return_vert_uvs=return_vert_uvs,
+                    return_vert_norms=return_vert_norms,
+                    return_vert_color=return_vert_color,
+                    to_torch=to_torch, device=device, verbose=verbose)
 
-def load_obj(path: Path, to_torch=False, device=None, verbose=True):
+def load_obj(path: Path,
+             return_vert_uvs=False,
+             return_vert_norms=False,
+             return_vert_color=False,
+             to_torch=False, device=None, verbose=True):
     """
     :param path: path to obj file
     :param to_torch: if True, returns a torch tensor
@@ -230,12 +242,36 @@ def load_obj(path: Path, to_torch=False, device=None, verbose=True):
         raise ValueError("Path must be a file")
     if path.suffix != ".obj":
         raise ValueError("Only .obj are supported")
-    v, f = parse_obj(path, verbose=verbose)
+    v, f, vt, vn, vc, ft, fn = parse_obj(path, verbose=verbose)
     if to_torch and device is not None:
         v = torch.tensor(v, dtype=torch.float, device=device)
-        f = torch.tensor(f,dtype=torch.long, device=device)
+        f = torch.tensor(f, dtype=torch.long, device=device)
         # n = torch.tensor(n, dtype=torch.float, device=device)
-    return v, f
+        if return_vert_norms and vn is not None and fn is not None:
+            vn = torch.tensor(vn, dtype=torch.float, device=device)
+            fn = torch.tensor(fn, dtype=torch.long, device=device)
+        if return_vert_uvs and vt is not None and ft is not None:
+            vt = torch.tensor(vt, dtype=torch.float, device=device)
+            ft = torch.tensor(ft, dtype=torch.long, device=device)
+        if return_vert_color and vc is not None:
+            vc = torch.tensor(vc, dtype=torch.float, device=device)
+    # very ew. consider returning a dict / named tuple ?
+    if return_vert_norms and return_vert_uvs and return_vert_color:
+        return v, f, vt, ft, vn, fn, vc
+    elif return_vert_uvs and return_vert_norms:
+        return v, f, vt, ft, vn, fn
+    elif return_vert_uvs and return_vert_color:
+        return v, f, vt, ft, vc
+    elif return_vert_norms and return_vert_color:
+        return v, f, vn, fn, vc
+    elif return_vert_uvs:
+        return v, f, vt, ft
+    elif return_vert_norms:
+        return v, f, vn, fn
+    elif return_vert_color:
+        return v, f, vc
+    else:
+        return v, f
 
 def parse_obj(path: Path, verbose=True):
     """
@@ -243,11 +279,13 @@ def parse_obj(path: Path, verbose=True):
     currently supports vertex and triangular face elements only
     """
     path = Path(path)
-    vertexList = []
-    vertexTextureList = []
-    vertexNormalList = []
-    colorList = []
-    faceList = []
+    vertex_list = []
+    vertex_texture_list = []
+    vertex_normal_list = []
+    color_list = []
+    face_list = []
+    face_texture_list = []
+    face_normal_list = []
     finite_flag = False
     with open(path, 'r') as objFile:
         for line in objFile:
@@ -260,29 +298,50 @@ def parse_obj(path: Path, verbose=True):
                     float_vertex = np.array([np.float64(x) for x in split[1:]])
                     if not np.isfinite(float_vertex).all():
                         finite_flag=True
-                    vertexList.append(float_vertex)
+                    vertex_list.append(float_vertex)
                 elif len(split[1:]) == 6:
                     float_vertex = np.array([np.float64(x) for x in split[1:4]])
                     float_color = np.array([np.float64(x) for x in split[4:]])
-                    vertexList.append(float_vertex)
-                    colorList.append(float_color)
+                    if (float_color < 0.0).any() or (float_color > 1.0).any():
+                        raise ValueError("color values must be in [0, 1]")
+                    vertex_list.append(float_vertex)
+                    color_list.append(float_color)
                 else:
-                    raise ValueError("vertex {} has {} entries, but only 3 or 6 are supported".format(len(vertexList), len(split[1:])))
+                    raise ValueError("vertex {} has {} entries, but only 3 or 6 are supported".format(len(vertex_list), len(split[1:])))
             elif split[0] == "f":
                 if len(split[1:]) != 3:
                     raise ValueError("only triangular faces are supported")
                 else:
-                    face = [x.split("/")[0] for x in split[1:]]
-                    int_face = np.array([int(x)-1 for x in face])
+                    face = np.array([x.split("/") for x in split[1:]])
+                    if face.shape == (3, 1):  # v
+                        int_face = face.squeeze().astype(np.int) - 1
+                        face_list.append(int_face)
+                    elif face.shape == (3, 2):  # v/vt
+                        int_face = face.astype(np.int) - 1
+                        face_list.append(int_face[:, 0])
+                        face_texture_list.append(int_face[:, 1])
+                    elif face.shape == (3, 3):  # v/vt/vn or v/vn
+                        if np.all([len(x)==0 for x in face[:, 1]]):  # v//vn
+                            face = face[:, 0::2]
+                            int_face = face.astype(np.int) - 1
+                            face_list.append(int_face[:, 0])
+                            face_normal_list.append(int_face[:, 1])
+                        else:  # v/vt/vn
+                            if np.any([len(x)==0 for x in face[:, 1]]):
+                                raise ValueError("face {} is corrupt".format(len(face_list)))
+                            else:
+                                int_face = face.astype(np.int) - 1
+                                face_list.append(int_face[:, 0])
+                                face_texture_list.append(int_face[:, 1])
+                                face_normal_list.append(int_face[:, 2])
                     if np.any(int_face < 0):
                         raise ValueError("negative face indices are not supported")
-                    faceList.append(int_face)
             elif split[0] == "vn":
                 if len(split[1:]) != 3:  # xn yn zn
-                    raise ValueError("vertex normal {} has {} entries, but only 3 are supported".format(len(vertexNormalList), len(split[1:])))
+                    raise ValueError("vertex normal {} has {} entries, but only 3 are supported".format(len(vertex_normal_list), len(split[1:])))
                 else:
                     float_vertex_normal = np.array([np.float64(x) for x in split[1:]])
-                    vertexNormalList.append(float_vertex_normal)
+                    vertex_normal_list.append(float_vertex_normal)
             elif split[0] == "vt":
                 if 2 <= len(split[1:]) <= 3:  # u [v, w]
                     float_vertex_tex = np.array([np.float64(x) for x in split[1:]])
@@ -290,20 +349,38 @@ def parse_obj(path: Path, verbose=True):
                         raise ValueError("negative texture coordinates are not supported")
                     if (float_vertex_tex > 1).any():
                         raise ValueError("texture coordinates must be between 0 and 1")
-                    vertexTextureList.append(float_vertex_tex)
+                    vertex_texture_list.append(float_vertex_tex)
                 else:
-                    raise ValueError("vertex normal {} has {} entries, but only 3 are supported".format(len(vertexNormalList), len(split[1:])))
+                    raise ValueError("vertex normal {} has {} entries, but only 3 are supported".format(len(vertex_normal_list), len(split[1:])))
             elif split[0] == "l":  # ignore polyline elements
                 continue
             elif split[0] == "vp":  # ignore parameter space vertices
                 continue
-    v = np.stack(vertexList)
-    f = np.stack(faceList)
+    v = np.stack(vertex_list)
+    f = np.stack(face_list)
     if finite_flag and verbose:
         print("Warning: some vertices in file were not finite")
-    # vn = np.stack(vertexNormalList)
-    # vt = np.stack(vertexTextureList)
-    return v, f #, vn, vt
+    if len(vertex_normal_list) > 0:
+        vn = np.stack(vertex_normal_list)
+    else:
+        vn = None
+    if len(vertex_texture_list) > 0:
+        vt = np.stack(vertex_texture_list)
+    else:
+        vt = None
+    if len(color_list) > 0:
+        vc = np.stack(color_list)
+    else:
+        vc = None
+    if len(face_texture_list) > 0:
+        ft = np.stack(face_texture_list)
+    else:
+        ft = None
+    if len(face_normal_list) > 0:
+        fn = np.stack(face_normal_list)
+    else:
+        fn = None
+    return v, f, vt, vn, vc, ft, fn
 
 def save_obj(vertices, faces, path: Path):
     """"

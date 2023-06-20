@@ -19,6 +19,7 @@ from .core import (
     roty,
     rotz,
     map_range,
+    map_to_01,
     create_random_cameras_on_unit_sphere,
     random_vectors_on_sphere,
     random_affine,
