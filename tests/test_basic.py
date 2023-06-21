@@ -265,9 +265,9 @@ def test_image():
     assert img.shape == (4, 256, 128)
 
 def test_video():
-    import os
-    FFMPEG_DIR = os.path.join("/usr/bin")
-    os.environ['PATH'] = FFMPEG_DIR + ":" + os.environ['PATH']
+    # import os
+    # FFMPEG_DIR = os.path.join("/usr/bin")
+    # os.environ['PATH'] = FFMPEG_DIR + ":" + os.environ['PATH']
     frame_number = 100
     images = np.random.randint(0, 255, (frame_number, 512, 512, 3), dtype=np.uint8)
     # im1 = gsoup.generate_voronoi_diagram(512, 512, 1000)

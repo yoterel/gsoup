@@ -2,7 +2,7 @@ import numpy as np
 import torch
 from PIL import Image, ImageDraw, ImageFont
 from scipy import interpolate, spatial
-from .core import to_8b, to_float, to_hom, homogenize, broadcast_batch, is_np
+from .core import to_8b, to_float, to_hom, homogenize, broadcast_batch, is_np, to_torch
 from .structures import get_gizmo_coords
 from .gsoup_io import save_image
 
@@ -48,6 +48,9 @@ def draw_text_on_image(images, text_per_image, fill_white=True):
     :param fill_white: if True, text is white, otherwise black
     :return: new (b x H x W x 3) numpy array with text written
     """
+    is_numpy = is_np(images)
+    if not is_numpy:
+        device = images.device
     is_float = images.dtype == np.float32
     if is_float:
         images = to_8b(images)
@@ -63,6 +66,8 @@ def draw_text_on_image(images, text_per_image, fill_white=True):
     rgbs = np.array([np.asarray(rgb) for rgb in rgbs])
     if is_float:
         rgbs = to_float(rgbs)
+    if not is_numpy:
+        rgbs = to_torch(rgbs, device=device)
     return rgbs
 
 def draw_gizmo_on_image(np_images, w2c, opengl=False, scale=.05):
