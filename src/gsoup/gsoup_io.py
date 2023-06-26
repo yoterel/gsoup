@@ -314,23 +314,23 @@ def parse_obj(path: Path, verbose=True):
                 else:
                     face = np.array([x.split("/") for x in split[1:]])
                     if face.shape == (3, 1):  # v
-                        int_face = face.squeeze().astype(np.int) - 1
+                        int_face = face.squeeze().astype(np.int32) - 1
                         face_list.append(int_face)
                     elif face.shape == (3, 2):  # v/vt
-                        int_face = face.astype(np.int) - 1
+                        int_face = face.astype(np.int32) - 1
                         face_list.append(int_face[:, 0])
                         face_texture_list.append(int_face[:, 1])
                     elif face.shape == (3, 3):  # v/vt/vn or v/vn
                         if np.all([len(x)==0 for x in face[:, 1]]):  # v//vn
                             face = face[:, 0::2]
-                            int_face = face.astype(np.int) - 1
+                            int_face = face.astype(np.int32) - 1
                             face_list.append(int_face[:, 0])
                             face_normal_list.append(int_face[:, 1])
                         else:  # v/vt/vn
                             if np.any([len(x)==0 for x in face[:, 1]]):
                                 raise ValueError("face {} is corrupt".format(len(face_list)))
                             else:
-                                int_face = face.astype(np.int) - 1
+                                int_face = face.astype(np.int32) - 1
                                 face_list.append(int_face[:, 0])
                                 face_texture_list.append(int_face[:, 1])
                                 face_normal_list.append(int_face[:, 2])

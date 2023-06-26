@@ -15,9 +15,6 @@ from .core import (
     to_torch,
     to_8b,
     to_float,
-    rotx,
-    roty,
-    rotz,
     map_range,
     map_to_01,
     create_random_cameras_on_unit_sphere,
@@ -40,6 +37,17 @@ from .core import (
     batch_mat2qvec,
 )
 
+from .transforms import (
+    rotx,
+    roty,
+    rotz,
+    translate,
+    scale,
+    rotate,
+    find_rigid_transform,
+    find_affine_transformation,
+    decompose_affine,
+)
 from .geometry_basic import (
     duplicate_faces,
     remove_duplicate_faces,
