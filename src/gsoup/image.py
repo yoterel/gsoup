@@ -2,7 +2,7 @@ import numpy as np
 import torch
 from PIL import Image, ImageDraw, ImageFont
 from scipy import interpolate, spatial
-from .core import to_8b, to_float, to_hom, homogenize, broadcast_batch, is_np, to_torch
+from .core import to_8b, to_float, to_hom, homogenize, broadcast_batch, is_np, to_torch, to_np
 from .structures import get_gizmo_coords
 from .gsoup_io import save_image
 
@@ -51,6 +51,7 @@ def draw_text_on_image(images, text_per_image, fill_white=True):
     is_numpy = is_np(images)
     if not is_numpy:
         device = images.device
+        images = to_np(images)
     is_float = images.dtype == np.float32
     if is_float:
         images = to_8b(images)
