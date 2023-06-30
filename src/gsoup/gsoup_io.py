@@ -110,7 +110,7 @@ def load_image(path, to_float=False, channels_last=True, to_torch=False, device=
     if path.is_dir():
         raise FileNotFoundError("Path must be a file")
     elif path.is_file():
-        image = load_images(path, to_float=to_float, channels_last=channels_last, return_paths=False, to_torch=to_torch, device=device, resize_wh=resize_wh, as_grayscale=as_grayscale)
+        image = load_images([path], to_float=to_float, channels_last=channels_last, return_paths=False, to_torch=to_torch, device=device, resize_wh=resize_wh, as_grayscale=as_grayscale)
         return image[0]
 
 def load_images(source, to_float=False, channels_last=True, return_paths=False, to_torch=False, device=None, resize_wh=None, as_grayscale=False):
@@ -132,9 +132,11 @@ def load_images(source, to_float=False, channels_last=True, return_paths=False, 
         for p in source:
             p = Path(p)
             if not p.exists():
-                raise FileNotFoundError("Path does not exist")
+                raise FileNotFoundError("Path does not exist: {}".format(p))
             if p.suffix in supported_suffixes:
                 im = Image.open(str(p))
+                if im.mode == "P":
+                    im = im.convert("RGB")
                 if resize_wh is not None:
                     im = im.resize(resize_wh)
                 images.append(np.array(im))
@@ -155,13 +157,15 @@ def load_images(source, to_float=False, channels_last=True, return_paths=False, 
     else:
         path = Path(source)
         if not path.exists():
-            raise FileNotFoundError("Path does not exist")
+            raise FileNotFoundError("Path does not exist: {}".format(path))
         if path.is_dir():
             images = []
             file_paths = []
             for image in sorted(path.iterdir()):
                 if image.suffix in supported_suffixes:
                     im = Image.open(str(image))
+                    if im.mode == "P":
+                        im = im.convert("RGB")
                     if resize_wh is not None:
                         im = im.resize(resize_wh)
                     images.append(np.array(im))
@@ -179,25 +183,8 @@ def load_images(source, to_float=False, channels_last=True, return_paths=False, 
                 if device is None:
                     device = torch.device("cpu")
                 images = torch.tensor(images, device=device)
-        elif path.is_file():
-            im = Image.open(str(path))
-            if resize_wh is not None:
-                im = im.resize(resize_wh)
-            images = np.array(im)
-            if as_grayscale and images.ndim == 3:
-                images = images.mean(axis=-1).astype(np.float32)
-            if not channels_last and images.ndim == 3:
-                images = np.moveaxis(images, -1, 0)
-            if to_float:
-                images = images.astype(np.float32) / 255
-            else:
-                images = images.astype(np.uint8)
-            file_paths = [path]
-            if to_torch:
-                if device is None:
-                    device = torch.device("cpu")
-                images = torch.tensor(images, device=device)
-            images = images[None, ...]
+        else:
+            raise FileNotFoundError("Path must be a folder or a list/tuple/array of paths")
     if return_paths:
         return images, file_paths
     else:

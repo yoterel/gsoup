@@ -302,7 +302,7 @@ class GrayCode:
         decodes a batch of images encoded with gray code
         :param captures: a 4D numpy array of shape (n, height, width, c) of captured images
         :param flipped_patterns: if true, patterns also contain their flipped version for better binarization
-        :param bg_threshold: a threshold used for background detection using teh all-white and all-black captures
+        :param bg_threshold: a threshold used for background detection using the all-white and all-black captures
         :param bin_threshold: a threshold used for binarization
         :param mode: "xy" or "ij" decides the order of last dimension coordinates (ij -> height first, xy -> width first)
         :return: a 2D numpy array of shape (height, width, 2) specifying the coordinates of decoded result, and foreground mask (height, width)
@@ -322,7 +322,7 @@ class GrayCode:
         if len(encoded) != len(captures):
             raise ValueError("captures must have length of {}".format(len(encoded)))
         if c != 1:  # naively convert to grayscale
-            captures = captures.mean(axis=-1, keepdims=True).astype(np.uint8)
+            captures = captures.mean(axis=-1, keepdims=True).round().astype(np.uint8)
         imgs_binary, fg = self.binarize(captures, flipped_patterns, bg_threshold, bin_threshold)
         imgs_binary = imgs_binary[:, :, :, 0]
         fg = fg[:, :, 0]
