@@ -94,7 +94,8 @@ def naive_color_compensate(target_image, all_white_image, all_black_image, cam_w
 
 def calibrate_procam(proj_height, proj_width, graycode_step, capture_dir, 
                      chess_vert=10, chess_hori=7,
-                     black_thr=40, chess_block_size=10.0, verbose=True):
+                     bg_threshold=10, chess_block_size=10.0, verbose=True,
+                     output_dir=None, debug=False):
     """
     calibrates a projection-camera pair using local homographies
     based on "Simple, accurate, and robust projector-camera calibration."
@@ -112,9 +113,11 @@ def calibrate_procam(proj_height, proj_width, graycode_step, capture_dir,
             - folder2
                 - 0000.png
                 - ...
-    :param black_thr threshold for detecting black pixels in the chessboard
+    :param bg_threshold threshold for detecting foreground
     :param chess_block_size size of blocks of chessboard in real world in any unit of measurement (will only effect the translation componenet between camera and projector)
     :param verbose if true, will print out the calibration results
+    :param output_dir will save debug results to this directory
+    :param debug if true, will save debug info into output_dir
     :return camera intrinsics, camera extrinsics, projector intrinsics, projector extrinsics, cam_proj_rmat, cam_proj_tvec
     """
     proj_shape = (proj_height, proj_width)
@@ -150,7 +153,9 @@ def calibrate_procam(proj_height, proj_width, graycode_step, capture_dir,
         if len(gc_filenames) != len(patterns):
             raise ValueError("invalid number of images in " + dname)
         imgs = load_images(gc_filenames, as_grayscale=True)[..., None]
-        forwardmap, fg = graycode.decode(imgs, (proj_shape[1], proj_shape[0]), mode="ij")
+        forwardmap, fg = graycode.decode(imgs, (proj_shape[1], proj_shape[0]), mode="ij",
+                                         bg_threshold=bg_threshold,
+                                         output_dir=output_dir, debug=debug)
         black_img = imgs[-1]
         white_img = imgs[-2]
         imgs = imgs[:-2]
@@ -172,10 +177,10 @@ def calibrate_procam(proj_height, proj_width, graycode_step, capture_dir,
                 for dy in range(-patch_size_half, patch_size_half + 1):
                     x = c_x + dx
                     y = c_y + dy
-                    if int(white_img[y, x]) - int(black_img[y, x]) <= black_thr:
-                        continue
+                    # if int(white_img[y, x]) - int(black_img[y, x]) <= black_thr:
+                    #     continue
                     if fg[y, x]:
-                        proj_pix = forwardmap[y, x]  # backward map ?
+                        proj_pix = forwardmap[y, x]
                         src_points.append((x, y))
                         dst_points.append(gc_step*np.array(proj_pix))
             if len(src_points) < patch_size_half**2:
@@ -261,27 +266,26 @@ class GrayCode:
         all_images = np.concatenate((all_images, img_white, img_black), axis=0)
         return all_images[..., None]
     
-    def binarize(self, captures, flipped_patterns=True, bg_threshold=5, bin_threshold=5):
+    def binarize(self, captures, flipped_patterns=True, bg_threshold=10):
         """
         binarize a batch of images
         :param captures: a 4D numpy array of shape (n, height, width, 1) of captured images
         :param flipped_patterns: if true, patterns also contain their flipped version for better binarization
-        :param bg_threshold: a threshold used for background detection using the all-white and all-black captures
-        :param bin_threshold: a threshold used for binarization between the flipped and non-flipped patterns
+        :param bg_threshold: if the difference between the pixel in the white&black images is greater than this, pixel is foreground
         :return: a 4D numpy binary array for decoding (total_images, height, width, 1) where total_images is the number of gray code patterns
         and a binary foreground mask (height, width, 1)
         """
-        captures, bw = captures[:-2], captures[-2:]
-        foreground = np.abs(bw[0].astype(np.int32) - bw[1].astype(np.int32)) > bg_threshold
-        # img_bin = np.zeros_like(captures, dtype=np.uint8)
+        if not -255 <= bg_threshold <= 255:
+            raise ValueError('bg_threshold must be between -255 and 255')
+        patterns, bw = captures[:-2], captures[-2:]
+        foreground = bw[0].astype(np.int32) - bw[1].astype(np.int32) > bg_threshold
         if flipped_patterns:
-            captures, flipped = captures[:len(captures)//2], captures[len(captures)//2:]
-            valid = np.abs(captures.astype(np.int32) - flipped.astype(np.int32)) > bin_threshold
-            binary = captures > flipped
-            foreground = foreground & np.all(valid, axis=0)  # do not use pixels that do not meet threshold in any of the images
-        else:  # slightly naive threhsolding
-            threhold = 0.5*(bw[1] + bw[0])
-            binary = captures >= threhold
+            orig, flipped = patterns[:len(patterns)//2], patterns[len(patterns)//2:]
+            # valid = (orig.astype(np.int32) - flipped.astype(np.int32)) > bin_threshold
+            binary = orig > flipped
+            # foreground = foreground & np.all(valid, axis=0)  # only pixels that are valid in all images are foreground
+        else:  # slightly more naive thresholding
+            binary = patterns >= 0.5*(bw[1] + bw[0])
         return binary, foreground
 
     def decode1d(self, gc_imgs):
@@ -296,15 +300,14 @@ class GrayCode:
         return img_index
 
     def decode(self, captures, proj_wh,
-               flipped_patterns=True, bg_threshold=10, bin_threshold=30,
+               flipped_patterns=True, bg_threshold=10,
                mode="xy", output_dir=None, debug=False):
         """
         decodes a batch of images encoded with gray code
         :param captures: a 4D numpy array of shape (n, height, width, c) of captured images
         :param flipped_patterns: if true, patterns also contain their flipped version for better binarization
         :param bg_threshold: a threshold used for background detection using the all-white and all-black captures
-        :param bin_threshold: a threshold used for binarization
-        :param mode: "xy" or "ij" decides the order of last dimension coordinates (ij -> height first, xy -> width first)
+        :param mode: "xy" or "ij" decides the order of last dimension coordinates i nthe output (ij -> height first, xy -> width first)
         :return: a 2D numpy array of shape (height, width, 2) specifying the coordinates of decoded result, and foreground mask (height, width)
         """
         if captures.ndim != 4:
@@ -323,7 +326,7 @@ class GrayCode:
             raise ValueError("captures must have length of {}".format(len(encoded)))
         if c != 1:  # naively convert to grayscale
             captures = captures.mean(axis=-1, keepdims=True).round().astype(np.uint8)
-        imgs_binary, fg = self.binarize(captures, flipped_patterns, bg_threshold, bin_threshold)
+        imgs_binary, fg = self.binarize(captures, flipped_patterns, bg_threshold)
         imgs_binary = imgs_binary[:, :, :, 0]
         fg = fg[:, :, 0]
         x = self.decode1d(imgs_binary[:b // 2])
@@ -338,6 +341,7 @@ class GrayCode:
             np.save(Path(output_dir, "forward_map.npy"), forward_map)
             if debug:
                 save_images(imgs_binary[..., None], Path(output_dir, "imgs_binary"))
+                save_image(fg, Path(output_dir, "foreground.png"))
                 composed = forward_map * fg[..., None]
                 composed_normalized = composed / np.array([proj_wh[1], proj_wh[0]])
                 composed_normalized_8b = to_8b(composed_normalized)
