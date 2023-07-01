@@ -202,7 +202,7 @@ def calibrate_procam(proj_height, proj_width, graycode_step, capture_dir,
 
     # Initial solution of camera's intrinsic parameters
     ret, cam_int, cam_dist, cam_rvecs, cam_tvecs = cv2.calibrateCamera(
-        cam_objps_list, cam_corners_list, cam_shape, None, None, None, None)
+        cam_objps_list, cam_corners_list, cam_shape[::-1], None, None, None, None)
     if verbose:
         print('Initial camera intrinsic parameters: {}'.format(cam_int))
         print('Initial camera distortion parameters: {}'.format(cam_dist))
@@ -210,7 +210,7 @@ def calibrate_procam(proj_height, proj_width, graycode_step, capture_dir,
 
     # Initial solution of projector's parameters
     ret, proj_int, proj_dist, proj_rvecs, proj_tvecs = cv2.calibrateCamera(
-        proj_objps_list, proj_corners_list, proj_shape, None, None, None, None)
+        proj_objps_list, proj_corners_list, proj_shape[::-1], None, None, None, None)
     if verbose:
         print('Initial projector intrinsic parameters: {}'.format(proj_int))
         print('Initial projector distortion parameters: {}'.format(proj_dist))
