@@ -97,8 +97,6 @@ from .image import (
     generate_stripe_pattern,
     generate_concentric_circles,
     generate_lollipop_pattern,
-    interpolate_single_channel,
-    interpolate_multi_channel,
     image_grid,
     resize_images_naive,
     adjust_contrast_brightness,

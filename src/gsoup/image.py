@@ -315,51 +315,6 @@ def generate_gray_gradient(height, width, grayscale=False, vertical=True, flip=F
         save_image(img, dst)
     return img
 
-def interpolate_single_channel(image: np.ndarray, mask: np.ndarray, method: str = "linear", fill_value: int = 0):
-    """
-    :param image: (H x W) numpy array
-    :param mask: (H x W) boolean numpy array, True indicates missing values
-    :param method: interpolation method, one of
-        'nearest', 'linear', 'cubic'.
-    :param fill_value: which value to use for filling up data outside the
-        convex hull of known pixel values.
-        Default is 0, Has no effect for 'nearest'.
-    :return: the image with missing values interpolated
-    """
-    h, w = image.shape[:2]
-    xx, yy = np.meshgrid(np.arange(w), np.arange(h))
-
-    known_x = xx[~mask]
-    known_y = yy[~mask]
-    known_v = image[~mask]
-    missing_x = xx[mask]
-    missing_y = yy[mask]
-
-    interp_values = interpolate.griddata(
-        (known_x, known_y), known_v, (missing_x, missing_y),
-        method=method, fill_value=fill_value
-    )
-
-    interp_image = image.copy()
-    interp_image[missing_y, missing_x] = interp_values
-
-    return interp_image
-
-def interpolate_multi_channel(image: np.ndarray, mask: np.ndarray):
-    """
-    given a multi channel image and a mask, interpolate the values where mask is true (per channel interpolation)
-    :param image: (H x W x C) numpy array
-    :param mask: (H x W) numpy array
-    :return: (H x W x C) numpy array
-    """
-    if image.ndim != 3:
-        raise ValueError("image must have atleast 1 channel")
-    interpolated = np.zeros_like(image)
-    for channel in range(image.shape[-1]):
-        interpolated_channel = interpolate_single_channel(image[:, :, channel], mask)
-        interpolated[:, :, channel] = interpolated_channel
-    return interpolated
-
 def image_grid(images, rows, cols):
     """
     :param images: list of images

@@ -302,16 +302,15 @@ def test_procam():
     gray = gsoup.GrayCode()
     patterns = gray.encode((128, 128))
     forward_map, fg = gray.decode(patterns, (128, 128),
-                                  output_dir=Path("resource/pix2pix"), mode="ij", debug=True)
+                                  output_dir=Path("resource/pix2pix"), mode="xy", debug=True)
     backward_map = gsoup.compute_backward_map((128, 128), forward_map, fg,
                                               output_dir=Path("resource/pix2pix"), debug=True)
     desired = gsoup.generate_lollipop_pattern(128, 128)
-    # desired = gsoup.to_float(desired)
-    warp_image = gsoup.warp_image(backward_map, desired, cam_wh=(forward_map.shape[1], forward_map.shape[0]),
+    warp_image = gsoup.warp_image(backward_map, desired, cam_wh=(forward_map.shape[1], forward_map.shape[0]), mode="xy",
                                   output_path=Path("resource/warp.png"))
     assert warp_image.shape == (128, 128, 3)
     assert warp_image.dtype == np.uint8
-    assert np.mean(np.abs(desired - warp_image)) < 10  # surely an identity corrospondence & warp can't be too bad
+    assert np.mean(np.abs(desired - warp_image)) < 10  # identity correspondence & warp should be very similar
     calibration_dir = Path("resource/calibration")
     calibration_dir.mkdir(exist_ok=True, parents=True)
     checkerboard = gsoup.to_float(gsoup.generate_checkerboard(128, 128, 16))
@@ -323,7 +322,8 @@ def test_procam():
     gsoup.save_images(captures, Path(calibration_dir, "1"))
     cam_int, cam_dist,\
     proj_int, proj_dist,\
-    cam_proj_rmat, cam_proj_tvec = gsoup.calibrate_procam(128, 128, 1, calibration_dir, chess_vert=7, chess_hori=7)
+    proj_transform = gsoup.calibrate_procam(128, 128, 1, calibration_dir, chess_vert=7, chess_hori=7)
+    assert(np.isclose(proj_transform, np.eye(4)).all())  # calibrating with perfect alignment should yield identity
 
 def test_sphere_tracer():
     image_size = 512
