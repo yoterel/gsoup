@@ -2,21 +2,26 @@ import numpy as np
 import torch
 from PIL import Image, ImageDraw, ImageFont
 from scipy import interpolate, spatial
-from .core import to_8b, to_float, to_hom, homogenize, broadcast_batch, is_np
+from .core import to_8b, to_float, to_hom, homogenize, broadcast_batch, is_np, to_torch, to_np
 from .structures import get_gizmo_coords
 from .gsoup_io import save_image
 
-def alpha_compose(images, bg_color=None):
+def alpha_compose(images, backgrounds=None, bg_color=None):
     """
-    composes a single or batch of RGBA images into a single or batch of RGB images
+    composes a single or batch of RGBA images into a single or batch of RGB images.
+    if no backgrounds or bg_color is provided, the background is assumed to be black.
     :param image: b x H x W x 4 or H x W x 4
-    :param bg_color: 3 or b x 3
+    :param background: b x H x W x 3 or H x W x 3
+    :param bg_color: 3 or b x 3 float32 array
     :return: b x H x W x 3 or H x W x 3
     """
     if images.ndim != 3 and images.ndim != 4:
         raise ValueError("image must be 3 or 4 dimensional")
     if images.shape[-1] != 4:
         raise ValueError("image must have 4 channels")
+    if backgrounds is not None:
+        if images.shape[:-1] != backgrounds.shape[:-1]:
+            raise ValueError("backgrounds must have same shape as images")
     if is_np(images):
         if bg_color is None:
             bg_color = np.array([0., 0., 0.]).astype(np.float32)
@@ -27,6 +32,10 @@ def alpha_compose(images, bg_color=None):
             bg_color = torch.tensor([0., 0., 0.], dtype=images.dtype, device=images.device)
         if images.dtype != torch.float32:
             images = to_float(images)
+    if backgrounds is not None:
+        if backgrounds.dtype != np.float32:
+            backgrounds = to_float(backgrounds)
+        bg_color = backgrounds
     alpha = images[..., 3:4]
     rgb = images[..., :3]
     return alpha * rgb + (1 - alpha) * bg_color
@@ -39,6 +48,10 @@ def draw_text_on_image(images, text_per_image, fill_white=True):
     :param fill_white: if True, text is white, otherwise black
     :return: new (b x H x W x 3) numpy array with text written
     """
+    is_numpy = is_np(images)
+    if not is_numpy:
+        device = images.device
+        images = to_np(images)
     is_float = images.dtype == np.float32
     if is_float:
         images = to_8b(images)
@@ -54,6 +67,8 @@ def draw_text_on_image(images, text_per_image, fill_white=True):
     rgbs = np.array([np.asarray(rgb) for rgb in rgbs])
     if is_float:
         rgbs = to_float(rgbs)
+    if not is_numpy:
+        rgbs = to_torch(rgbs, device=device)
     return rgbs
 
 def draw_gizmo_on_image(np_images, w2c, opengl=False, scale=.05):
@@ -172,10 +187,10 @@ def generate_checkerboard(h, w, blocksize):
     :param h: height of the image
     :param w: width of the image
     :param blocksize: size of the squares
-    :return: (H x W x 1) numpy array (np.bool)
+    :return: (H x W x 1) numpy array (bool)
     """
     c0, c1 = 0, 1  # color of the squares, for binary these are just 0,1
-    tile = np.array([[c0, c1],[c1, c0]], dtype=np.bool).repeat(blocksize, axis=0).repeat(blocksize, axis=1)[..., None]
+    tile = np.array([[c0, c1],[c1, c0]], dtype=bool).repeat(blocksize, axis=0).repeat(blocksize, axis=1)[..., None]
     grid = np.tile(tile, ( h//(2*blocksize)+1, w//(2*blocksize)+1, 1))
     return grid[:h,:w]
 
@@ -300,51 +315,6 @@ def generate_gray_gradient(height, width, grayscale=False, vertical=True, flip=F
         save_image(img, dst)
     return img
 
-def interpolate_single_channel(image: np.ndarray, mask: np.ndarray, method: str = "linear", fill_value: int = 0):
-    """
-    :param image: (H x W) numpy array
-    :param mask: (H x W) boolean numpy array, True indicates missing values
-    :param method: interpolation method, one of
-        'nearest', 'linear', 'cubic'.
-    :param fill_value: which value to use for filling up data outside the
-        convex hull of known pixel values.
-        Default is 0, Has no effect for 'nearest'.
-    :return: the image with missing values interpolated
-    """
-    h, w = image.shape[:2]
-    xx, yy = np.meshgrid(np.arange(w), np.arange(h))
-
-    known_x = xx[~mask]
-    known_y = yy[~mask]
-    known_v = image[~mask]
-    missing_x = xx[mask]
-    missing_y = yy[mask]
-
-    interp_values = interpolate.griddata(
-        (known_x, known_y), known_v, (missing_x, missing_y),
-        method=method, fill_value=fill_value
-    )
-
-    interp_image = image.copy()
-    interp_image[missing_y, missing_x] = interp_values
-
-    return interp_image
-
-def interpolate_multi_channel(image: np.ndarray, mask: np.ndarray):
-    """
-    given a multi channel image and a mask, interpolate the values where mask is true (per channel interpolation)
-    :param image: (H x W x C) numpy array
-    :param mask: (H x W) numpy array
-    :return: (H x W x C) numpy array
-    """
-    if image.ndim != 3:
-        raise ValueError("image must have atleast 1 channel")
-    interpolated = np.zeros_like(image)
-    for channel in range(image.shape[-1]):
-        interpolated_channel = interpolate_single_channel(image[:, :, channel], mask)
-        interpolated[:, :, channel] = interpolated_channel
-    return interpolated
-
 def image_grid(images, rows, cols):
     """
     :param images: list of images
@@ -357,7 +327,10 @@ def image_grid(images, rows, cols):
     if len(images) != rows * cols:
         raise ValueError("number of images must be equal to rows * cols")
     tmp = images.reshape(rows, cols, images.shape[1], images.shape[2], -1)
-    result = tmp.transpose(0, 2, 1, 3, 4).reshape(rows * images.shape[1], cols * images.shape[2], -1)
+    if type(tmp) == torch.Tensor:
+        result = tmp.permute(0, 2, 1, 3, 4).reshape(rows * images.shape[1], cols * images.shape[2], -1)
+    elif type(tmp) == np.ndarray:
+        result = tmp.transpose(0, 2, 1, 3, 4).reshape(rows * images.shape[1], cols * images.shape[2], -1)
     return result
 
 def resize_images_naive(images, H, W, channels_last=True, mode="mean"):
@@ -390,7 +363,41 @@ def resize_images_naive(images, H, W, channels_last=True, mode="mean"):
         raise ValueError("mode must be one of 'max', 'mean'")
     return small_images
 
-def pad_image_to_res(images, res_h, res_w, bg_color=None):
+def pad_to_square(images, color=None):
+    """
+    pads a batch of images to a square shape
+    note: smaller dimension is padded
+    :param image: numpy image b x h x w x c
+    :param color: color to pad with
+    :return: padded image
+    """
+    if images.ndim != 4:
+        raise ValueError("image must be a 4D array")
+    diff = images.shape[1] - images.shape[2]
+    if diff == 0:
+        return images
+    if diff > 0:
+        return pad_to_res(images, images.shape[1], images.shape[1], color)
+    else:
+        return pad_to_res(images, images.shape[2], images.shape[2], color)
+
+def crop_to_square(images):
+    """
+    crops a batch of images to a square shape
+    note: bigger dimension is cropped
+    :param img: numpy image h x w x c
+    :return: the cropped square image
+    """
+    if images.ndim != 4:
+        raise ValueError("image must be a 4D array")
+    if images.shape[1] > images.shape[2]:
+        s = int((images.shape[1] - images.shape[2]) / 2)
+        return images[s:(s + images.shape[2])]
+    else:
+        s = int((images.shape[2] - images.shape[1]) / 2)
+        return images[:, :, s:(s + images.shape[1])]
+
+def pad_to_res(images, res_h, res_w, bg_color=None):
     """
     pads a batch of numpy images to a specific resolution
     :param image: numpy image b x h x w x c

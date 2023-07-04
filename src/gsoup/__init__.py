@@ -1,4 +1,4 @@
-__version__ = "0.0.8"
+__version__ = "0.0.10"
 
 from .core import (
     is_np,
@@ -15,12 +15,12 @@ from .core import (
     to_torch,
     to_8b,
     to_float,
-    rotx,
-    roty,
-    rotz,
     map_range,
+    map_to_01,
     create_random_cameras_on_unit_sphere,
     random_vectors_on_sphere,
+    random_affine,
+    random_perspective,
     opengl_c2w_to_opencv_c2w,
     opencv_c2w_to_opengl_c2w,
     opencv_intrinsics_from_opengl_project,
@@ -37,6 +37,17 @@ from .core import (
     batch_mat2qvec,
 )
 
+from .transforms import (
+    rotx,
+    roty,
+    rotz,
+    translate,
+    scale,
+    rotate,
+    find_rigid_transform,
+    find_affine_transformation,
+    decompose_affine,
+)
 from .geometry_basic import (
     duplicate_faces,
     remove_duplicate_faces,
@@ -86,15 +97,15 @@ from .image import (
     generate_stripe_pattern,
     generate_concentric_circles,
     generate_lollipop_pattern,
-    interpolate_single_channel,
-    interpolate_multi_channel,
     image_grid,
     resize_images_naive,
     adjust_contrast_brightness,
     change_brightness,
     linear_to_srgb,
     srgb_to_linear,
-    pad_image_to_res,
+    pad_to_res,
+    pad_to_square,
+    crop_to_square,
     mask_regions,
     crop_center
 )

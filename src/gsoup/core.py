@@ -433,98 +433,20 @@ def to_PIL(x: np.array):
     else:
         raise ValueError("unsupported array dimensions")
 
-def translate(t):
-    """
-    creates a translation matrix from a translation vector
-    :param t: translation vector or batch of translation vectors
-    :return: 4x4 translation matrix
-    """
-    if t.shape[-1] != 3:
-        raise ValueError("translation vector must be 3d")
-    if t.ndim == 1:
-        t = t[None, :]
-    mat = np.concatenate((np.eye(3)[None, :, :], t[:, :, None]), axis=-1)
-    return to_44(mat)
-
-def scale(s):
-    """
-    creates a scaling matrix from a scaling vector
-    :param s: scaling vector or batch of scaling vectors
-    :return: nx4x4 scaling matrix
-    """
-    if s.shape[-1] != 3:
-        raise ValueError("translation vector must be 3d")
-    if s.ndim == 1:
-        s = s[None, :]
-    mat = np.diag(s)
-    return to_44(mat)
-
-def sincos(a, degrees=True):
-    """
-    sin and cos of an angle
-    :param a: angle
-    :param degrees: if True, a is in degrees
-    """
-    if degrees:
-        a = np.deg2rad(a)
-    return np.sin(a), np.cos(a)
-
-def rotate(a, r):
-    """
-    creates a rotation matrix from an angle a and an axis of rotation r
-    """
-    s, c = sincos(a)
-    r = normalize(r)
-    nc = 1 - c
-    x, y, z = r
-    return np.array([[x*x*nc +   c, x*y*nc - z*s, x*z*nc + y*s, 0],
-                      [y*x*nc + z*s, y*y*nc +   c, y*z*nc - x*s, 0],
-                      [x*z*nc - y*s, y*z*nc + x*s, z*z*nc +   c, 0],
-                      [           0,            0,            0, 1]])
-
-def rotx(a, degrees=True):
-    """
-    creates a homogeneous 3D rotation matrix around the x axis
-    a: angle
-    degrees: if True, a is in degrees, else radians
-    """
-    s, c = sincos(a, degrees)
-    return np.array([[1,0,0,0],
-                      [0,c,-s,0],
-                      [0,s,c,0],
-                      [0,0,0,1]])
-
-def roty(a, degrees=True):
-    """
-    creates a homogeneous 3D rotation matrix around the y axis
-    a: angle
-    degrees: if True, a is in degrees, else radians
-    """
-    s, c = sincos(a, degrees)
-    return np.array([[c,0,s,0],
-                      [0,1,0,0],
-                      [-s,0,c,0],
-                      [0,0,0,1]])
-
-def rotz(a, degrees=True):
-    """
-    creates a homogeneous 3D rotation matrix around the z axis
-    a: angle
-    degrees: if True, a is in degrees, else radians
-    """
-    s, c = sincos(a, degrees)
-    return np.array([[c,-s,0,0],
-                      [s,c,0,0],
-                      [0,0,1,0],
-                      [0,0,0,1]])
-
-def map_range(x, in_min, in_max, out_min, out_max):
+def map_range(x, out_min, out_max):
     """
     given an input and a range, maps it to a new range
     """
-    if not in_min <= x <= in_max:
-        raise ValueError("input must be inside range ({} - {})".format(in_min, in_max))
-    return int((x-in_min) * (out_max-out_min) / (in_max-in_min) + out_min)
+    if type(x) == np.ndarray:
+        return np.clip((x-x.min()) * (out_max-out_min) / (x.max()-x.min()) + out_min, out_min, out_max)
+    elif type(x) == torch.Tensor:
+        return torch.clamp((x-x.min()) * (out_max-out_min) / (x.max()-x.min()) + out_min, out_min, out_max)
+    else:
+        raise ValueError("unsupported type")
+
+def map_to_01(x):
+    return map_range(x, 0, 1)
+
 
 def vec2skew(v):
     """
@@ -593,6 +515,38 @@ def random_qvec(n: int):
     denom = np.copysign(np.sqrt(s), o[:, 0])[:, None]
     o = o / denom
     return o
+
+def random_affine(ang_range=20.0, trans_range=10.0, scale=2.0):
+    """
+    generates a random 2D affine transformation matrix
+    """
+    R = np.eye(3)
+    ang_rot = np.random.uniform(ang_range)-ang_range/2
+    tx = trans_range*np.random.uniform()-trans_range/2
+    ty = trans_range*np.random.uniform()-trans_range/2
+    sx = np.random.rand() * scale
+    sy = np.random.rand() * scale
+    R[0, 0] = np.cos(ang_rot * np.pi / 180)
+    R[0, 1] = -np.sin(ang_rot * np.pi / 180)
+    R[1, 0] = np.sin(ang_rot * np.pi / 180)
+    R[1, 1] = np.cos(ang_rot * np.pi / 180)
+    T = np.eye(3)
+    T[0, 2] = tx
+    T[1, 2] = ty
+    S = np.eye(3)
+    S[0, 0] = sx
+    S[1, 1] = sy
+    H = T @ S @ R
+    return H
+
+def random_perspective():
+    """
+    generates a random 2D perspective transformation matrix
+    """
+    P = random_affine()
+    P[2, 0] = np.random.rand() / 100
+    P[2, 1] = np.random.rand() / 100
+    return P
 
 def random_vectors_on_sphere(n, normal=None, device="cpu"):
     """

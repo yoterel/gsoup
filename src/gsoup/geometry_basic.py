@@ -336,7 +336,7 @@ def remove_unreferenced_vertices(v, f):
     :param f: Fx3 np array of faces
     :return: the new vertices and faces, and a map from new to old indices (-1 if unreferenced)
     """
-    referenced = np.zeros((v.shape[0]), dtype=np.bool)
+    referenced = np.zeros((v.shape[0]), dtype=bool)
     referenced[f.flatten()] = True
     idx = -1 * np.ones((v.shape[0]), dtype=np.int64)
     idx[referenced] = np.arange(np.sum(referenced), dtype=np.int64)

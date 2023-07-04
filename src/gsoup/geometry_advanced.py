@@ -150,26 +150,3 @@ def distribute_vector_field(num_vertices, f, per_face_vector_field):
     incident_face_vectors = torch.index_add(incident_face_vectors, dim=0, index=f_unrolled,
                                             source=normals_repeated_per_face)
     return incident_face_vectors
-
-def rigid_transform_3d(A, B):
-    """
-    finds best rigid transformation between pc a and pc b (in terms of rmse) based on "Least-Squares Rigid Motion Using SVD"
-    :param A: point cloud a
-    :param B: point cloud b
-    :return: R, t such that B = R @ A + t
-    """
-    centroid_A = np.mean(A, axis=0)
-    centroid_B = np.mean(B, axis=0)
-
-    A_mean = A - centroid_A
-    B_mean = B - centroid_B
-
-    H = A_mean.T @ B_mean
-    U, S, Vt = np.linalg.svd(H)
-
-    flip = np.linalg.det(Vt.T @ U.T)
-    ones = np.identity(len(Vt))
-    ones[-1, -1] = flip
-    R = Vt.T @ ones @ U.T
-    t = centroid_B - R @ centroid_A
-    return R, t

@@ -1,13 +1,14 @@
 import time
 import collections
 import numpy as np
+import pathlib
 from pathlib import Path
 import ffmpeg
 from .image import resize_images_naive
 import subprocess
+
 def get_ffmpeg_version():
     """
-    returns ffmpeg version
     :return: ffmpeg version
     """
     try:
@@ -91,34 +92,71 @@ def load_video(video_path, verbose=False):
 def save_video(frames, output_path, fps, lossy=False, verbose=False):
     """
     saves a video from a t x h x w x 3 numpy tensor
-    :param frames: (t x h x w x 3) tensor
+    :param frames: (t x h x w x 3) numpy array or directory path containing images of same format and resolution
     :param output_path: path to save video to
     :param fps: frames per second of output video
     :param lossy: if True, use lossy compression (default: False, but then only .avi is supported)
     """
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    if lossy:
-        (
-        ffmpeg
-        .input('pipe:', format='rawvideo', pix_fmt='rgb24', s='{}x{}'.format(frames.shape[2], frames.shape[1]), r=fps)
-        .output(str(output_path), pix_fmt='yuv420p')
-        .overwrite_output()
-        .run(input=frames.tobytes(), quiet=not verbose)
-        )
-    else:
-        if output_path.suffix == ".avi":
-            pix_fmt = "bgr24"
-        else:
-            # todo: figure out lossless pixel formats for other containers
-            raise ValueError("Lossless video only supported for .avi container")
-        (
+    if type(frames) == np.ndarray:
+        if lossy:
+            (
             ffmpeg
             .input('pipe:', format='rawvideo', pix_fmt='rgb24', s='{}x{}'.format(frames.shape[2], frames.shape[1]), r=fps)
-            .output(str(output_path), vcodec='rawvideo', pix_fmt=pix_fmt)
+            .output(str(output_path), pix_fmt='yuv420p')
             .overwrite_output()
             .run(input=frames.tobytes(), quiet=not verbose)
-        )
+            )
+        else:
+            if output_path.suffix == ".avi":
+                pix_fmt = "bgr24"
+            else:
+                # todo: figure out lossless pixel formats for other containers
+                raise ValueError("Lossless video only supported for .avi container")
+            (
+                ffmpeg
+                .input('pipe:', format='rawvideo', pix_fmt='rgb24', s='{}x{}'.format(frames.shape[2], frames.shape[1]), r=fps)
+                .output(str(output_path), vcodec='rawvideo', pix_fmt=pix_fmt)
+                .overwrite_output()
+                .run(input=frames.tobytes(), quiet=not verbose)
+            )
+    elif isinstance(frames, pathlib.PurePath):
+        if not frames.exists():
+            raise FileNotFoundError("Image directory not found: {}".format(frames))
+        if not frames.is_dir():
+            raise ValueError("frames must be numpy array or path to directory of images")
+        files = sorted(list(frames.glob("*")))
+        if len(files) == 0:
+            raise FileNotFoundError("No images found in directory: {}".format(frames))
+        extensions = []
+        for file in files:
+            extensions.append(file.suffix)
+        if len(set(extensions)) > 1:
+            raise ValueError("All images in directory must have same extension")
+        glob_pattern = str(frames) + "/*" + extensions[0]
+        if lossy:
+            (
+                ffmpeg
+                .input(glob_pattern, pattern_type='glob', framerate=fps)
+                .output(str(output_path))
+                .run(quiet=not verbose)
+            )
+        else:
+            if output_path.suffix == ".avi":
+                pix_fmt = "bgr24"
+            else:
+                # todo: figure out lossless pixel formats for other containers
+                raise ValueError("Lossless video only supported for .avi container")
+            (
+                ffmpeg
+                .input(glob_pattern, pattern_type='glob', pix_fmt='rgb24', r=fps)
+                .output(str(output_path), vcodec='rawvideo', pix_fmt=pix_fmt)
+                .overwrite_output()
+                .run(quiet=not verbose)
+            )
+    else:
+        raise ValueError("frames must be numpy array or path to directory of images")
 
 def reverse_video(video_path, output_path=None, verbose=False):
     """
