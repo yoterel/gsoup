@@ -37,7 +37,7 @@ def save_animation(images, dst):
     dst = Path(dst.parent, dst.stem)
     images[0].save(str(dst)+".gif", save_all=True, append_images=images[1:], optimize=False, duration=100, loop=0)
 
-def save_image(image, dst, force_grayscale: bool = False):
+def save_image(image, dst, force_grayscale: bool = False, overwrite: bool = True, extension: str = "png"):
     """
     saves single image as png
     :param image: (H x W x C) tensor or (H x W) tensor
@@ -50,9 +50,9 @@ def save_image(image, dst, force_grayscale: bool = False):
     if image.ndim != 3:
         raise ValueError("Image must be 2 or 3 dimensional")
     dst = Path(dst)
-    save_images(image[None, ...], dst.parent, [dst.name], force_grayscale)
+    save_images(image[None, ...], dst.parent, [dst.name], force_grayscale, overwrite, extension)
 
-def save_images(images, dst, file_names: list = [], force_grayscale: bool = False, overwrite: bool = True):
+def save_images(images, dst, file_names: list = [], force_grayscale: bool = False, overwrite: bool = True, extension: str = "png"):
     """
     saves images as png
     :param images: (b x H x W x C) tensor
@@ -84,9 +84,9 @@ def save_images(images, dst, file_names: list = [], force_grayscale: bool = Fals
         else:
             pil_image = Image.fromarray(image)
         if file_names:
-            cur_dst = Path(dst, "{}.png".format(file_names[i]))
+            cur_dst = Path(dst, "{}.{}".format(file_names[i], extension))
         else:
-            cur_dst = Path(dst, "{:05d}.png".format(i))
+            cur_dst = Path(dst, "{:05d}.{}".format(i, extension))
         if not overwrite:
             if cur_dst.exists():
                 continue

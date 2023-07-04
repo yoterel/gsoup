@@ -17,20 +17,20 @@ def is_np(x):
 
 def to_hom(x):
     """
-    converts a vector to homogeneous coordinates
-    :param x: nxc numpy array
-    :return: nxc+1 numpy array
+    converts a vector to homogeneous coordinates (concatenates 1 along last dimension)
+    :param x: (..., c) numpy array or torch tensor
+    :return: (..., c+1) numpy array or torch tensor
     """
     if is_np(x):
         if x.ndim == 1:
             return np.concatenate((x, np.array([1], dtype=x.dtype)))
         else:
-            return np.concatenate((x, np.ones((x.shape[0], 1), dtype=x.dtype)), axis=-1)
+            return np.concatenate((x, np.ones((*x.shape[:-1], 1), dtype=x.dtype)), axis=-1)
     else:
         if x.ndim == 1:
             return torch.cat((x, torch.ones(1, device=x.device)))
         else:
-            return torch.cat((x, torch.ones(x.shape[0], 1, device=x.device)), dim=-1)
+            return torch.cat((x, torch.ones(*x.shape[:-1], 1, device=x.device)), dim=-1)
 
 def homogenize(x, keepdim=False):
     """
