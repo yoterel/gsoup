@@ -100,18 +100,29 @@ def naive_color_compensate(target_image, all_white_image, all_black_image, cam_w
         save_image(compensated, output_path)
     return compensated
 
-def calibrate_procam(proj_height, proj_width, graycode_step, capture_dir, 
+def calibrate_procam(proj_wh, capture_dir, 
                      chess_vert=10, chess_hori=7,
-                     bg_threshold=10, chess_block_size=10.0, verbose=True,
+                     bg_threshold=10, chess_block_size=10.0, projector_from_above=True, verbose=True,
                      output_dir=None, debug=False):
     """
     calibrates a projection-camera pair using local homographies
     based on "Simple, accurate, and robust projector-camera calibration."
-    :param proj_height projector pixel height
-    :param proj_width projector pixel width
+    note1: the calibration poses some reasonable constraints on the projector-camera pair:
+    1) projector is assumed to have no distortion, and a square pixel aspect ratio.
+    2) camera is assumed to have a square pixel aspect ratio, and principle axis is assumed to be the center of the image.
+    3) both elements are assumed to have no tangential distortion.
+    note2: recommendations for calibration:
+    1) use a chessboard with as many blocks as possible, but make sure the chessboard is fully visible in the camera image and in focus.
+    2) capture sessions should span the whole image plane, and should be as diverse as possible in terms of poses (tilt the checkerboard !)
+    3) when tilting the checkerboard, do not tilt it too much or the projector pixels will get smeared and the gray code decoding will produce large errors.
+    4) place the checkeboard only in the working zone of the projector, i.e. the area where the projector is in focus.
+    5) make sure the full dynamic range of the camera is used, i.e. the blackest black and whitest white should be visible in the captured images.
+    6) attach the checkerboard to a flat surface, make sure the final pattern is as flat as possible. any bending will cause large errors.
+    7) capture as many sessions as possible, if a session is not good (use debug=True to check), discard it.
+    8) the RMS is only a rough estimate of the calibration quality, but if it is below 1, the calibration should be good enough (units are pixels).
+    :param proj_wh projector resolution (width, height) as a tuple
     :param chess_vert number of cross points of chessboard in vertical direction (not including the border, i.e. internal corners)
     :param chess_hori number of cross points of chessboard in horizontal direction (not including the border, i.e. internal corners)
-    :param graycode_step factor used to downsample the graycode images (see generate_gray_code)
     :param capture_dir directory containing the captured images when gray code patterns were projected, assumes structure as follows:
         capture_dir
             - folder1
@@ -123,6 +134,7 @@ def calibrate_procam(proj_height, proj_width, graycode_step, capture_dir,
                 - ...
     :param bg_threshold threshold for detecting foreground
     :param chess_block_size size of blocks of chessboard in real world in any unit of measurement (will only effect the translation componenet between camera and projector)
+    :param projector_from_above if true, will assume the projector is shining from above (only effects initial guess of calibration)
     :param verbose if true, will print out the calibration results
     :param output_dir will save debug results to this directory
     :param debug if true, will save debug info into output_dir
@@ -132,9 +144,7 @@ def calibrate_procam(proj_height, proj_width, graycode_step, capture_dir,
             projector distortion parameters (5x1),
             proj_transform in camera coordinate system (4x4)
     """
-    proj_shape = (proj_height, proj_width)
     chess_shape = (chess_vert, chess_hori)
-    gc_step = graycode_step
     capture_dir = Path(capture_dir)
     if not capture_dir.exists():
         raise FileNotFoundError("capture_dir was not found")
@@ -153,9 +163,9 @@ def calibrate_procam(proj_height, proj_width, graycode_step, capture_dir,
     objps = np.zeros((chess_shape[0]*chess_shape[1], 3), np.float32)
     objps[:, :2] = chess_block_size * np.mgrid[0:chess_shape[0], 0:chess_shape[1]].T.reshape(-1, 2)
     graycode = GrayCode()
-    patterns = graycode.encode((proj_shape[1], proj_shape[0]))
-    cam_shape = load_image(gc_fname_lists[0][0], as_grayscale=True).shape
-    patch_size_half = int(np.ceil(cam_shape[1] / 180))
+    patterns = graycode.encode(proj_wh)
+    cam_shape = load_image(gc_fname_lists[0][0], as_grayscale=True).shape[::-1]  # width, height
+    patch_size_half = int(np.ceil(cam_shape[0] / 180))  # some magic number for patch size
     cam_corners_list = []
     cam_objps_list = []
     cam_corners_list2 = []
@@ -165,7 +175,7 @@ def calibrate_procam(proj_height, proj_width, graycode_step, capture_dir,
         if len(gc_filenames) != len(patterns):
             raise ValueError("invalid number of images in " + dname)
         imgs = load_images(gc_filenames, as_grayscale=True)[..., None]
-        forwardmap, fg = graycode.decode(imgs, (proj_shape[1], proj_shape[0]), mode="xy",
+        forwardmap, fg = graycode.decode(imgs, proj_wh, mode="xy",
                                          bg_threshold=bg_threshold,
                                          output_dir=output_dir, debug=debug)
         black_img = imgs[-1]
@@ -192,7 +202,7 @@ def calibrate_procam(proj_height, proj_width, graycode_step, capture_dir,
                     if fg[y, x]:
                         proj_pix = forwardmap[y, x]
                         src_points.append((x, y))
-                        dst_points.append(gc_step*np.array(proj_pix))
+                        dst_points.append(np.array(proj_pix))
             if len(src_points) < patch_size_half**2:
                 if verbose:
                     print('corner {}, {} was skiped because too few decoded pixels found (check your images and thresholds)'.format(c_x, c_y))
@@ -212,15 +222,23 @@ def calibrate_procam(proj_height, proj_width, graycode_step, capture_dir,
 
     # Initial solution of camera's intrinsic parameters
     ret, cam_int, cam_dist, cam_rvecs, cam_tvecs = cv2.calibrateCamera(
-        cam_objps_list, cam_corners_list, cam_shape[::-1], None, None, None, None)
+        cam_objps_list, cam_corners_list, cam_shape, None, None, None, None,
+        cv2.CALIB_FIX_ASPECT_RATIO + cv2.CALIB_ZERO_TANGENT_DIST + cv2.CALIB_FIX_PRINCIPAL_POINT)
     if verbose:
         print('Initial camera intrinsic parameters: {}'.format(cam_int))
         print('Initial camera distortion parameters: {}'.format(cam_dist))
         print('Initial camera RMS: {}'.format(ret))
 
     # Initial solution of projector's parameters
+    cy_correction = proj_wh[1] / 4
+    if projector_from_above:
+        cy_correction *= -1
+    projector_intrinsics_init = np.array([[np.mean(proj_wh), 0, proj_wh[0]/2], [0, np.mean(proj_wh), cy_correction + proj_wh[1]/2], [0, 0, 1]])
+    projector_ditortion_init = np.zeros((5, 1))
     ret, proj_int, proj_dist, proj_rvecs, proj_tvecs = cv2.calibrateCamera(
-        proj_objps_list, proj_corners_list, proj_shape[::-1], None, None, None, None)
+        proj_objps_list, proj_corners_list, proj_wh, projector_intrinsics_init, projector_ditortion_init, None, None,
+        cv2.CALIB_USE_INTRINSIC_GUESS + cv2.CALIB_FIX_ASPECT_RATIO + cv2.CALIB_ZERO_TANGENT_DIST + cv2.CALIB_FIX_K1 + cv2.CALIB_FIX_K2 + cv2.CALIB_FIX_K3)
+    
     if verbose:
         print('Initial projector intrinsic parameters: {}'.format(proj_int))
         print('Initial projector distortion parameters: {}'.format(proj_dist))
@@ -251,13 +269,23 @@ def calibrate_procam(proj_height, proj_width, graycode_step, capture_dir,
             projected_proj_points, _ = cv2.projectPoints(obj_corners[i], proj_rvecs[i], proj_tvecs[i], proj_int, proj_dist)
             all_projected_proj_corners.append(projected_proj_points)
         all_projected_cam_corners = np.array(all_projected_cam_corners).squeeze()
-        cam_norms = np.linalg.norm(cam_corners.reshape(-1, 2) - all_projected_cam_corners.reshape(-1, 2), axis=-1)
+        cam_norms = np.linalg.norm(cam_corners - all_projected_cam_corners, axis=-1)
+        cam_per_session_error = cam_norms.mean(axis=-1)
+        worst_to_best_cam_session_ids = np.argsort(cam_per_session_error)[::-1]
+        worst_to_best_cam_errors = cam_per_session_error[worst_to_best_cam_session_ids]
+        print("worst to best sessions ids for camera reprojection error: {}".format(worst_to_best_cam_session_ids))
+        print("and their associated errors: {}".format(worst_to_best_cam_errors))
         cam_hist = np.histogram(cam_norms)
-        print('camera reprojection error histogram: {}'.format(cam_hist))
+        print('camera reprojection error histogram: {} (should be similar to gaussian around 0)'.format(cam_hist))
         all_projected_proj_corners = np.array(all_projected_proj_corners).squeeze()
-        proj_norms = np.linalg.norm(proj_corners.reshape(-1, 2) - all_projected_proj_corners.reshape(-1, 2), axis=-1)
+        proj_norms = np.linalg.norm(proj_corners - all_projected_proj_corners, axis=-1)
+        per_session_projector_error = proj_norms.mean(axis=-1)
+        worst_to_best_proj_session_ids = np.argsort(per_session_projector_error)[::-1]
+        worst_to_best_proj_errors = per_session_projector_error[worst_to_best_proj_session_ids]
+        print("worst to best sessions ids for camera reprojection error: {}".format(worst_to_best_proj_session_ids))
+        print("and their associated errors: {}".format(worst_to_best_proj_errors))
         proj_hist = np.histogram(proj_norms)
-        print('projector reprojection error histogram: {}'.format(proj_hist))
+        print('projector reprojection error histogram: {} (should be similar to gaussian around 0)'.format(proj_hist))
     return cam_int, cam_dist, proj_int, proj_dist, proj_transform
 
 def reconstruct_pointcloud(forward_map, proj_transform, cam_int, cam_dist, proj_int, proj_dist, cam_wh, proj_wh, color_image=None):
