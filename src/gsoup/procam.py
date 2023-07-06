@@ -260,7 +260,7 @@ def calibrate_procam(proj_height, proj_width, graycode_step, capture_dir,
         print('projector reprojection error histogram: {}'.format(proj_hist))
     return cam_int, cam_dist, proj_int, proj_dist, proj_transform
 
-def reconstruct_pointcloud(forward_map, proj_transform, cam_int, cam_dist, proj_int, proj_dist, cam_shape, proj_shape, color_image=None):
+def reconstruct_pointcloud(forward_map, proj_transform, cam_int, cam_dist, proj_int, proj_dist, cam_wh, proj_wh, color_image=None):
     """
     given a dense pixel correspondence map between a camera and a projector, and calibration results, reconstructs a 3D point cloud of the scene.
     :param forward_map: a dense pixel correspondence map between a camera and a projector (see GrayCode.decode)
@@ -269,19 +269,21 @@ def reconstruct_pointcloud(forward_map, proj_transform, cam_int, cam_dist, proj_
     :param cam_dist: camera's distortion parameters
     :param proj_int: projector's intrinsic parameters
     :param proj_dist: projector's distortion parameters
-    :param cam_shape: camera's (width, height)
-    :param proj_shape: projector's (width, height)
+    :param cam_wh: camera's (width, height)
+    :param proj_wh: projector's (width, height)
     :param color_image: an optional color image of the scene
     :return: a 3D point cloud of the scene (Nx3) and color per point (Nx3) if color_image is not None
     """
     # define ray bundle from camera pixels and center of projection
-    # x, y = np.meshgrid(
-    #             np.arange(cam_shape[1]),
-    #             np.arange(cam_shape[0]),
-    #             indexing="xy",
-    #         )
-    # cam_points = np.stack((x, y), dim=-1).flatten()
-    # undistorted_cam_points =  cv2.undistortPoints(cam_points, cam_int, cam_dist)
+    x, y = np.meshgrid(
+                np.arange(cam_wh[1]),
+                np.arange(cam_wh[0]),
+                indexing="xy",
+            )
+    cam_points = np.stack((x, y)).transpose(1,2,0).reshape(-1, 2).astype(np.float32)
+    undistorted_cam_points =  cv2.undistortPoints(cam_points, cam_int, cam_dist, P=proj_transform[0]).squeeze()  # equivalent to not setting P and doing K @ points outside
+    projector_points = forward_map[undistorted_cam_points]
+
     # define ray bundle from projector using the forward map and center of projection
     # intersect the ray bundles to get 3D points (and their colors)
     pass

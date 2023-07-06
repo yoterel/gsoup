@@ -128,6 +128,7 @@ from .procam import (
     calibrate_procam,
     compute_backward_map,
     naive_color_compensate,
+    reconstruct_pointcloud,
     GrayCode
 )
 
