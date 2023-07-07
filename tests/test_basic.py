@@ -328,8 +328,9 @@ def test_procam():
     patterns = gsoup.load_images(Path("tests/tests_resource/correspondence"))
     cam_wh = (patterns[0].shape[1], patterns[0].shape[0])
     proj_wh = (800, 800)
-    forward_map, fg = gray.decode(patterns, (800, 800), output_dir="resource/debug", debug=True, mode=mode)
-    backward_map = gsoup.compute_backward_map((800, 800), forward_map, fg, mode=mode, output_dir="resource/debug", debug=True, interpolate=True)
+    forward_map, fg = gray.decode(patterns, (800, 800), output_dir="resource/forward", debug=True, mode=mode)
+    backward_map = gsoup.compute_backward_map((800, 800), forward_map, fg, mode=mode, output_dir="resource/backward_not_interp", debug=True, interpolate=False)
+    backward_map = gsoup.compute_backward_map((800, 800), forward_map, fg, mode=mode, output_dir="resource/backward_interp", debug=True, interpolate=True)
     desired = gsoup.generate_lollipop_pattern(800, 800)
     warp_image = gsoup.warp_image(backward_map, desired, cam_wh=cam_wh, mode=mode,
                                   output_path=Path("resource/debug/warp.png"))
