@@ -4,6 +4,7 @@ from .gsoup_io import save_image, save_images, load_images, load_image
 from .transforms import compose_rt
 from .core import to_8b, to_hom
 from .image import change_brightness
+from .geometry_basic import ray_ray_intersection
 from pathlib import Path
 from scipy.interpolate import LinearNDInterpolator
 
@@ -41,29 +42,39 @@ def warp_image(backward_map, desired_image, cam_wh=None, mode="xy", output_path=
         save_image(warpped, output_path)
     return warpped
 
-def compute_backward_map(proj_wh, forward_map, foreground, output_dir=None, debug=False): 
+def compute_backward_map(proj_wh, forward_map, foreground, mode="ij", interpolate=True, output_dir=None, debug=False): 
     """
     computes the inverse map of forward_map by piece-wise interpolating a triangulated version of it (see GrayCode.decode to understand forward_map)
     :param proj_wh: projector (width, height) as a tuple
     :param forward_map: forward map as a numpy array of shape (height, width, 2) of type int32
+    :param foreground: a boolean mask of shape (height, width) where True indicates a valid pixel in forward_map
+    :param interpolate: if False, output will not be interpolated (will have holes...)
+    :param mode: the last channel order of forward_map. either "xy" (width first) or "ij" (height first).
     :param output_dir: directory to save the inverse map to
-    :param debug: if True, saves a visualization of the inverse map to output_dir
-    :return: inverse map as a numpy array of shape (projector_height, projector_width, 2) of type int32
+    :param debug: if True, saves a visualization of the backward map to output_dir (R=X, G=Y, B=0) where X increases from left to right and Y increases from top to bottom
+    :return: backward map as a numpy array of shape (projector_height, projector_width, 2) of type int32, last channel encodes (height, width).
     """   
     if output_dir is not None:
         output_dir = Path(output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
-    data = np.argwhere(foreground)
+    data = np.argwhere(foreground)  # always ij
     points = forward_map[foreground]
-    interp = LinearNDInterpolator(points, data, fill_value=0.0)
-    X, Y = np.meshgrid(np.arange(proj_wh[1]), np.arange(proj_wh[0]))
-    result = interp(X, Y).transpose(1, 0, 2)  # eww
+    if interpolate:
+        interp = LinearNDInterpolator(points, data, fill_value=0.0)
+        X, Y = np.meshgrid(np.arange(proj_wh[0]), np.arange(proj_wh[1]))
+        result = interp(X, Y).transpose(1, 0, 2)  # eww
+    else:
+        sparse_map = np.zeros((proj_wh[1], proj_wh[0], 2), dtype=np.uint32)
+        if mode == "xy":
+            sparse_map[(points[:, 1]), (points[:, 0])] = data
+        elif mode == "ij":
+            sparse_map[(points[:, 0]), (points[:, 1])] = data
+        result = sparse_map
     if output_dir:
         np.save(Path(output_dir, "backward_map.npy"), result)
         if debug:
-            # the following line assumes forward_map encodes (y, x)
-            # but since this is just for debugging, we will assume the user knows what they are doing
             result_normalized = result / np.array([forward_map.shape[0], forward_map.shape[1]])
+            result_normalized[..., [0, 1]] = result_normalized[..., [1, 0]]
             result_normalized_8b = to_8b(result_normalized)
             result_normalized_8b_3c = np.concatenate((result_normalized_8b, np.zeros_like(result_normalized_8b[..., :1])), axis=-1)
             save_image(result_normalized_8b_3c, Path(output_dir, "backward_map.png"))
@@ -102,7 +113,7 @@ def naive_color_compensate(target_image, all_white_image, all_black_image, cam_w
 
 def calibrate_procam(proj_wh, capture_dir, 
                      chess_vert=10, chess_hori=7,
-                     bg_threshold=10, chess_block_size=10.0, projector_from_above=True, verbose=True,
+                     bg_threshold=10, chess_block_size=10.0, projector_orientation="from_above", verbose=True,
                      output_dir=None, debug=False):
     """
     calibrates a projection-camera pair using local homographies
@@ -134,7 +145,8 @@ def calibrate_procam(proj_wh, capture_dir,
                 - ...
     :param bg_threshold threshold for detecting foreground
     :param chess_block_size size of blocks of chessboard in real world in any unit of measurement (will only effect the translation componenet between camera and projector)
-    :param projector_from_above if true, will assume the projector is shining from above (only effects initial guess of calibration)
+    :param projector_orientation -  effects initial guess for projector principal point.
+                                    can be "from_above" or "from_below", or "none".
     :param verbose if true, will print out the calibration results
     :param output_dir will save debug results to this directory
     :param debug if true, will save debug info into output_dir
@@ -230,9 +242,14 @@ def calibrate_procam(proj_wh, capture_dir,
         print('Initial camera RMS: {}'.format(ret))
 
     # Initial solution of projector's parameters
-    cy_correction = proj_wh[1] / 4
-    if projector_from_above:
-        cy_correction *= -1
+    if projector_orientation == "none":
+        cy_correction = 0
+    elif projector_orientation == "from_below":
+        cy_correction = proj_wh[1] / 4
+    elif projector_orientation == "from_above":
+        cy_correction = - proj_wh[1] / 4
+    else:
+        raise ValueError("invalid projector_orientation")
     projector_intrinsics_init = np.array([[np.mean(proj_wh), 0, proj_wh[0]/2], [0, np.mean(proj_wh), cy_correction + proj_wh[1]/2], [0, 0, 1]])
     projector_ditortion_init = np.zeros((5, 1))
     ret, proj_int, proj_dist, proj_rvecs, proj_tvecs = cv2.calibrateCamera(
@@ -288,34 +305,32 @@ def calibrate_procam(proj_wh, capture_dir,
         print('projector reprojection error histogram: {} (should be similar to gaussian around 0)'.format(proj_hist))
     return cam_int, cam_dist, proj_int, proj_dist, proj_transform
 
-def reconstruct_pointcloud(forward_map, proj_transform, cam_int, cam_dist, proj_int, proj_dist, cam_wh, proj_wh, color_image=None):
+def reconstruct_pointcloud(forward_map, fg, cam_transform, proj_transform, cam_int, cam_dist, proj_int):
     """
     given a dense pixel correspondence map between a camera and a projector, and calibration results, reconstructs a 3D point cloud of the scene.
     :param forward_map: a dense pixel correspondence map between a camera and a projector (see GrayCode.decode)
-    :param proj_transform: a 4x4 transformation matrix of the projector, in the camera's coordinate system (changes basis from camera to projector)
+    :param fg: a foreground mask of the scene (see GrayCode.decode)
+    :param cam_transform: a 4x4 transformation matrix of the camera (cam to world)
+    :param proj_transform: a 4x4 transformation matrix of the projector (proj to world)
     :param cam_int: camera's intrinsic parameters
     :param cam_dist: camera's distortion parameters
     :param proj_int: projector's intrinsic parameters
-    :param proj_dist: projector's distortion parameters
     :param cam_wh: camera's (width, height)
     :param proj_wh: projector's (width, height)
-    :param color_image: an optional color image of the scene
-    :return: a 3D point cloud of the scene (Nx3) and color per point (Nx3) if color_image is not None
+    :return: a 3D point cloud of the scene (Nx3)
     """
-    # define ray bundle from camera pixels and center of projection
-    x, y = np.meshgrid(
-                np.arange(cam_wh[1]),
-                np.arange(cam_wh[0]),
-                indexing="xy",
-            )
-    cam_points = np.stack((x, y)).transpose(1,2,0).reshape(-1, 2).astype(np.float32)
-    undistorted_cam_points =  cv2.undistortPoints(cam_points, cam_int, cam_dist, P=proj_transform[0]).squeeze()  # equivalent to not setting P and doing K @ points outside
-    projector_points = forward_map[undistorted_cam_points]
-
-    # define ray bundle from projector using the forward map and center of projection
-    # intersect the ray bundles to get 3D points (and their colors)
-    pass
-
+    cam_pixels = np.argwhere(fg)
+    cam_origins = cam_transform[None, :3, -1]
+    cam_directions = (cam_transform[:3, :3] @ (np.linalg.inv(cam_int) @ to_hom(cam_pixels).T)).T
+    cam_directions = cam_directions / np.linalg.norm(cam_directions, axis=-1, keepdims=True)
+    # todo: account for distortion if supplied
+    # undistorted_cam_points =  cv2.undistortPoints(cam_points, cam_int, cam_dist, P=proj_transform[0]).squeeze()  # equivalent to not setting P and doing K @ points outside
+    projector_pixels = forward_map[fg]
+    projector_origins = proj_transform[None, :3, -1]
+    projector_directions = (proj_transform[:3, :3] @ (np.linalg.inv(proj_int) @ to_hom(projector_pixels).T)).T
+    projector_directions = projector_directions / np.linalg.norm(projector_directions, axis=-1, keepdims=True)
+    points, weight_factor = ray_ray_intersection(cam_origins, cam_directions, projector_origins, projector_directions)
+    return points
 
 class GrayCode:
     """
@@ -389,13 +404,15 @@ class GrayCode:
 
     def decode(self, captures, proj_wh,
                flipped_patterns=True, bg_threshold=10,
-               mode="xy", output_dir=None, debug=False):
+               mode="ij", output_dir=None, debug=False):
         """
         decodes a batch of images encoded with gray code
         :param captures: a 4D numpy array of shape (n, height, width, c) of captured images (camera resolution is inferred from this)
         :param flipped_patterns: if true, patterns also contain their flipped version for better binarization
         :param bg_threshold: a threshold used for background detection using the all-white and all-black captures
-        :param mode: "xy" or "ij" decides the order of last dimension coordinates i nthe output (ij -> height first, xy -> width first)
+        :param mode: "xy" or "ij" decides the order of last dimension coordinates in the output (ij -> height first, xy -> width first)
+        :param output_dir: if not None, saves the decoded images to this directory
+        :param debug: if True, visualizes the map in an image using the red and green channels where R=X, G=Y, B=0, X increases from left to right, Y increases from top to bottom
         :return: a 2D numpy array of shape (height, width, 2) mapping from camera pixels to projector pixels, and a foreground mask (height, width)
         """
         if captures.ndim != 4:
@@ -433,6 +450,7 @@ class GrayCode:
                 composed = forward_map * fg[..., None]
                 if mode == "ij":
                     composed_normalized = composed / np.array([proj_wh[1], proj_wh[0]])
+                    composed_normalized[..., [0, 1]] = composed_normalized[..., [1, 0]]
                 elif mode == "xy":
                     composed_normalized = composed / np.array([proj_wh[0], proj_wh[1]])
                 composed_normalized_8b = to_8b(composed_normalized)

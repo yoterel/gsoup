@@ -276,11 +276,12 @@ def opencv_intrinsics_from_opengl_project(opengl_project, width, height):
                            [0.0, 0.0, 1]])
     return opencv_mtx
 
-def opengl_c2w_to_opencv_c2w(opengl_transforms):
+def opengl_c2w_to_opencv_c2w(opengl_transforms, is_column_major=True):
     """
     given a modelview matrix (World space->Eye/Camera/View space) where z is backward and y is up,
     converts its coordinate system to opencv convention (z forward, y down)
     :param opengl_transforms: 4x4 modelview matrix or batch of 4x4 modelview matrices
+    :param is_column_major: whether the input matrix is column major (default) or row major
     :return: 4x4 modelview matrix in opencv convention
     """
     if opengl_transforms.ndim == 2:
@@ -289,15 +290,17 @@ def opengl_c2w_to_opencv_c2w(opengl_transforms):
         my_transforms = opengl_transforms
     if my_transforms.shape[1:] != (4, 4):
         raise ValueError("transform must be 4x4 or batch of 4x4")
-    my_transforms[:, :, 1] *= -1
-    my_transforms[:, :, 2] *= -1
+    if is_column_major:
+        my_transforms = my_transforms.transpose(0, 2, 1)
+    my_transforms[:, 1, :] *= -1
+    my_transforms[:, 2, :] *= -1
     return my_transforms.reshape(opengl_transforms.shape)
 
-def opencv_c2w_to_opengl_c2w(opencv_transform):
+def opencv_c2w_to_opengl_c2w(opencv_transform, to_column_major=True):
     """
     converts coordinates of "vision" (opencv) to OpenGL coordinates by flipping y and z axes
     """
-    return opengl_c2w_to_opencv_c2w(opencv_transform)
+    return opengl_c2w_to_opencv_c2w(opencv_transform, to_column_major)
 
 def create_random_cameras_on_unit_sphere(n_cams, radius, normal=None, opengl=False, device="cpu"):
     """

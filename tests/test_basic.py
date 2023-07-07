@@ -167,6 +167,7 @@ def test_structures():
     assert np.allclose(f, f1)
     v, f = gsoup.structures.icosehedron()
     gsoup.save_mesh(v, f, "resource/ico.obj")
+    gsoup.save_pointcloud(v, "resource/ico.ply")
     v1, f1 = gsoup.load_obj("resource/ico.obj")
     assert np.allclose(v, v1)
     assert np.allclose(f, f1)
@@ -301,29 +302,57 @@ def test_video():
 def test_procam():
     gray = gsoup.GrayCode()
     patterns = gray.encode((128, 128))
+    mode = "ij"
     forward_map, fg = gray.decode(patterns, (128, 128),
-                                  output_dir=Path("resource/pix2pix"), mode="xy", debug=True)
+                                  output_dir=Path("resource/pix2pix"), mode=mode, debug=True)
     backward_map = gsoup.compute_backward_map((128, 128), forward_map, fg,
                                               output_dir=Path("resource/pix2pix"), debug=True)
     desired = gsoup.generate_lollipop_pattern(128, 128)
-    warp_image = gsoup.warp_image(backward_map, desired, cam_wh=(forward_map.shape[1], forward_map.shape[0]), mode="xy",
+    warp_image = gsoup.warp_image(backward_map, desired, cam_wh=(forward_map.shape[1], forward_map.shape[0]), mode=mode,
                                   output_path=Path("resource/warp.png"))
     assert warp_image.shape == (128, 128, 3)
     assert warp_image.dtype == np.uint8
     assert np.mean(np.abs(desired - warp_image)) < 10  # identity correspondence & warp should be very similar
-    calibration_dir = Path("resource/calibration")
-    calibration_dir.mkdir(exist_ok=True, parents=True)
-    checkerboard = gsoup.to_float(gsoup.generate_checkerboard(128, 128, 16))
+    # calibration_dir = Path("resource/calibration")
+    # calibration_dir.mkdir(exist_ok=True, parents=True)
+    checkerboard = gsoup.generate_checkerboard(128, 128, 16)
     # T = gsoup.random_perspective()
     # T_opencv = T[:2, :]
     # img_transformed = cv2.warpPerspective(checkerboard, T, (128, 128))
-    captures = np.bitwise_and(patterns==255, checkerboard[None, ...]==1.0)
-    gsoup.save_images(captures, Path(calibration_dir, "0"))
-    gsoup.save_images(captures, Path(calibration_dir, "1"))
+    # captures = np.bitwise_and(patterns==255, checkerboard[None, ...]==1.0)
+    # gsoup.save_images(captures, Path(calibration_dir, "0"))
+    # gsoup.save_images(captures, Path(calibration_dir, "1"))
+    gsoup.save_image(checkerboard, Path("resource/checkerboard.png"))
+    #############
+    # patterns = gray.encode((800, 800))
+    patterns = gsoup.load_images(Path("tests/tests_resource/correspondence"))
+    cam_wh = (patterns[0].shape[1], patterns[0].shape[0])
+    proj_wh = (800, 800)
+    forward_map, fg = gray.decode(patterns, (800, 800), output_dir="resource/debug", debug=True, mode=mode)
+    backward_map = gsoup.compute_backward_map((800, 800), forward_map, fg, mode=mode, output_dir="resource/debug", debug=True, interpolate=True)
+    desired = gsoup.generate_lollipop_pattern(800, 800)
+    warp_image = gsoup.warp_image(backward_map, desired, cam_wh=cam_wh, mode=mode,
+                                  output_path=Path("resource/debug/warp.png"))
     cam_int, cam_dist,\
     proj_int, proj_dist,\
-    proj_transform = gsoup.calibrate_procam((128, 128), calibration_dir, chess_vert=7, chess_hori=7, debug=True)
-    # assert(np.isclose(proj_transform, np.eye(4)).all())  # calibrating with perfect alignment should yield identity
+    proj_transform = gsoup.calibrate_procam((800, 800), Path("tests/tests_resource/calibration"),
+                                            chess_vert=9, chess_hori=9,
+                                            chess_block_size=0.027, output_dir="resource/calibration", debug=True)
+    cam_int = np.array([[1250, 0, 400.0], [0.0, 1250, 400], [0, 0, 1]])
+    proj_int = np.array([[800, 0, 400.0], [0.0, 800, 400], [0, 0, 1]])
+    blend_to_cv = np.array([[1.0, 0, 0, 0],
+                          [0, -1, 0, 0],
+                          [0, 0, -1, 0],
+                          [0, 0, 0, 1]])
+    cam_transform = np.array([[0, 0, 1, 1], [1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 0, 1.0]])
+    cam_transform = np.matmul(cam_transform, blend_to_cv)
+    proj_transform = np.array([[-0.12403473, -0.23891242,  0.96308672,  0.80000001],
+                                [ 0.99227786, -0.02986405,  0.12038584,  0.1       ],
+                                [ 0.        ,  0.97058171,  0.24077168,  0.2       ],
+                                [ 0.        ,  0.        ,  0.        ,  1.        ]])
+    proj_transform = np.matmul(proj_transform, blend_to_cv)
+    pc = gsoup.reconstruct_pointcloud(forward_map, fg, cam_transform, proj_transform, cam_int, cam_dist, proj_int)
+    gsoup.save_pointcloud(pc, "resource/points.ply")
 
 def test_sphere_tracer():
     image_size = 512

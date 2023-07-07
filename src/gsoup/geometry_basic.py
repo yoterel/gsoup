@@ -1,6 +1,6 @@
 import torch
 import numpy as np
-from .core import is_np
+from .core import is_np, broadcast_batch
 
 def duplicate_faces(f):
     """
@@ -241,26 +241,42 @@ def qslerp(qa, qb, t):
 
 def ray_ray_intersection(oa, da, ob, db):
     """
-    returns point closest to both rays of form o+t*d,
-    and a weight factor that goes to 0 if the lines are parallel
-    :param oa:
-    :param da:
-    :param ob:
-    :param db:
-    :return:
+    returns points closest to each corresponding ray of form o+t*d in t he bundle
+    :param oa: origin of ray a (b x 3)
+    :param da: direction of ray a (b x 3)
+    :param ob: origin of ray b (b x 3)
+    :param db: direction of ray b (b x 3)
+    :return: points closest to each ray (b x 3) and a weight factor that goes to 0 if the lines are parallel
     """
-    da = da / np.linalg.norm(da)
-    db = db / np.linalg.norm(db)
+    batched_input = True
+    if oa.ndim == 1:
+        oa = oa[None, :]
+        batched_input = False
+    if da.ndim == 1:
+        da = da[None, :]
+        batched_input = False
+    if ob.ndim == 1:
+        ob = ob[None, :]
+        batched_input = False
+    if db.ndim == 1:
+        db = db[None, :]
+        batched_input = False
+    oa, ob, da, db = broadcast_batch(oa, ob, da, db)
+    da = da / np.linalg.norm(da, axis=1, keepdims=True)
+    db = db / np.linalg.norm(db, axis=1, keepdims=True)
     c = np.cross(da, db)
-    denom = np.linalg.norm(c) ** 2
+    denom = np.linalg.norm(c, axis=-1) ** 2
     t = ob - oa
-    ta = np.linalg.det([t, db, c]) / (denom + 1e-10)
-    tb = np.linalg.det([t, da, c]) / (denom + 1e-10)
-    if ta < 0:
-        ta = 0
-    if tb < 0:
-        tb = 0
-    return (oa + ta * da + ob + tb * db) * 0.5, denom
+    stackedb = np.concatenate([t[:, None, :], db[:, None, :], c[:, None, :]], axis=1)
+    stackeda = np.concatenate([t[:, None, :], da[:, None, :], c[:, None, :]], axis=1)
+    ta = np.linalg.det(stackedb) / (denom + 1e-10)
+    tb = np.linalg.det(stackeda) / (denom + 1e-10)
+    ta[ta < 0] = 0
+    tb[tb < 0] = 0
+    points = (oa + ta[:, None] * da + ob + tb[:, None] * db) * 0.5
+    if not batched_input:
+        points = points[0]
+    return points, denom
 
 def get_center_of_attention(c2w):
     """
