@@ -2,7 +2,7 @@ import numpy as np
 import cv2
 from .gsoup_io import save_image, save_images, load_images, load_image
 from .transforms import compose_rt
-from .core import to_8b, to_hom
+from .core import to_8b, to_hom, swap_columns
 from .image import change_brightness
 from .geometry_basic import ray_ray_intersection
 from pathlib import Path
@@ -154,7 +154,7 @@ def calibrate_procam(proj_wh, capture_dir,
             camera distortion parameters (5x1),
             projector intrinsics (3x3),
             projector distortion parameters (5x1),
-            proj_transform in camera coordinate system (4x4)
+            proj_transform (4x4), a projector to camera transformation matrix (to get p2w, you should invert this matrix and multiply from the left with the camera to world matrix)
     """
     chess_shape = (chess_vert, chess_hori)
     capture_dir = Path(capture_dir)
@@ -233,9 +233,10 @@ def calibrate_procam(proj_wh, capture_dir,
         cam_corners_list2.append(np.float32(cam_corners2))
 
     # Initial solution of camera's intrinsic parameters
+    camera_intrinsics_init = np.array([[np.mean(cam_shape), 0, cam_shape[0]/2], [0, np.mean(cam_shape), cam_shape[1]/2], [0, 0, 1]])
     ret, cam_int, cam_dist, cam_rvecs, cam_tvecs = cv2.calibrateCamera(
-        cam_objps_list, cam_corners_list, cam_shape, None, None, None, None,
-        cv2.CALIB_FIX_ASPECT_RATIO + cv2.CALIB_ZERO_TANGENT_DIST + cv2.CALIB_FIX_PRINCIPAL_POINT)
+        cam_objps_list, cam_corners_list, cam_shape, camera_intrinsics_init, None, None, None,
+        cv2.CALIB_USE_INTRINSIC_GUESS + cv2.CALIB_FIX_ASPECT_RATIO + cv2.CALIB_ZERO_TANGENT_DIST + cv2.CALIB_FIX_PRINCIPAL_POINT)
     if verbose:
         print('Initial camera intrinsic parameters: {}'.format(cam_int))
         print('Initial camera distortion parameters: {}'.format(cam_dist))
@@ -305,7 +306,7 @@ def calibrate_procam(proj_wh, capture_dir,
         print('projector reprojection error histogram: {} (should be similar to gaussian around 0)'.format(proj_hist))
     return cam_int, cam_dist, proj_int, proj_dist, proj_transform
 
-def reconstruct_pointcloud(forward_map, fg, cam_transform, proj_transform, cam_int, cam_dist, proj_int):
+def reconstruct_pointcloud(forward_map, fg, cam_transform, proj_transform, cam_int, cam_dist, proj_int, mode="xy", color_image=None, debug=False):
     """
     given a dense pixel correspondence map between a camera and a projector, and calibration results, reconstructs a 3D point cloud of the scene.
     :param forward_map: a dense pixel correspondence map between a camera and a projector (see GrayCode.decode)
@@ -315,22 +316,34 @@ def reconstruct_pointcloud(forward_map, fg, cam_transform, proj_transform, cam_i
     :param cam_int: camera's intrinsic parameters
     :param cam_dist: camera's distortion parameters
     :param proj_int: projector's intrinsic parameters
-    :param cam_wh: camera's (width, height)
-    :param proj_wh: projector's (width, height)
+    :param mode: "xy" or "ij" which is the ordering of the last channel of the forward map (see GrayCode.decode)
+    :param color_image: RGB image with the same spatial size as forwardmap. if supplied will return a colored point cloud (Nx6).
+    :param debug: if True, will return debug information
     :return: a 3D point cloud of the scene (Nx3)
     """
-    cam_pixels = np.argwhere(fg)
+    cam_pixels = swap_columns(np.argwhere(fg), 0, 1)
     cam_origins = cam_transform[None, :3, -1]
     cam_directions = (cam_transform[:3, :3] @ (np.linalg.inv(cam_int) @ to_hom(cam_pixels).T)).T
     cam_directions = cam_directions / np.linalg.norm(cam_directions, axis=-1, keepdims=True)
     # todo: account for distortion if supplied
     # undistorted_cam_points =  cv2.undistortPoints(cam_points, cam_int, cam_dist, P=proj_transform[0]).squeeze()  # equivalent to not setting P and doing K @ points outside
-    projector_pixels = forward_map[fg]
+    if mode == "xy":
+        projector_pixels = forward_map[fg]
+    elif mode == "ij":
+        projector_pixels = swap_columns(forward_map[fg], 0 , 1)
+    else:
+        raise ValueError("mode must be either 'xy' or 'ij'")
     projector_origins = proj_transform[None, :3, -1]
     projector_directions = (proj_transform[:3, :3] @ (np.linalg.inv(proj_int) @ to_hom(projector_pixels).T)).T
     projector_directions = projector_directions / np.linalg.norm(projector_directions, axis=-1, keepdims=True)
     points, weight_factor = ray_ray_intersection(cam_origins, cam_directions, projector_origins, projector_directions)
-    return points
+    if color_image is not None:
+        colors = color_image[fg] if mode == "xy" else color_image[swap_columns(fg, 0, 1)]
+        points = np.concatenate([points, colors], axis=-1)
+    if debug:
+        return points, weight_factor, cam_origins, cam_directions, projector_origins, projector_directions, cam_pixels, projector_pixels
+    else:
+        return points
 
 class GrayCode:
     """

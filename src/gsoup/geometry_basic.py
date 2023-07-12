@@ -2,6 +2,28 @@ import torch
 import numpy as np
 from .core import is_np, broadcast_batch
 
+def edge_function(v0, v1, p):
+    """
+    returns the "edge function" which equals half the area of the traingle formed by v0, v1 and p
+    :param v0: first vertex of the triangle (3,)
+    :param v1: second vertex of the triangle (3,)
+    :param p: point to check (3,) or batch of points to check (B, 3)
+    """
+    return np.cross(v1 - v0, p - v0)
+
+def is_inside_triangle(p, v0, v1, v2):
+    """
+    checks if a point is inside a triangle
+    :param p: point or batch of points to check (3,)
+    :param v0: first vertex of the triangle (3,)
+    :param v1: second vertex of the triangle (3,)
+    :param v2: third vertex of the triangle (3,)
+    """
+    a = np.all(edge_function(v0, v1, p) >= 0, axis=-1)
+    b = np.all(edge_function(v1, v2, p) >= 0, axis=-1)
+    c = np.all(edge_function(v2, v0, p) >= 0, axis=-1)
+    return a & b & c
+    
 def duplicate_faces(f):
     """
     duplicates *every* face in the mesh, with flipped orientation (and appends it to the end of the tensor)

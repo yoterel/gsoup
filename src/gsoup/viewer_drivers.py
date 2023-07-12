@@ -1,6 +1,6 @@
 import numpy as np
 from gsoup.viewer import gviewer
-from gsoup import structures
+from gsoup import structures, pixels_in_world_space, to_hom, ray_ray_intersection, swap_columns, reconstruct_pointcloud, load_image
 
 """
 a few example functions for using the viewer
@@ -140,4 +140,53 @@ def poses_static_view(camera_poses=None, meshes=None, pointclouds=None, group_ca
     if pointclouds is not None:
         for i, pointcloud in enumerate(pointclouds):
             gviewer.register_pointcloud("pc_{}".format(i), pointcloud, radius=1e-4)
+    gviewer.show()
+
+def calibration_static_view(camera_pose, projector_pose, camera_wh, projector_wh, camera_intrinsics=None, camera_distortion=None, projector_intrinsics=None, forward_map=None, fg=None, mode="xy"):
+    """
+    visualizes a procam pair reconstruction
+    :param camera_pose: (4, 4) np array of camera to world transform
+    :param projector_pose: (4, 4) np array of projector to world transform
+    :param camera_wh: (2,) np array of camera resolution
+    :param projector_wh: (2,) np array of projector resolution
+    :param camera_intrinsics: (3, 3) np array of camera intrinsics
+    :param camera_distortion: (5,) np array of camera distortion
+    :param projector_intrinsics: (3, 3) np array of projector intrinsics
+    :param forward_map: (h, w, 2) np array of projector to camera mapping
+    :param fg: (h, w, 3) np array of projector fg
+    :param mode: "xy" or "ij" for forward map last channel encoding
+    """
+    gviewer.init(height=1024, width=1024)
+    gviewer.ps.set_up_dir("z_up")
+    edge_rad = 0.0005
+    v_aabb, e_aabb, c_aabb = structures.get_aabb_coords()
+    aabb_network = gviewer.ps.register_curve_network("aabb", v_aabb, e_aabb, radius=edge_rad)
+    aabb_network.add_color_quantity("color", c_aabb, defined_on='edges', enabled=True)
+    v_gizmo, e_gizmo, c_gizmo = structures.get_gizmo_coords(0.1)
+    gizmo_network = gviewer.ps.register_curve_network("gizmo", v_gizmo, e_gizmo, radius=edge_rad)
+    gizmo_network.add_color_quantity("color", c_gizmo, defined_on='edges', enabled=True)
+    coa = np.zeros((1, 3))
+    gviewer.register_pointcloud("center_of_world", coa, c=np.array([1., 1., 1.])[None, :], radius=0.005, mode="sphere")
+    v_tot, e_tot, c_tot = gviewer.register_camera("camera", camera_pose[None, ...], edge_rad, True)
+    v_tot, e_tot, c_tot = gviewer.register_camera("projector", projector_pose[None, ...], edge_rad, True)
+    camera_pixels = pixels_in_world_space(camera_wh, camera_intrinsics, camera_pose)
+    projector_pixels = pixels_in_world_space(projector_wh, projector_intrinsics, projector_pose)
+    # camera_screen_pc = gviewer.register_pointcloud("camera_screen", camera_pixels, radius=0.0002)
+    # projector_screen_pc = gviewer.register_pointcloud("projector_screen", projector_pixels, radius=0.0002)
+    points, weight_factor, \
+    cam_origins, cam_directions, \
+    projector_origins, projector_directions, \
+    cam_pixels, projector_pixels = reconstruct_pointcloud(forward_map, fg,
+                                                          camera_pose, projector_pose,
+                                                          camera_intrinsics, camera_distortion, projector_intrinsics,
+                                                          mode=mode, color_image=load_image("D:/src/gsoup/tests/tests_resource/correspondence/0025.png")[..., :3], debug=True)
+    reconst = gviewer.register_pointcloud("reconstruction", points[:, :3], c=points[:, 3:], radius=0.0002)
+    t = np.linspace(0, 3, 50)
+    cam_ray_points = cam_origins[0] + t[:, None]*cam_directions[0][None, :]
+    cam_ray = gviewer.ps.register_curve_network("cam_ray", cam_ray_points, "line", radius=0.0002)
+    proj_ray_points = projector_origins[0] + t[:, None]*projector_directions[0][None, :]
+    proj_ray = gviewer.ps.register_curve_network("proj_ray", proj_ray_points, "line", radius=0.0002)
+    ray_intersection = points[0:1, :3]
+    gviewer.register_pointcloud("ray_intersection", ray_intersection, c=np.array([1., 1., 1.])[None, :], radius=0.0005, mode="sphere")
+    ###
     gviewer.show()

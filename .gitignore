@@ -134,4 +134,4 @@ dmypy.json
 #local resource folder
 resource/
 data/
-tests/tests_resource/*
+tests/tests_resource/calibration

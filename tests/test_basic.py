@@ -3,6 +3,8 @@ import numpy as np
 import torch
 import gsoup
 from pathlib import Path
+from gsoup.viewer_drivers import calibration_static_view
+
 
 def test_type_conversions():
     test_numpy_bool = np.array([1, 0, 0, 1], dtype=bool)
@@ -334,30 +336,39 @@ def test_procam():
     desired = gsoup.generate_lollipop_pattern(800, 800)
     warp_image = gsoup.warp_image(backward_map, desired, cam_wh=cam_wh, mode=mode,
                                   output_path=Path("resource/debug/warp.png"))
-    cam_int, cam_dist,\
-    proj_int, proj_dist,\
-    proj_transform = gsoup.calibrate_procam((800, 800), Path("tests/tests_resource/calibration"),
-                                            chess_vert=9, chess_hori=9,
-                                            chess_block_size=0.027, output_dir="resource/calibration", debug=True)
-    cam_int = np.array([[1250, 0, 400.0], [0.0, 1250, 400], [0, 0, 1]])
-    proj_int = np.array([[800, 0, 400.0], [0.0, 800, 400], [0, 0, 1]])
     blend_to_cv = np.array([[1.0, 0, 0, 0],
-                          [0, -1, 0, 0],
-                          [0, 0, -1, 0],
-                          [0, 0, 0, 1]])
+                            [0, -1, 0, 0],
+                            [0, 0, -1, 0],
+                            [0, 0, 0, 1]])
     cam_transform = np.array([[0, 0, 1, 1], [1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 0, 1.0]])
-    cam_transform = np.matmul(cam_transform, blend_to_cv)
-    proj_transform = np.array([[-0.12403473, -0.23891242,  0.96308672,  0.80000001],
-                                [ 0.99227786, -0.02986405,  0.12038584,  0.1       ],
-                                [ 0.        ,  0.97058171,  0.24077168,  0.2       ],
-                                [ 0.        ,  0.        ,  0.        ,  1.        ]])
-    proj_transform = np.matmul(proj_transform, blend_to_cv)
-    pc = gsoup.reconstruct_pointcloud(forward_map, fg, cam_transform, proj_transform, cam_int, cam_dist, proj_int)
+    cam_transform = cam_transform @ blend_to_cv
+    ### gt ###
+    cam_int = np.array([[800, 0, 400.0], [0.0, 800, 400], [0, 0, 1]])
+    proj_int = np.array([[800, 0, 400.0], [0.0, 800, 400], [0, 0, 1]])
+    proj_transform = np.array([[-0.12403473, -0.23891242,  0.96308672,  0.8 ],
+                                [ 0.99227786, -0.02986405,  0.12038584,  0.1],
+                                [ 0.        ,  0.97058171,  0.24077168,  0.2],
+                                [ 0.        ,  0.        ,  0.        ,  1. ]])
+    proj_transform = proj_transform @ blend_to_cv
+    cam_dist = None
+    ### end gt ###
+    ### calib ###
+    # cam_int, cam_dist,\
+    # proj_int, proj_dist,\
+    # proj_transform = gsoup.calibrate_procam((800, 800), Path("tests/tests_resource/calibration"),
+    #                                         chess_vert=9, chess_hori=9,
+    #                                         chess_block_size=0.027, output_dir="resource/calibration",
+    #                                         projector_orientation="none", debug=True)
+    # proj_transform = cam_transform @ np.linalg.inv(proj_transform)  # c2w @ p2c = p2w
+    ### end calib ###
+    # calibration_static_view(cam_transform, proj_transform, (800, 800), (800, 800), cam_int, cam_dist, proj_int, forward_map, fg, mode)
+    pc = gsoup.reconstruct_pointcloud(forward_map, fg, cam_transform, proj_transform, cam_int, cam_dist, proj_int, mode=mode)
     gsoup.save_pointcloud(pc, "resource/points.ply")
 
 def test_sphere_tracer():
     image_size = 512
-    device = "cuda:0"
+    # device = "cuda:0"
+    device = "cpu"
     w2v, v2c = gsoup.create_random_cameras_on_unit_sphere(5, 1.0, opengl=True, device=device)
     ray_origins, ray_directions = gsoup.generate_rays(w2v, v2c[0], image_size, image_size, device=device)
     sdf = gsoup.structures.sphere_sdf(0.25)
