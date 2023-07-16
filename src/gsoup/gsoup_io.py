@@ -1,7 +1,7 @@
 import torch
 import numpy as np
 from pathlib import Path
-from .core import to_8b, to_np
+from .core import to_8b, to_np, to_float
 from PIL import Image
 import json
 
@@ -64,10 +64,11 @@ def save_images(images, dst, file_names: list = [], force_grayscale: bool = Fals
         images = to_np(images)
     if np.isnan(images).any():
         raise ValueError("Images must be finite")
-    if images.dtype == np.float32 or images.dtype == np.float64 or images.dtype == bool:
-        images = to_8b(images)
-    if images.dtype != np.uint8:
-        raise ValueError("Images must be of type uint8 (or float32/64, which will be converted to uint8)")
+    if extension != "tiff":
+        if images.dtype == np.float32 or images.dtype == np.float64 or images.dtype == bool:
+            images = to_8b(images)
+        if images.dtype != np.uint8:
+            raise ValueError("Images must be of type uint8 (or float32/64, which will be converted to uint8)")
     if images.ndim != 4:
         raise ValueError("Images must be of shape (b x H x W x C)")
     if file_names:
@@ -80,7 +81,10 @@ def save_images(images, dst, file_names: list = [], force_grayscale: bool = Fals
         if force_grayscale or images.shape[-1] == 1:
             if images.shape[-1] == 3:
                 image = image.mean(axis=-1, keepdims=True).astype(np.uint8)
-            pil_image = Image.fromarray(image[..., 0], mode="L")
+            if extension == "tiff":
+                pil_image = Image.fromarray(image[..., 0])
+            else:
+                pil_image = Image.fromarray(image[..., 0], mode="L")
         else:
             pil_image = Image.fromarray(image)
         if file_names:
@@ -147,9 +151,7 @@ def load_images(source, to_float=False, channels_last=True, return_paths=False, 
         if not channels_last and images.ndim == 4:
             images = np.moveaxis(images, -1, 1)
         if to_float:
-            images = images.astype(np.float32) / 255
-        else:
-            images = images.astype(np.uint8)
+            images = to_float(images)
         if to_torch:
             if device is None:
                 device = torch.device("cpu")
