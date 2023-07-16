@@ -96,11 +96,11 @@ def save_images(images, dst, file_names: list = [], force_grayscale: bool = Fals
                 continue
         pil_image.save(str(cur_dst))
 
-def load_image(path, to_float=False, channels_last=True, to_torch=False, device=None, resize_wh=None, as_grayscale=False):
+def load_image(path, float=False, channels_last=True, to_torch=False, device=None, resize_wh=None, as_grayscale=False):
     """
     loads an image from a single file
     :param path: path to file
-    :param to_float: if True, converts image to float
+    :param float: if True, converts image to float
     :param return_paths: if True, returns a list of file paths
     :param to_torch: if True, returns a torch tensor
     :param device: device to load tensor to
@@ -114,14 +114,14 @@ def load_image(path, to_float=False, channels_last=True, to_torch=False, device=
     if path.is_dir():
         raise FileNotFoundError("Path must be a file")
     elif path.is_file():
-        image = load_images([path], to_float=to_float, channels_last=channels_last, return_paths=False, to_torch=to_torch, device=device, resize_wh=resize_wh, as_grayscale=as_grayscale)
+        image = load_images([path], float=float, channels_last=channels_last, return_paths=False, to_torch=to_torch, device=device, resize_wh=resize_wh, as_grayscale=as_grayscale)
         return image[0]
 
-def load_images(source, to_float=False, channels_last=True, return_paths=False, to_torch=False, device=None, resize_wh=None, as_grayscale=False):
+def load_images(source, float=False, channels_last=True, return_paths=False, to_torch=False, device=None, resize_wh=None, as_grayscale=False):
     """
     loads images from a list of paths, a folder or a single file
     :param source: path to folder with images / path to image file / list of paths
-    :param to_float: if True, converts images to float (and normalizes to [0, 1])
+    :param float: if True, converts images to float (and normalizes to [0, 1])
     :param return_paths: if True, returns a list of file paths
     :param to_torch: if True, returns a torch tensor
     :param device: device to load tensor to
@@ -148,9 +148,10 @@ def load_images(source, to_float=False, channels_last=True, return_paths=False, 
         images = np.stack(images, axis=0)
         if as_grayscale and images.ndim == 4:
             images = images.mean(axis=-1).astype(np.float32)
+            images = images.round().astype(np.uint8)
         if not channels_last and images.ndim == 4:
             images = np.moveaxis(images, -1, 1)
-        if to_float:
+        if float:
             images = to_float(images)
         if to_torch:
             if device is None:
@@ -175,12 +176,11 @@ def load_images(source, to_float=False, channels_last=True, return_paths=False, 
             images = np.stack(images, axis=0)
             if as_grayscale and images.ndim == 4:
                 images = images.mean(axis=-1).astype(np.float32)
+                images = images.round().astype(np.uint8)
             if not channels_last and images.ndim == 4:
                 images = np.moveaxis(images, -1, 1)
-            if to_float:
-                images = images.astype(np.float32) / 255
-            else:
-                images = images.astype(np.uint8)
+            if float:
+                images = to_float(images)
             if to_torch:
                 if device is None:
                     device = torch.device("cpu")
