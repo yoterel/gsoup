@@ -64,10 +64,11 @@ def save_images(images, dst, file_names: list = [], force_grayscale: bool = Fals
         images = to_np(images)
     if np.isnan(images).any():
         raise ValueError("Images must be finite")
-    if images.dtype == np.float32 or images.dtype == np.float64 or images.dtype == bool:
-        images = to_8b(images)
-    if images.dtype != np.uint8:
-        raise ValueError("Images must be of type uint8 (or float32/64, which will be converted to uint8)")
+    if extension != "tiff":
+        if images.dtype == np.float32 or images.dtype == np.float64 or images.dtype == bool:
+            images = to_8b(images)
+        if images.dtype != np.uint8:
+            raise ValueError("Images must be of type uint8 (or float32/64, which will be converted to uint8)")
     if images.ndim != 4:
         raise ValueError("Images must be of shape (b x H x W x C)")
     if file_names:
@@ -80,7 +81,10 @@ def save_images(images, dst, file_names: list = [], force_grayscale: bool = Fals
         if force_grayscale or images.shape[-1] == 1:
             if images.shape[-1] == 3:
                 image = image.mean(axis=-1, keepdims=True).astype(np.uint8)
-            pil_image = Image.fromarray(image[..., 0], mode="L")
+            if extension == "tiff":
+                pil_image = Image.fromarray(image[..., 0])
+            else:
+                pil_image = Image.fromarray(image[..., 0], mode="L")
         else:
             pil_image = Image.fromarray(image)
         if file_names:
@@ -92,11 +96,11 @@ def save_images(images, dst, file_names: list = [], force_grayscale: bool = Fals
                 continue
         pil_image.save(str(cur_dst))
 
-def load_image(path, to_float=False, channels_last=True, to_torch=False, device=None, resize_wh=None, as_grayscale=False):
+def load_image(path, float=False, channels_last=True, to_torch=False, device=None, resize_wh=None, as_grayscale=False):
     """
     loads an image from a single file
     :param path: path to file
-    :param to_float: if True, converts image to float
+    :param float: if True, converts image to float
     :param return_paths: if True, returns a list of file paths
     :param to_torch: if True, returns a torch tensor
     :param device: device to load tensor to
@@ -110,14 +114,14 @@ def load_image(path, to_float=False, channels_last=True, to_torch=False, device=
     if path.is_dir():
         raise FileNotFoundError("Path must be a file")
     elif path.is_file():
-        image = load_images([path], to_float=to_float, channels_last=channels_last, return_paths=False, to_torch=to_torch, device=device, resize_wh=resize_wh, as_grayscale=as_grayscale)
+        image = load_images([path], float=float, channels_last=channels_last, return_paths=False, to_torch=to_torch, device=device, resize_wh=resize_wh, as_grayscale=as_grayscale)
         return image[0]
 
-def load_images(source, to_float=False, channels_last=True, return_paths=False, to_torch=False, device=None, resize_wh=None, as_grayscale=False):
+def load_images(source, float=False, channels_last=True, return_paths=False, to_torch=False, device=None, resize_wh=None, as_grayscale=False):
     """
     loads images from a list of paths, a folder or a single file
     :param source: path to folder with images / path to image file / list of paths
-    :param to_float: if True, converts images to float (and normalizes to [0, 1])
+    :param float: if True, converts images to float (and normalizes to [0, 1])
     :param return_paths: if True, returns a list of file paths
     :param to_torch: if True, returns a torch tensor
     :param device: device to load tensor to

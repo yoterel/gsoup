@@ -228,14 +228,14 @@ def test_image():
     img = gsoup.load_image(dst, as_grayscale=True)
     assert img.shape == (512, 512)
     assert img.dtype == np.uint8
-    img = gsoup.load_image(dst, to_float=True)
+    img = gsoup.load_image(dst, float=True)
     assert img.shape == (512, 512, 3)
     assert img.dtype == np.float32
     assert (img>=0.0).all()
     assert (img<=1.0).all()
     img = gsoup.load_image(dst, channels_last=False)
     assert img.shape == (3, 512, 512)
-    img = gsoup.load_image(dst, to_float=True, as_grayscale=True)
+    img = gsoup.load_image(dst, float=True, as_grayscale=True)
     assert img.shape == (512, 512)
     assert img.dtype == np.float32
     assert (img>=0.0).all()
@@ -265,7 +265,7 @@ def test_image():
     assert img.shape == (4, 512, 512)
     img = gsoup.load_images([dst, dst, dst, dst], resize_wh=(128, 128))
     assert img.shape == (4, 128, 128, 3)
-    img, paths = gsoup.load_images([dst, dst, dst, dst], resize_wh=(128, 256), as_grayscale=True, channels_last=False, return_paths=True, to_float=True, to_torch=True)
+    img, paths = gsoup.load_images([dst, dst, dst, dst], resize_wh=(128, 256), as_grayscale=True, channels_last=False, return_paths=True, float=True, to_torch=True)
     assert len(paths) == 4
     assert img.dtype == torch.float32
     assert img.shape == (4, 256, 128)
