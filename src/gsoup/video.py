@@ -89,7 +89,7 @@ def load_video(video_path, verbose=False):
     video = np.frombuffer(out, np.uint8).reshape([-1, h, w, 3])
     return video
 
-def save_video(frames, output_path, fps, lossy=False, verbose=False):
+def save_video(frames, output_path, fps, lossy=True, verbose=False):
     """
     saves a video from a t x h x w x 3 numpy tensor
     :param frames: (t x h x w x 3) numpy array or directory path containing images of same format and resolution
@@ -134,27 +134,29 @@ def save_video(frames, output_path, fps, lossy=False, verbose=False):
             extensions.append(file.suffix)
         if len(set(extensions)) > 1:
             raise ValueError("All images in directory must have same extension")
-        glob_pattern = str(frames) + "/*" + extensions[0]
+        with open("ffmpeg_input.txt", "wb") as outfile:
+            for filename in files:
+                mystr = "file '{}'\n".format(str(filename.resolve()).replace("\\", "/"))
+                outfile.write(mystr.encode())
+        stdin_stream = None
+        stdout_stream = subprocess.PIPE if not verbose else None
+        stderr_stream = subprocess.PIPE if not verbose else None
         if lossy:
-            (
-                ffmpeg
-                .input(glob_pattern, pattern_type='glob', framerate=fps)
-                .output(str(output_path))
-                .run(quiet=not verbose)
-            )
+            # (
+            args = ["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", "ffmpeg_input.txt", "-framerate", str(fps), str(output_path)]
         else:
             if output_path.suffix == ".avi":
                 pix_fmt = "bgr24"
             else:
                 # todo: figure out lossless pixel formats for other containers
                 raise ValueError("Lossless video only supported for .avi container")
-            (
-                ffmpeg
-                .input(glob_pattern, pattern_type='glob', pix_fmt='rgb24', r=fps)
-                .output(str(output_path), vcodec='rawvideo', pix_fmt=pix_fmt)
-                .overwrite_output()
-                .run(quiet=not verbose)
-            )
+            args = ["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", "ffmpeg_input.txt", "-framerate", str(fps), "-pix_fmt", pix_fmt, "-vcodec", "rawvideo", str(output_path)]
+        proc = subprocess.Popen(args, stdin=stdin_stream, stdout=stdout_stream, stderr=stderr_stream)
+        out, err = proc.communicate(input)
+        retcode = proc.poll()
+        if retcode:
+            raise ValueError('ffmpeg', out, err)
+        Path("ffmpeg_input.txt").unlink()
     else:
         raise ValueError("frames must be numpy array or path to directory of images")
 
@@ -203,7 +205,7 @@ def video_to_images(src, dst, verbose=False):
     (
         ffmpeg
         .input(str(src))
-        .output(str(dst / '%d.png'), vcodec='png', format='image2')
+        .output(str(dst / '%04d.png'), vcodec='png', format='image2')
         .overwrite_output()
         .run(quiet=not verbose)
     )

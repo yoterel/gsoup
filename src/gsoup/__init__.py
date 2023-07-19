@@ -82,10 +82,8 @@ from .gsoup_io import (
     save_animation,
     save_mesh,
     save_meshes,
-    save_obj,
     load_image,
     load_images,
-    load_obj,
     load_mesh,
     save_pointcloud,
     save_pointclouds

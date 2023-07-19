@@ -28,6 +28,7 @@ requires-python = ">=3.7"
 [project.optional-dependencies]
 build = ["build", "twine"]
 dev = ["bumpver", "pytest"]
+vis = ["polyscope"]
 
 [project.urls]
 Homepage = "https://github.com/yoterel/gsoup"

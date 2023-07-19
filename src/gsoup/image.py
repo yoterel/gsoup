@@ -4,11 +4,11 @@ from PIL import Image, ImageDraw, ImageFont
 from scipy import interpolate, spatial
 from .core import to_8b, to_float, to_hom, homogenize, broadcast_batch, is_np, to_torch, to_np
 from .structures import get_gizmo_coords
-from .gsoup_io import save_image
 
 def alpha_compose(images, backgrounds=None, bg_color=None):
     """
     composes a single or batch of RGBA images into a single or batch of RGB images.
+    if backgrounds is provided, will blend them with the images, otherwise will blend with bg_color.
     if no backgrounds or bg_color is provided, the background is assumed to be black.
     :param image: b x H x W x 4 or H x W x 4
     :param background: b x H x W x 3 or H x W x 3
@@ -273,7 +273,7 @@ def generate_concentric_circles(height, width, background="black", n=15, dst=Non
         img.save(str(dst))
     return np.array(img)
 
-def generate_gray_gradient(height, width, grayscale=False, vertical=True, flip=False, bins=10, dst=None):
+def generate_gray_gradient(height, width, grayscale=False, vertical=True, flip=False, bins=10):
     """
     generate a gray gradient image HxWx3
     :param height: height of the image
@@ -282,7 +282,6 @@ def generate_gray_gradient(height, width, grayscale=False, vertical=True, flip=F
     :param vertical: if True, the gradient is vertical
     :param flip: if True, the gradient is flipped
     :param bins: number of bins
-    :param dst: if not None, the image is written to this path
     :return: (H x W x 3) numpy array
     """
     bins = np.clip(bins, 1, 256)
@@ -311,8 +310,6 @@ def generate_gray_gradient(height, width, grayscale=False, vertical=True, flip=F
             img = np.flip(img, axis=1)
     if not grayscale:
         img = img[:, :, None].repeat(3, axis=-1)
-    if dst is not None:
-        save_image(img, dst)
     return img
 
 def image_grid(images, rows, cols):

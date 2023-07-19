@@ -184,6 +184,8 @@ def calibrate_procam(proj_wh, capture_dir,
     proj_objps_list = []
     proj_corners_list = []
     for dname, gc_filenames in zip(dirnames, gc_fname_lists):
+        if verbose:
+            print("processing: {}".format(dname))
         if len(gc_filenames) != len(patterns):
             raise ValueError("invalid number of images in " + dname)
         imgs = load_images(gc_filenames, as_grayscale=True)[..., None]
@@ -231,16 +233,17 @@ def calibrate_procam(proj_wh, capture_dir,
         proj_objps_list.append(np.float32(proj_objps))
         proj_corners_list.append(np.float32(proj_corners))
         cam_corners_list2.append(np.float32(cam_corners2))
-
-    # Initial solution of camera's intrinsic parameters
-    camera_intrinsics_init = np.array([[np.mean(cam_shape), 0, cam_shape[0]/2], [0, np.mean(cam_shape), cam_shape[1]/2], [0, 0, 1]])
-    ret, cam_int, cam_dist, cam_rvecs, cam_tvecs = cv2.calibrateCamera(
-        cam_objps_list, cam_corners_list, cam_shape, camera_intrinsics_init, None, None, None,
-        cv2.CALIB_USE_INTRINSIC_GUESS + cv2.CALIB_FIX_ASPECT_RATIO + cv2.CALIB_ZERO_TANGENT_DIST + cv2.CALIB_FIX_PRINCIPAL_POINT)
     if verbose:
-        print('Initial camera intrinsic parameters: {}'.format(cam_int))
-        print('Initial camera distortion parameters: {}'.format(cam_dist))
-        print('Initial camera RMS: {}'.format(ret))
+        print("total correspondence points: {}".format(sum([len(x) for x in proj_corners_list])))
+    # Initial solution of camera's intrinsic parameters
+    # camera_intrinsics_init = np.array([[np.mean(cam_shape), 0, cam_shape[0]/2], [0, np.mean(cam_shape), cam_shape[1]/2], [0, 0, 1]])
+    ret, cam_int, cam_dist, cam_rvecs, cam_tvecs = cv2.calibrateCamera(
+        cam_objps_list, cam_corners_list, cam_shape, None , None, None, None,  # camera_intrinsics_init
+        cv2.CALIB_FIX_ASPECT_RATIO  + cv2.CALIB_FIX_PRINCIPAL_POINT)  # + cv2.CALIB_ZERO_TANGENT_DIST  # cv2.CALIB_USE_INTRINSIC_GUESS
+    if verbose:
+        print('Camera calib. intrinsic parameters: {}'.format(cam_int))
+        print('Camera calib. distortion parameters: {}'.format(cam_dist))
+        print('Camera calib. reprojection error: {}'.format(ret))
 
     # Initial solution of projector's parameters
     if projector_orientation == "none":
@@ -258,22 +261,22 @@ def calibrate_procam(proj_wh, capture_dir,
         cv2.CALIB_USE_INTRINSIC_GUESS + cv2.CALIB_FIX_ASPECT_RATIO + cv2.CALIB_ZERO_TANGENT_DIST + cv2.CALIB_FIX_K1 + cv2.CALIB_FIX_K2 + cv2.CALIB_FIX_K3)
     
     if verbose:
-        print('Initial projector intrinsic parameters: {}'.format(proj_int))
-        print('Initial projector distortion parameters: {}'.format(proj_dist))
-        print('Initial projector RMS: {}'.format(ret))
+        print('Projector calib. intrinsic parameters: {}'.format(proj_int))
+        print('Projector calib. distortion parameters: {}'.format(proj_dist))
+        print('Projector calib. reprojection error: {}'.format(ret))
 
     # Stereo calibration for final solution
     ret, cam_int, cam_dist, proj_int, proj_dist, cam_proj_rmat, cam_proj_tvec, E, F = cv2.stereoCalibrate(
         proj_objps_list, cam_corners_list2, proj_corners_list, cam_int, cam_dist, proj_int, proj_dist, None)
     
-    if verbose:
-        print('RMS: {}'.format(ret))
-        print('Camera intrinsic parameters: {}'.format(cam_int))
-        print('Camera distortion parameters: {}'.format(cam_dist))
-        print('Projector intrinsic parameters: {}'.format(proj_int))
-        print('Projector distortion parameters: {}'.format(proj_dist))
-        print('Rotation matrix / translation vector from camera to projector (cam2proj transform): {}, {}'.format(cam_proj_rmat, cam_proj_tvec))
     proj_transform = compose_rt(cam_proj_rmat[None, ...], cam_proj_tvec[None, :, 0], square=True)[0]
+    if verbose:
+        print('Stereo reprojection error: {}'.format(ret))
+        print('Stereo camera intrinsic parameters: {}'.format(cam_int))
+        print('Stereo camera distortion parameters: {}'.format(cam_dist))
+        print('Stereo projector intrinsic parameters: {}'.format(proj_int))
+        print('Stereo projector distortion parameters: {}'.format(proj_dist))
+        print('Stereo projector2camera transform): {}'.format(proj_transform))
     if debug:
         # computes a histogram of camera reprojection errors, and not just average error
         cam_corners = np.array(cam_corners_list).squeeze()

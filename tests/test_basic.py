@@ -163,17 +163,20 @@ def test_normalize_vertices():
 
 def test_structures():
     v, f = gsoup.structures.cube()
-    gsoup.save_obj(v, f, "resource/cube.obj")
-    v1, f1 = gsoup.load_obj("resource/cube.obj")
+    gsoup.save_mesh(v, f, "resource/cube.obj")
+    v1, f1 = gsoup.load_mesh("resource/cube.obj")
     assert np.allclose(v, v1)
     assert np.allclose(f, f1)
     v, f = gsoup.structures.icosehedron()
     gsoup.save_mesh(v, f, "resource/ico.obj")
-    gsoup.save_pointcloud(v, "resource/ico.ply")
-    v1, f1 = gsoup.load_obj("resource/ico.obj")
+    gsoup.save_mesh(v, f, "resource/ico.ply")
+    gsoup.save_mesh(v, f, "resource/ico_vcolor.ply", vertex_colors=np.random.randint(0, 255, size=v.shape).astype(np.uint8))
+    gsoup.save_mesh(v, f, "resource/ico_fcolor.ply", face_colors=np.random.randint(0, 255, size=f.shape).astype(np.uint8))
+    gsoup.save_pointcloud(v, "resource/ico_pc.ply")
+    v1, f1 = gsoup.load_mesh("resource/ico.obj")
     assert np.allclose(v, v1)
     assert np.allclose(f, f1)
-    v, f = gsoup.load_obj("resource/cube.obj")
+    v, f = gsoup.load_mesh("resource/cube.obj")
     assert v.shape[0] == 8
     assert f.shape[0] == 12
 
@@ -203,18 +206,18 @@ def test_image():
     gsoup.generate_concentric_circles(256, 512, dst=Path("resource/circles.png"))
     gsoup.generate_stripe_pattern(256, 512, direction="both", dst=Path("resource/stripe.png"))
     gsoup.generate_dot_pattern(512, 256, dst=Path("resource/dots.png"))
-    gray1 = gsoup.generate_gray_gradient(256, 256, grayscale=True, dst=Path("resource/gg_vert.png"))
+    gray1 = gsoup.generate_gray_gradient(256, 256, grayscale=True)
     assert gray1.shape == (256, 256)
     assert len(np.unique(gray1)) == 10
     assert gray1.max() == 255
-    gray2 = gsoup.generate_gray_gradient(50, 800, vertical=False, dst=Path("resource/gg_horiz.png"))
+    gray2 = gsoup.generate_gray_gradient(50, 800, vertical=False)
     assert gray2.shape == (50, 800, 3)
     assert gray2.max() == 255
-    gray3 = gsoup.generate_gray_gradient(256, 256, bins=-65, dst=Path("resource/gg_bin_min.png"))
+    gray3 = gsoup.generate_gray_gradient(256, 256, bins=-65)
     assert gray3.max() == 0
-    gray4 = gsoup.generate_gray_gradient(256, 256, bins=300, dst=Path("resource/gg_bin_max.png"))
+    gray4 = gsoup.generate_gray_gradient(256, 256, bins=300)
     assert gray4.max() == 255
-    gray5 = gsoup.generate_gray_gradient(1080, 1920, bins=300, dst=Path("resource/gg_highres.png"))
+    gray5 = gsoup.generate_gray_gradient(1080, 1920, bins=300)
     assert gray5.shape == (1080, 1920, 3)
     assert gray5.max() == 255
     dst = Path("resource/voronoi.png")
@@ -268,37 +271,41 @@ def test_image():
     assert img.shape == (4, 256, 128)
 
 def test_video():
-    # import os
+    import os
     # FFMPEG_DIR = os.path.join("/usr/bin")
     # os.environ['PATH'] = FFMPEG_DIR + ":" + os.environ['PATH']
+    FFMPEG_DIR = os.path.join("D:/tools/ffmpeg-5.1-essentials_build/bin")
+    os.environ['PATH'] = FFMPEG_DIR + ";" + os.environ['PATH']
     frame_number = 100
-    images = np.random.randint(0, 255, (frame_number, 512, 512, 3), dtype=np.uint8)
+    h = 128
+    w = 128
+    # images = np.random.randint(0, 255, (frame_number, 512, 512, 3), dtype=np.uint8)
+    images = np.array([gsoup.generate_concentric_circles(h, w, n=5) for i in range(100)])
     # im1 = gsoup.generate_voronoi_diagram(512, 512, 1000)
     # im2 = gsoup.generate_voronoi_diagram(512, 512, 1000)
     # im1s = np.tile(im1[None, ...], (10, 1, 1, 1))
     # im2s = np.tile(im2[None, ...], (10, 1, 1, 1))
     # images = np.vstack([im1s, im2s])
-    dst = Path("resource/noise.avi")
-    gsoup.save_video(images, dst, fps=10)
-    gsoup.save_video(images, Path("resource/noise_lossy.avi"), lossy=True, fps=10)
-    reader = gsoup.VideoReader(dst, h=512, w=512)
+    gsoup.save_video(images, Path("resource/lossless_video.avi"), lossy=False, fps=10)
+    gsoup.save_video(images, Path("resource/lossy_video.avi"), lossy=True, fps=10)
+    reader = gsoup.VideoReader(Path("resource/lossless_video.avi"), h=h, w=w)
     fps = gsoup.FPS()
     for i, frame in enumerate(reader):
         print("{}: {}, fps: {}".format(i, frame.shape, fps()))
         assert np.all(frame == images[i])
-    video_frames = gsoup.load_video(dst)
-    assert video_frames.shape == (frame_number, 512, 512, 3)
+    video_frames = gsoup.load_video(Path("resource/lossless_video.avi"))
+    assert video_frames.shape == (frame_number, h, w, 3)
     assert np.all(video_frames == images)
-    video_frames_reversed = gsoup.reverse_video(dst)
+    video_frames_reversed = gsoup.reverse_video(Path("resource/lossless_video.avi"))
     assert (video_frames_reversed[-1] == video_frames[0]).all()
-    sliced_frames = gsoup.slice_from_video(dst, every_n_frames=2, start_frame=0, end_frame=6)
+    sliced_frames = gsoup.slice_from_video(Path("resource/lossless_video.avi"), every_n_frames=2, start_frame=0, end_frame=6)
     assert (sliced_frames == video_frames[:7:2, :, :, :]).all()
-    gsoup.video_to_images(dst, Path("resource/noise"))
-    gsoup.save_video(Path("resource/noise"), Path("resource/noise2.avi"), fps=10)
-    gsoup.save_video(Path("resource/noise"), Path("resource/noise_lossy2.avi"), lossy=True, fps=10)
-    discrete_images = gsoup.load_images(Path("resource/noise"))
-    assert discrete_images.shape == (frame_number, 512, 512, 3)
-    timestamps = gsoup.get_frame_timestamps(dst)
+    gsoup.video_to_images(Path("resource/lossless_video.avi"), Path("resource/ffmpeg_reconstructed_images"))
+    gsoup.save_video(Path("resource/ffmpeg_reconstructed_images"), Path("resource/reconst_lossy.avi"), fps=10, lossy=True)
+    gsoup.save_video(Path("resource/ffmpeg_reconstructed_images"), Path("resource/reconst_lossless.avi"), fps=10, lossy=False)
+    discrete_images = gsoup.load_images(Path("resource/ffmpeg_reconstructed_images"))
+    assert discrete_images.shape == (frame_number, h, w, 3)
+    timestamps = gsoup.get_frame_timestamps(Path("resource/lossless_video.avi"))
     assert timestamps[0] == 0
 
 def test_procam():
@@ -343,23 +350,23 @@ def test_procam():
     cam_transform = np.array([[0, 0, 1, 1], [1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 0, 1.0]])
     cam_transform = cam_transform @ blend_to_cv
     ### gt ###
-    cam_int = np.array([[800, 0, 400.0], [0.0, 800, 400], [0, 0, 1]])
-    proj_int = np.array([[800, 0, 400.0], [0.0, 800, 400], [0, 0, 1]])
-    proj_transform = np.array([[-0.12403473, -0.23891242,  0.96308672,  0.8 ],
-                                [ 0.99227786, -0.02986405,  0.12038584,  0.1],
-                                [ 0.        ,  0.97058171,  0.24077168,  0.2],
-                                [ 0.        ,  0.        ,  0.        ,  1. ]])
-    proj_transform = proj_transform @ blend_to_cv
-    cam_dist = None
+    # cam_int = np.array([[800, 0, 400.0], [0.0, 800, 400], [0, 0, 1]])
+    # proj_int = np.array([[800, 0, 400.0], [0.0, 800, 400], [0, 0, 1]])
+    # proj_transform = np.array([[-0.12403473, -0.23891242,  0.96308672,  0.8 ],
+    #                             [ 0.99227786, -0.02986405,  0.12038584,  0.1],
+    #                             [ 0.        ,  0.97058171,  0.24077168,  0.2],
+    #                             [ 0.        ,  0.        ,  0.        ,  1. ]])
+    # proj_transform = proj_transform @ blend_to_cv
+    # cam_dist = None
     ### end gt ###
     ### calib ###
-    # cam_int, cam_dist,\
-    # proj_int, proj_dist,\
-    # proj_transform = gsoup.calibrate_procam((800, 800), Path("tests/tests_resource/calibration"),
-    #                                         chess_vert=9, chess_hori=9,
-    #                                         chess_block_size=0.027, output_dir="resource/calibration",
-    #                                         projector_orientation="none", debug=True)
-    # proj_transform = cam_transform @ np.linalg.inv(proj_transform)  # c2w @ p2c = p2w
+    cam_int, cam_dist,\
+    proj_int, proj_dist,\
+    proj_transform = gsoup.calibrate_procam((800, 800), Path("tests/tests_resource/calibration"),
+                                            chess_vert=9, chess_hori=9,
+                                            chess_block_size=0.032, output_dir="resource/calibration",
+                                            projector_orientation="none", debug=True)
+    proj_transform = cam_transform @ np.linalg.inv(proj_transform)  # c2w @ p2c = p2w
     ### end calib ###
     # calibration_static_view(cam_transform, proj_transform, (800, 800), (800, 800), cam_int, cam_dist, proj_int, forward_map, fg, mode)
     pc = gsoup.reconstruct_pointcloud(forward_map, fg, cam_transform, proj_transform, cam_int, cam_dist, proj_int, mode=mode)

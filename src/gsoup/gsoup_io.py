@@ -2,6 +2,7 @@ import torch
 import numpy as np
 from pathlib import Path
 from .core import to_8b, to_np
+from .image import alpha_compose
 from PIL import Image
 import json
 
@@ -15,7 +16,6 @@ def write_to_json(data, dst):
     dst.parent.mkdir(parents=True, exist_ok=True)
     with open(dst, "w") as f:
         json.dump(data, f, indent=4, sort_keys=True)
-
 
 def save_animation(images, dst):
     """
@@ -126,9 +126,9 @@ def load_images(source, to_float=False, channels_last=True, return_paths=False, 
     :return: (b x H x W x C) tensor, and optionally a list of file names
     """
     supported_suffixes = [".png", ".jpg", ".jpeg", ".tiff"]
+    images = []
+    file_paths = []
     if type(source) == list or type(source) == tuple or type(source) == np.ndarray:
-        images = []
-        file_paths = []
         for p in source:
             p = Path(p)
             if not p.exists():
@@ -141,50 +141,36 @@ def load_images(source, to_float=False, channels_last=True, return_paths=False, 
                     im = im.resize(resize_wh)
                 images.append(np.array(im))
                 file_paths.append(p)
-        images = np.stack(images, axis=0)
-        if as_grayscale and images.ndim == 4:
-            images = images.mean(axis=-1).astype(np.float32)
-        if not channels_last and images.ndim == 4:
-            images = np.moveaxis(images, -1, 1)
-        if to_float:
-            images = images.astype(np.float32) / 255
-        else:
-            images = images.astype(np.uint8)
-        if to_torch:
-            if device is None:
-                device = torch.device("cpu")
-            images = torch.tensor(images, device=device)
-    else:
+    else:  # path to a folder
         path = Path(source)
         if not path.exists():
             raise FileNotFoundError("Path does not exist: {}".format(path))
-        if path.is_dir():
-            images = []
-            file_paths = []
-            for image in sorted(path.iterdir()):
-                if image.suffix in supported_suffixes:
-                    im = Image.open(str(image))
-                    if im.mode == "P":
-                        im = im.convert("RGB")
-                    if resize_wh is not None:
-                        im = im.resize(resize_wh)
-                    images.append(np.array(im))
-                    file_paths.append(image)
-            images = np.stack(images, axis=0)
-            if as_grayscale and images.ndim == 4:
-                images = images.mean(axis=-1).astype(np.float32)
-            if not channels_last and images.ndim == 4:
-                images = np.moveaxis(images, -1, 1)
-            if to_float:
-                images = images.astype(np.float32) / 255
-            else:
-                images = images.astype(np.uint8)
-            if to_torch:
-                if device is None:
-                    device = torch.device("cpu")
-                images = torch.tensor(images, device=device)
-        else:
+        if not path.is_dir():
             raise FileNotFoundError("Path must be a folder or a list/tuple/array of paths")
+        for image in sorted(path.iterdir()):
+            if image.suffix in supported_suffixes:
+                im = Image.open(str(image))
+                if im.mode == "P":
+                    im = im.convert("RGB")
+                if resize_wh is not None:
+                    im = im.resize(resize_wh)
+                images.append(np.array(im))
+                file_paths.append(image)
+    images = np.stack(images, axis=0)
+    if as_grayscale and images.ndim == 4:
+        if images.shape[-1] == 4:
+            images = to_8b(alpha_compose(images))
+        images = images.mean(axis=-1).astype(np.float32)
+    if not channels_last and images.ndim == 4:
+        images = np.moveaxis(images, -1, 1)
+    if to_float:
+        images = images.astype(np.float32) / 255
+    else:
+        images = images.astype(np.uint8)
+    if to_torch:
+        if device is None:
+            device = torch.device("cpu")
+        images = torch.tensor(images, device=device)
     if return_paths:
         return images, file_paths
     else:
@@ -198,13 +184,17 @@ def load_mesh(path: Path,
     """
     loads a mesh from a file
     :param path: path to mesh file
+    :param return_vert_uvs: if True, returns a (V x 2) tensor of vertex uv coordinates
+    :param return_vert_norms: if True, returns a (V x 3) tensor of vertex normals
+    :param return_vert_color: if True, returns a (V x 3) tensor of vertex colors
     :param to_torch: if True, returns a torch tensor
     :param device: device to load tensor to
+    :param verbose: if True, prints out information about the mesh
     :return: (V x 3) tensor of vertices, (F x 3) tensor of faces, and optionally (V x 3) tensor of normals
     """
     path = Path(path)
     if path.suffix != ".obj":
-        raise ValueError("Only .obj are supported")
+        raise ValueError("Only .obj format is supported for loading")
     return load_obj(path,
                     return_vert_uvs=return_vert_uvs,
                     return_vert_norms=return_vert_norms,
@@ -260,7 +250,7 @@ def load_obj(path: Path,
     else:
         return v, f
 
-def parse_obj(path: Path, verbose=True):
+def parse_obj(path, verbose=True):
     """
     A simple obj parser
     currently supports vertex and triangular face elements only
@@ -369,11 +359,12 @@ def parse_obj(path: Path, verbose=True):
         fn = None
     return v, f, vt, vn, vc, ft, fn
 
-def save_obj(vertices, faces, path: Path):
+def save_obj(vertices, faces, path):
     """"
-    :param path: path to save obj file to
     :param vertices: (n x 3) tensor of vertices
     :param faces: (m x 3) tensor of vertex indices
+    :param path: path to save obj file to
+    :param vertex_normals: optional (n x 3) tensor of vertex normals
     """
     path = Path(path)
     if path.suffix != ".obj":
@@ -400,13 +391,63 @@ def save_obj(vertices, faces, path: Path):
         for f in faces:
             file.write("f {} {} {}\n".format(f[0] + 1, f[1] + 1, f[2] + 1))  # obj indices start at 1
 
-def save_ply(vertices, faces, path):
+def save_ply(vertices, path, faces=None, vertex_colors=None, face_colors=None, vertex_normals=None):
     """
     saves a ply file in a human readable format
-    :param vertices: (n x 3) np array of vertices np.float32
-    :param faces: (m x 3) np array of vertex indices np.int32
+    :param vertices: (n x 3) np array or torch tensor of vertices float32/float64
     :param path: path to save ply file to
+    :param faces: optional (m x 3) np array or torch tensor of vertex indices np.int32/np.int64
+    :param vertex_colors: optional (n x 3) np array or torch tensor of vertex colors np.uint8
+    :param face_colors: optional (m x 3) np array or torch tensor of face colors np.uint8
+    :param vertex_normals: optional (n x 3) np array or torch tensor of vertex normals np.float32/np.float64
     """
+    path = Path(path)
+    if path.suffix != ".ply":
+        raise ValueError("Path must have suffix .ply")
+    if not path.parent.exists():
+        path.parent.mkdir(parents=True, exist_ok=True)
+    if type(vertices) == torch.Tensor:
+        vertices = to_np(vertices)
+    if faces is not None:
+        if type(faces) == torch.Tensor:
+            faces = to_np(faces)
+        if (faces < 0).any():
+            raise ValueError("Faces must be positive")
+        if np.isnan(vertices).any():
+            raise ValueError("Vertices must be finite")
+        if np.isnan(faces).any():
+            raise ValueError("Faces must be finite")
+        if vertices.dtype != np.float32 and vertices.dtype != np.float64:
+            raise ValueError("Vertices must be of type float32 / float64")
+        if faces.dtype != np.int32 and faces.dtype != np.int64:
+            raise ValueError("Faces must be of type int32 / int64")
+    if vertex_colors is not None:
+        if type(vertex_colors) == torch.Tensor:
+            vertex_colors = to_np(vertex_colors)
+        if vertex_colors.dtype != np.uint8:
+            raise ValueError("Vertex colors must be of type uint8")
+        if vertex_colors.shape != vertices.shape:
+            raise ValueError("Vertex colors must be same shape as vertices")
+        if np.isnan(vertex_colors).any():
+            raise ValueError("Vertices colors must be finite")
+    if face_colors is not None:
+        if type(face_colors) == torch.Tensor:
+            face_colors = to_np(face_colors)
+        if face_colors.dtype != np.uint8:
+            raise ValueError("Faces colorss must be of type uint8")
+        if face_colors.shape != faces.shape:
+            raise ValueError("Faces colors must be same shape as vertices")
+        if np.isnan(face_colors).any():
+            raise ValueError("Faces colors must be finite")
+    if vertex_normals is not None:
+        if type(vertex_normals) == torch.Tensor:
+            vertex_normals = to_np(vertex_normals)
+        if vertex_normals.dtype != np.float32 and vertex_normals.dtype != np.float64:
+            raise ValueError("Vertex normals must be of type float32 / float64")
+        if vertex_normals.shape != vertices.shape:
+            raise ValueError("Vertex normals must be same shape as vertices")
+        if np.isnan(vertex_normals).any():
+            raise ValueError("Vertices normals must be finite")
     with open(str(path), "w") as file:
         file.write("ply\n")
         file.write("format ascii 1.0\n")
@@ -415,45 +456,82 @@ def save_ply(vertices, faces, path):
         file.write("property float x\n")
         file.write("property float y\n")
         file.write("property float z\n")
+        if vertex_colors is not None:
+            file.write("property uchar red\n")
+            file.write("property uchar green\n")
+            file.write("property uchar blue\n")
+        if vertex_normals is not None:
+            file.write("property float nx\n")
+            file.write("property float ny\n")
+            file.write("property float nz\n")
         if faces is not None:
             file.write("element face {}\n".format(len(faces)))
             file.write("property list uchar int vertex_indices\n")
+            if face_colors is not None:
+                file.write("property uchar red\n")
+                file.write("property uchar green\n")
+                file.write("property uchar blue\n")
         file.write("end_header\n")
-        for v in vertices:
-            file.write("{} {} {}\n".format(v[0], v[1], v[2]))
+        for i, v in enumerate(vertices):
+            file.write("{} {} {}".format(v[0], v[1], v[2]))
+            if vertex_colors is not None:
+                c = vertex_colors[i]
+                file.write(" {} {} {}".format(c[0], c[1], c[2]))
+            if vertex_normals is not None:
+                n = vertex_normals[i]
+                file.write(" {} {} {}".format(n[0], n[1], n[2]))
+            file.write("\n")
         if faces is not None:
-            for f in faces:
-                file.write("3 {} {} {}\n".format(f[0], f[1], f[2]))
+            for i, f in enumerate(faces):
+                file.write("3 {} {} {}".format(f[0], f[1], f[2]))
+                if face_colors is not None:
+                    c = face_colors[i]
+                    file.write(" {} {} {}".format(c[0], c[1], c[2]))
+                file.write("\n")
 
-def save_mesh(vertices, faces, path):
+def save_mesh(vertices, faces, path, vertex_normals=None, vertex_colors=None, face_colors=None):
     """
     saves a mesh to a file
-    :param path: path to save mesh to
     :param vertices: (n x 3) tensor of vertices
     :param faces: (m x 3) tensor of vertex indices
+    :param path: path to save mesh to
+    :param vertex_normals: optional (n x 3) tensor of vertex normals
+    :param vertex_colors: optional (n x 3) tensor of vertex colors
+    :param face_colors: optional (m x 3) tensor of face colors
     """
     path = Path(path)
-    if path.suffix not in [".obj"]:
-        raise ValueError("Only .obj is supported")
+    if path.suffix not in [".obj", ".ply"]:
+        raise ValueError("Only .obj or .ply are supported")
     else:
         if path.suffix == ".obj":
-            save_obj(vertices, faces, path)
-        # elif path.suffix == ".ply":
-        #     save_ply(path, vertices, faces)
+            if vertex_colors is not None or face_colors is not None:
+                raise ValueError("obj does not officially support vertex or face colors")
+            save_obj(vertices, faces, path)  # will ignore vertex_normals/vertex_colors/face_colors
+        elif path.suffix == ".ply":
+            save_ply(vertices, path, faces=faces, vertex_normals=vertex_normals, vertex_colors=vertex_colors, face_colors=face_colors)
 
-def save_pointcloud(vertices, path: Path):
+def save_pointcloud(vertices, path, vertex_colors=None, vertex_normals=None):
     path = Path(path)
     if path.suffix != ".ply":
         raise ValueError("Only .ply are supported")
-    else:
-        save_ply(vertices, None, path)
+    if vertex_colors is not None:
+        if vertex_colors.dtype != np.uint8:
+            raise ValueError("Vertex colors must be of type uint8")
+        if vertex_colors.shape != vertices.shape:
+            raise ValueError("Vertex colors must have same shape as vertices")
+    if vertex_normals is not None:
+        if vertex_normals.shape != vertices.shape:
+            raise ValueError("Vertex normals must have same shape as vertices")
+    save_ply(vertices, path, vertex_colors=vertex_colors, vertex_normals=vertex_normals)
 
-def save_pointclouds(vertices, path, file_names: list = []):
+def save_pointclouds(vertices, path, file_names: list = [], vertex_colors=None, vertex_normals=None):
     """
     saves a batch of pointclouds to a folder
     :param path: path to save meshes to
     :param vertices: (b x V x 3) tensor
     :param file_names: list of file names of length b without suffix (suffix will be removed)
+    :param vertex_normals: optional (b x V x 3) tensor of vertex normals
+    :param vertex_colors: optional (b x V x 3) tensor of vertex colors
     """
     if vertices.ndim != 3:
         raise ValueError("Vertices must be a (batch, points, 3) np array")
@@ -462,11 +540,17 @@ def save_pointclouds(vertices, path, file_names: list = []):
             raise ValueError("Number of file names must match batch size")
     path = Path(path)
     for i, v in enumerate(vertices):
+        cur_vert_colors = None
+        if vertex_colors is not None:
+            cur_vert_colors = vertex_colors[i]
+        cur_vert_norm = None
+        if vertex_normals is not None:
+            cur_vert_norm = vertex_normals[i]
         if file_names:
             file_name = Path(file_names[i]).stem
-            save_pointcloud(v, path / "{}.ply".format(file_name))
+            save_pointcloud(v, path / "{}.ply".format(file_name), vertex_colors=cur_vert_colors, vertex_normals=cur_vert_norm)
         else:
-            save_pointcloud(v, path / "{:05d}.ply".format(i))
+            save_pointcloud(v, path / "{:05d}.ply".format(i), vertex_colors=cur_vert_colors, vertex_normals=cur_vert_norm)
 
 def save_meshes(vertices, faces, path, file_names: list = []):
     """
