@@ -1,7 +1,7 @@
 import torch
 import numpy as np
 from pathlib import Path
-from .core import to_8b, to_np
+from .core import to_8b, to_np, to_float
 from .image import alpha_compose
 from PIL import Image
 import json
@@ -168,9 +168,7 @@ def load_images(source, float=False, channels_last=True, return_paths=False, to_
     if not channels_last and images.ndim == 4:
         images = np.moveaxis(images, -1, 1)
     if float:
-        images = images.astype(np.float32) / 255
-    else:
-        images = images.astype(np.uint8)
+        images = to_float(images)
     if to_torch:
         if device is None:
             device = torch.device("cpu")
