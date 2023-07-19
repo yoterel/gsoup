@@ -167,7 +167,7 @@ def load_images(source, float=False, channels_last=True, return_paths=False, to_
         images = images.mean(axis=-1).astype(np.float32)
     if not channels_last and images.ndim == 4:
         images = np.moveaxis(images, -1, 1)
-    if to_float:
+    if float:
         images = images.astype(np.float32) / 255
     else:
         images = images.astype(np.uint8)
