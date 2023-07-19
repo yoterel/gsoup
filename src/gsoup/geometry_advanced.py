@@ -90,22 +90,27 @@ def qem(v: np.ndarray, f: np.ndarray, budget: int):
 
 def distribute_field(v, f, field, avg=False):
     """
-    given a field of size F (with any number of addtional dimensions), distribute it to the vertices of the mesh by summing up the values of the incident faces
-    :param v: vertices of the mesh
-    :param f: faces of the mesh
-    :param field: field of size F
+    given a mesh, and a field shaped (F, ...), distribute it to the vertices of the mesh by summing up the values of the incident faces
+    :param v: vertices of the mesh (V, 3)
+    :param f: faces of the mesh (F, 3)
+    :param field: field of size (F, ...) dtype float32
     :param avg: if True, the field is averaged over the incident faces instead of summed up
-    :return: scalar field of size V
+    :return: the field distributed over the vertices (V, ...)
     """
+    if field.shape[0] != f.shape[0]:
+        raise ValueError("field must have the same number of elements as faces")
+    if field.dtype != np.float32:
+        raise ValueError("field must be of dtype float32")
     # compute the incident triangles per vertex
     incident_triangles = compute_incident_triangles(f)
     # compute the scalar field per vertex
-    field_per_vertex = np.zeros((v.shape[0], *field.shape[1:]))
+    field_per_vertex = np.zeros((v.shape[0], *field.shape[1:]), dtype=np.float32)
     for i, face in enumerate(f):
         for vertex in face:
             field_per_vertex[vertex] += field[i]
     if avg:
-        field_per_vertex /= len(incident_triangles)
+        n_incident_triangles = np.array([len(triangles) for triangles in incident_triangles])
+        field_per_vertex /= n_incident_triangles[..., None]
     return field_per_vertex
 
 def distribute_scalar_field(num_vertices, f, per_face_scalar_field, avg=False):
