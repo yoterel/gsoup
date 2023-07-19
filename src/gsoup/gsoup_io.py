@@ -165,6 +165,7 @@ def load_images(source, float=False, channels_last=True, return_paths=False, to_
         if images.shape[-1] == 4:
             images = to_8b(alpha_compose(images))
         images = images.mean(axis=-1).astype(np.float32)
+        images = to_8b(images)
     if not channels_last and images.ndim == 4:
         images = np.moveaxis(images, -1, 1)
     if float:
