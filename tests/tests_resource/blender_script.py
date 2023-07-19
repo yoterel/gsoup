@@ -172,10 +172,9 @@ def generate_all_white(height, width, dst=None):
         img.save(str(dst))
     return np.array(img)
 
-def remove_texures():
+def remove_textures():
     # remove current textures
-    exceptions = [""]
-    string_exceptions = [""]
+    exceptions = ["checkerboard.png"]
     for image in bpy.data.images:
         if image.name not in exceptions:
             print("removing texture: {}".format(image))
@@ -277,7 +276,7 @@ out_data = {
     'blender_matrix_world_proj': listify_matrix(bpy.context.scene.objects["Projector"].matrix_world),
 }
 # get textures
-remove_texures()
+remove_textures()
 texture_names = np.array(TEXTURES)
 
 bpy.context.scene.objects['Projector'].data.energy = 50
