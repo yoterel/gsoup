@@ -8,7 +8,7 @@ This library is the result of me getting tired of replicating pieces of utility 
 
 The majority of the code uses numpy, but some effort has been made to also be compatible with pytorch for GPU computations, as many of my interests rely on a strong auto-differentiaion (and GPU enabled) package.
 
-All the code is used for self-educational purposes and to facilitate faster research of concepts in computational geometry / graphics.
+All the code is used for self-educational purposes and to facilitate faster research of concepts in graphics, and specifically for applications in AR.
 
 ## Installation
 `pip install gsoup`
@@ -21,7 +21,7 @@ All the code is used for self-educational purposes and to facilitate faster rese
 
 `cd gsoup`
 
-`pip install -e .`
+`pip install -e .[dev]`
 
 Feel free to submit pull requests (run the tests first).
 
