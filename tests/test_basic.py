@@ -271,11 +271,14 @@ def test_image():
     assert img.shape == (4, 256, 128)
 
 def test_video():
+    import platform
     import os
-    # FFMPEG_DIR = os.path.join("/usr/bin")
-    # os.environ['PATH'] = FFMPEG_DIR + ":" + os.environ['PATH']
-    FFMPEG_DIR = os.path.join("D:/tools/ffmpeg-5.1-essentials_build/bin")
-    os.environ['PATH'] = FFMPEG_DIR + ";" + os.environ['PATH']
+    if platform.system() == "Windows":
+        FFMPEG_DIR = os.path.join("D:/tools/ffmpeg-5.1-essentials_build/bin")
+        os.environ['PATH'] = FFMPEG_DIR + ";" + os.environ['PATH']
+    else:
+        FFMPEG_DIR = os.path.join("/usr/bin")
+        os.environ['PATH'] = FFMPEG_DIR + ":" + os.environ['PATH']
     frame_number = 100
     h = 128
     w = 128

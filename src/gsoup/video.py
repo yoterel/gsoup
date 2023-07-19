@@ -36,8 +36,10 @@ class FPS:
         self.frametimestamps = collections.deque(maxlen=avarageof)
     def __call__(self):
         self.frametimestamps.append(time.time())
-        if(len(self.frametimestamps) > 1):
-            return len(self.frametimestamps)/(self.frametimestamps[-1]-self.frametimestamps[0])
+        nominator = len(self.frametimestamps)
+        denominator = self.frametimestamps[-1] - self.frametimestamps[0]
+        if(len(self.frametimestamps) > 1) and (denominator != 0):
+            return nominator / denominator
         else:
             return 0.0
 
