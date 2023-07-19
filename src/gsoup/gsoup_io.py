@@ -162,9 +162,11 @@ def load_images(source, float=False, channels_last=True, return_paths=False, to_
                 file_paths.append(image)
     images = np.stack(images, axis=0)
     if as_grayscale and images.ndim == 4:
-        if images.shape[-1] == 4:
-            images = to_8b(alpha_compose(images))
-        images = images.mean(axis=-1).astype(np.float32)
+        if images.shape[-1] == 4:  # alpha compose before converting to grayscale as alpha is not affected by averaging
+            images = alpha_compose(images)
+        else:
+            images = to_float(images)
+        images = images.mean(axis=-1)
         images = to_8b(images)
     if not channels_last and images.ndim == 4:
         images = np.moveaxis(images, -1, 1)

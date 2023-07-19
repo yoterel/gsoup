@@ -178,8 +178,8 @@ def calibrate_procam(proj_wh, capture_dir,
     patterns = graycode.encode(proj_wh)
     cam_shape = load_image(gc_fname_lists[0][0], as_grayscale=True).shape[::-1]  # width, height
     patch_size_half = int(np.ceil(cam_shape[0] / 180))  # some magic number for patch size
-    cam_corners_list = []
-    cam_objps_list = []
+    cam_corners_list = []  # will contain the corners of the chessboard in camera coordinates
+    cam_objps_list = []  # will contain the corners of the chessboard in chessboard local coordinates (unit of measurement deduced from chess_block_size)
     cam_corners_list2 = []
     proj_objps_list = []
     proj_corners_list = []
@@ -303,7 +303,7 @@ def calibrate_procam(proj_wh, capture_dir,
         per_session_projector_error = proj_norms.mean(axis=-1)
         worst_to_best_proj_session_ids = np.argsort(per_session_projector_error)[::-1]
         worst_to_best_proj_errors = per_session_projector_error[worst_to_best_proj_session_ids]
-        print("worst to best sessions ids for camera reprojection error: {}".format(worst_to_best_proj_session_ids))
+        print("worst to best sessions ids for projector reprojection error: {}".format(worst_to_best_proj_session_ids))
         print("and their associated errors: {}".format(worst_to_best_proj_errors))
         proj_hist = np.histogram(proj_norms)
         print('projector reprojection error histogram: {} (should be similar to gaussian around 0)'.format(proj_hist))

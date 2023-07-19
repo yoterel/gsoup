@@ -366,8 +366,8 @@ def test_procam():
     cam_int, cam_dist,\
     proj_int, proj_dist,\
     proj_transform = gsoup.calibrate_procam((800, 800), Path("tests/tests_resource/calibration"),
-                                            chess_vert=9, chess_hori=9,
-                                            chess_block_size=0.032, output_dir="resource/calibration",
+                                            chess_vert=15, chess_hori=15,
+                                            chess_block_size=0.0185, output_dir="resource/calibration",
                                             projector_orientation="none", debug=True)
     proj_transform = cam_transform @ np.linalg.inv(proj_transform)  # c2w @ p2c = p2w
     ### end calib ###
