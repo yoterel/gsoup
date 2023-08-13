@@ -363,12 +363,13 @@ def test_procam():
     # cam_dist = None
     ### end gt ###
     ### calib ###
-    cam_int, cam_dist,\
-    proj_int, proj_dist,\
-    proj_transform = gsoup.calibrate_procam((800, 800), Path("tests/tests_resource/calibration"),
+    result = gsoup.calibrate_procam((800, 800), Path("tests/tests_resource/calibration"),
                                             chess_vert=15, chess_hori=15,
                                             chess_block_size=0.0185, output_dir="resource/calibration",
                                             projector_orientation="none", debug=True)
+    cam_int, cam_dist,\
+    proj_int, proj_dist,\
+    proj_transform = result["cam_intrinsics"], result["cam_distortion"], result["proj_intrinsics"], result["proj_distortion"], result["proj_transform"]
     proj_transform = cam_transform @ np.linalg.inv(proj_transform)  # c2w @ p2c = p2w
     ### end calib ###
     # calibration_static_view(cam_transform, proj_transform, (800, 800), (800, 800), cam_int, cam_dist, proj_int, forward_map, fg, mode)

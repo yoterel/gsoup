@@ -113,7 +113,7 @@ def naive_color_compensate(target_image, all_white_image, all_black_image, cam_w
 
 def calibrate_procam(proj_wh, capture_dir, 
                      chess_vert=10, chess_hori=7,
-                     bg_threshold=10, chess_block_size=10.0, projector_orientation="from_above", verbose=True,
+                     bg_threshold=10, chess_block_size=10.0, projector_orientation="lower_half", verbose=True,
                      output_dir=None, debug=False):
     """
     calibrates a projection-camera pair using local homographies
@@ -146,7 +146,9 @@ def calibrate_procam(proj_wh, capture_dir,
     :param bg_threshold threshold for detecting foreground
     :param chess_block_size size of blocks of chessboard in real world in any unit of measurement (will only effect the translation componenet between camera and projector)
     :param projector_orientation -  effects initial guess for projector principal point.
-                                    can be "from_above" or "from_below", or "none".
+                                    can be "upper_half" or "lower_half", or "none".
+                                    tabletop projectors usually have their principal point in the lower half of the image while ceiling mounted projectors have it in the upper half.
+                                    note: opencv convention has the y direction increasing downwards.
     :param verbose if true, will print out the calibration results
     :param output_dir will save debug results to this directory
     :param debug if true, will save debug info into output_dir
@@ -154,7 +156,7 @@ def calibrate_procam(proj_wh, capture_dir,
             camera distortion parameters (5x1),
             projector intrinsics (3x3),
             projector distortion parameters (5x1),
-            proj_transform (4x4), a projector to camera transformation matrix (to get p2w, you should invert this matrix and multiply from the left with the camera to world matrix)
+            proj_transform (4x4), a camera to projector transformation matrix (to get p2w, you should invert this matrix and multiply from the left with the camera to world matrix)
     """
     chess_shape = (chess_vert, chess_hori)
     capture_dir = Path(capture_dir)
@@ -248,9 +250,9 @@ def calibrate_procam(proj_wh, capture_dir,
     # Initial solution of projector's parameters
     if projector_orientation == "none":
         cy_correction = 0
-    elif projector_orientation == "from_below":
+    elif projector_orientation == "lower_half":
         cy_correction = proj_wh[1] / 4
-    elif projector_orientation == "from_above":
+    elif projector_orientation == "upper_half":
         cy_correction = - proj_wh[1] / 4
     else:
         raise ValueError("invalid projector_orientation")
@@ -276,7 +278,7 @@ def calibrate_procam(proj_wh, capture_dir,
         print('Stereo camera distortion parameters: {}'.format(cam_dist))
         print('Stereo projector intrinsic parameters: {}'.format(proj_int))
         print('Stereo projector distortion parameters: {}'.format(proj_dist))
-        print('Stereo projector2camera transform): {}'.format(proj_transform))
+        print('Stereo camera2projector transform): {}'.format(proj_transform))
     if debug:
         # computes a histogram of camera reprojection errors, and not just average error
         cam_corners = np.array(cam_corners_list).squeeze()
@@ -307,6 +309,7 @@ def calibrate_procam(proj_wh, capture_dir,
         print("and their associated errors: {}".format(worst_to_best_proj_errors))
         proj_hist = np.histogram(proj_norms)
         print('projector reprojection error histogram: {} (should be similar to gaussian around 0)'.format(proj_hist))
+    ret = {"cam_intrinsics": cam_int, "cam_distortion": cam_dist, "proj_intrinsics": proj_int, "proj_distortion": proj_dist, "proj_transform": proj_transform}
     return cam_int, cam_dist, proj_int, proj_dist, proj_transform
 
 def reconstruct_pointcloud(forward_map, fg, cam_transform, proj_transform, cam_int, cam_dist, proj_int, mode="xy", color_image=None, debug=False):
