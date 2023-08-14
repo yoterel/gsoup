@@ -162,7 +162,7 @@ def calibrate_procam(proj_wh, capture_dir,
     capture_dir = Path(capture_dir)
     if not capture_dir.exists():
         raise FileNotFoundError("capture_dir was not found")
-    dirnames = sorted(capture_dir.glob('*'))
+    dirnames = sorted([x for x in capture_dir.glob('*') if x.is_dir()])
     if len(dirnames) == 0:
         raise FileNotFoundError("capture_dir contains no subfolders")
     used_dirnames = []
@@ -310,7 +310,7 @@ def calibrate_procam(proj_wh, capture_dir,
         proj_hist = np.histogram(proj_norms)
         print('projector reprojection error histogram: {} (should be similar to gaussian around 0)'.format(proj_hist))
     ret = {"cam_intrinsics": cam_int, "cam_distortion": cam_dist, "proj_intrinsics": proj_int, "proj_distortion": proj_dist, "proj_transform": proj_transform}
-    return cam_int, cam_dist, proj_int, proj_dist, proj_transform
+    return ret
 
 def reconstruct_pointcloud(forward_map, fg, cam_transform, proj_transform, cam_int, cam_dist, proj_int, mode="xy", color_image=None, debug=False):
     """
