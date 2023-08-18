@@ -156,7 +156,7 @@ def calibrate_procam(proj_wh, capture_dir,
             camera distortion parameters (5x1),
             projector intrinsics (3x3),
             projector distortion parameters (5x1),
-            proj_transform (4x4), a camera to projector transformation matrix (to get p2w, you should invert this matrix and multiply from the left with the camera to world matrix)
+            proj_transform (4x4), a camera to projector (p2c) transformation matrix (to get p2w, you should invert this matrix and multiply from the left with the camera to world matrix i.e. p2w = c2w * p2c)
     """
     chess_shape = (chess_vert, chess_hori)
     capture_dir = Path(capture_dir)
