@@ -31,7 +31,7 @@ def compute_quadtratic_surface(v, f):
     n = np.cross(e1, e2)
     n = n / np.linalg.norm(n, axis=-1)[: ,None]
     d = ((-v[f[:, 0]])[:, None, :] @ n[:, :, None]).squeeze()
-    Qf = np.zeros((f.shape[0], 4, 4))
+    Qf = np.zeros((f.shape[0], 4, 4), dtype=np.float32)
     Qf[:, :3, :3] = n[:, :, None] @ n[:, None, :]
     Qf[:, -1, :-1] = d[:, None] * n
     Qf[:, :-1, -1] = Qf[:, -1, :-1]
