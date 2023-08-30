@@ -296,7 +296,7 @@ def frustum_projection(x0, x1, y0, y1, z0, z1):
                       [ 0, 0, c, d],
                       [ 0, 0,-1, 0]])
 
-def opengl_project_from_opencv_intrinsics(opencv_intrinsics, width, height, near=0.1, far=100.0):
+def opengl_project_from_opencv_intrinsics(opencv_intrinsics, width, height, near=0.1, far=100.0, window_coords_inverted=False):
     """
     given a matrix K from opencv, returns the corresponding projection matrix for OpenGL ("Eye/Camera/View space -> Clip Space")
     :param opencv_intrinsics: 3x3 intrinsics matrix from opencv
@@ -304,14 +304,18 @@ def opengl_project_from_opencv_intrinsics(opencv_intrinsics, width, height, near
     :param height: height of the image
     :param near: near plane
     :param far: far plane
+    :param window_coords_inverted: if True, the y axis is inverted (y down)
     :return: 4x4 projection matrix for OpenGL (note: column major)
     """
     fx = opencv_intrinsics[0, 0]
     fy = opencv_intrinsics[1, 1]
     cx = opencv_intrinsics[0, 2]
     cy = opencv_intrinsics[1, 2]
+    factor = 1.0
+    if window_coords_inverted:
+        factor = -1.0
     opengl_mtx = np.array([[2*fx/width, 0.0, (width - 2*cx)/width, 0.0],
-                           [0.0, -2*fy/height, (height - 2*cy)/height, 0.0],
+                           [0.0, factor*2*fy/height, factor*(height - 2*cy)/height, 0.0],
                            [0.0, 0.0, (-far - near) / (far - near), -2.0*far*near/(far-near)],
                            [0.0, 0.0, -1.0, 0.0]])
     return opengl_mtx

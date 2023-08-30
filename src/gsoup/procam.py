@@ -312,7 +312,7 @@ def calibrate_procam(proj_wh, capture_dir,
     ret = {"cam_intrinsics": cam_int, "cam_distortion": cam_dist, "proj_intrinsics": proj_int, "proj_distortion": proj_dist, "proj_transform": proj_transform}
     return ret
 
-def reconstruct_pointcloud(forward_map, fg, cam_transform, proj_transform, cam_int, cam_dist, proj_int, mode="xy", color_image=None, debug=False):
+def reconstruct_pointcloud(forward_map, fg, cam_transform, proj_transform, cam_int, cam_dist, proj_int, mode="ij", color_image=None, debug=False):
     """
     given a dense pixel correspondence map between a camera and a projector, and calibration results, reconstructs a 3D point cloud of the scene.
     :param forward_map: a dense pixel correspondence map between a camera and a projector (see GrayCode.decode)
