@@ -2,9 +2,20 @@ import torch
 import numpy as np
 from .core import is_np, broadcast_batch
 
+def point_line_distance(p, v0, v1):
+    """
+    returns the distance between a point p and a line defined by the points v0 and v1
+    :param p: point to check (3,) or batch of points to check (B, 3)
+    :param v0: first vertex of the line (3,)
+    :param v1: second vertex of the line (3,)
+    :return the distance between the point and the line
+    """
+    return np.linalg.norm(np.cross(v1 - v0, p - v0), axis=-1) / np.linalg.norm(v1 - v0, axis=-1)
+
 def edge_function(v0, v1, p):
     """
     returns the "edge function" which equals half the area of the traingle formed by v0, v1 and p
+    if the result is positive, p is to the right of the line v0v1
     :param v0: first vertex of the triangle (3,)
     :param v1: second vertex of the triangle (3,)
     :param p: point to check (3,) or batch of points to check (B, 3)

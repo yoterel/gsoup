@@ -161,6 +161,27 @@ def test_normalize_vertices():
     v_normalized = gsoup.normalize_vertices(v)
     assert (v_normalized < 1.0).all()
 
+def test_point_to_line_distance():
+    p = np.array([0, 0, 0])
+    v0 = np.array([1, 0, 0])
+    v1 = np.array([2, 0, 0])
+    dist = gsoup.point_line_distance(p, v0, v1)
+    assert dist == 0.0
+    p = np.array([0, 1, 0])
+    dist = gsoup.point_line_distance(p, v0, v1)
+    assert dist == 1.0
+    v0 = np.array([0, 1, 0])
+    v1 = np.array([0, 2, 0])
+    p = np.array([0, 0, 0])
+    dist = gsoup.point_line_distance(p, v0, v1)
+    assert dist == 0.0
+    p = np.array([1, 0, 0])
+    dist = gsoup.point_line_distance(p, v0, v1)
+    assert dist == 1.0
+    p = np.array([[0, 0, 1], [1, 0, 0]])
+    dist = gsoup.point_line_distance(p, v0, v1)
+    assert (dist == np.array([1.0, 1.0])).all()
+
 def test_structures():
     v, f = gsoup.structures.cube()
     gsoup.save_mesh(v, f, "resource/cube.obj")
