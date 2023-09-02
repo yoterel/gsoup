@@ -263,7 +263,7 @@ def qslerp(qa, qb, t):
 
 def ray_ray_intersection(oa, da, ob, db):
     """
-    returns points closest to each corresponding ray of form o+t*d in t he bundle
+    returns points closest to each corresponding ray of form o+t*d in the bundle
     :param oa: origin of ray a (b x 3)
     :param da: direction of ray a (b x 3)
     :param ob: origin of ray b (b x 3)

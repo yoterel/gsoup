@@ -328,11 +328,11 @@ def reconstruct_pointcloud(forward_map, fg, cam_transform, proj_transform, cam_i
     :return: a 3D point cloud of the scene (Nx3)
     """
     cam_pixels = swap_columns(np.argwhere(fg), 0, 1)
+    # todo: account for distortion if supplied
+    # undistorted_cam_points =  cv2.undistortPoints(cam_points, cam_int, cam_dist, P=proj_transform[0]).squeeze()  # equivalent to not setting P and doing K @ points outside
     cam_origins = cam_transform[None, :3, -1]
     cam_directions = (cam_transform[:3, :3] @ (np.linalg.inv(cam_int) @ to_hom(cam_pixels).T)).T
     cam_directions = cam_directions / np.linalg.norm(cam_directions, axis=-1, keepdims=True)
-    # todo: account for distortion if supplied
-    # undistorted_cam_points =  cv2.undistortPoints(cam_points, cam_int, cam_dist, P=proj_transform[0]).squeeze()  # equivalent to not setting P and doing K @ points outside
     if mode == "xy":
         projector_pixels = forward_map[fg]
     elif mode == "ij":
