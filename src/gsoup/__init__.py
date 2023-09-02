@@ -51,6 +51,7 @@ from .transforms import (
     batch_mat2qvec,
 )
 from .geometry_basic import (
+    point_line_distance,
     is_inside_triangle,
     ray_ray_intersection,
     duplicate_faces,

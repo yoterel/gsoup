@@ -4,9 +4,40 @@ from .gsoup_io import save_image, save_images, load_images, load_image
 from .transforms import compose_rt
 from .core import to_8b, to_hom, swap_columns
 from .image import change_brightness
-from .geometry_basic import ray_ray_intersection
+from .geometry_basic import ray_ray_intersection, point_line_distance
 from pathlib import Path
 from scipy.interpolate import LinearNDInterpolator
+from scipy.spatial import ConvexHull
+
+def blend_intensity_multi_projectors(forward_maps, fgs, proj_whs, mode="ij"):
+    """
+    given an image of the overlapping region of two or more projectors, and dense mappings between camera and all projectors pixels, computes an alpha mask per projector for seamless projection
+    based on: "Multiprojector Displays using Camera-Based Registration".
+    :param forward_maps: a list of forward maps each of (proj_hi x proj_wi x 2) uint32 corresponding to projectors i resolution
+    :param fgs: a list of foreground masks each of (proj_hi x proj_wi) bool corresponding to projectors i resolution
+    :proj_whs: a list of projector resolutions (proj_wi, proj_hi) as tuples
+    :param mode: "xy" or "ij" depending on the order of the last channel of forward_map (see GrayCode.decode)
+    :return: a list of alpha masks to use per projector i of size (proj_hi x proj_wi x 1) uint8
+    """
+    cam_wh = forward_maps[0].shape[:2]
+    multi_proj_map = np.ones((len(forward_maps), cam_wh[1], cam_wh[0], 1), dtype=np.float)
+    for i in range(len(forward_maps)):
+        points = np.where(fgs[i])
+        convex_hull = ConvexHull(points)
+        hull_points = [points[simplex] for simplex in convex_hull.simplices] + [points[convex_hull.simplices[0]]]
+        hull_edges = np.array([[hull_points[i], hull_points[i+1]] for i in range(len(hull_points)-1)])
+        distances = np.empty(len(hull_edges), len(points))
+        for j, edge in enumerate(hull_edges):
+            distances[j] = point_line_distance(points, edge[0], edge[1])
+        distances = distances.min(axis=0)
+        multi_proj_map[i, points] = distances
+    multi_proj_map = multi_proj_map / multi_proj_map.sum(axis=0, keepdims=True)
+    multi_proj_map = to_8b(multi_proj_map)
+    masks = []
+    for fmap, fg, proj_wh in zip(forward_maps, fgs, proj_whs):
+        bmap = compute_backward_map(proj_wh, fmap, fg, mode=mode)
+        masks.append(multi_proj_map[bmap])
+    return masks
 
 def warp_image(backward_map, desired_image, cam_wh=None, mode="xy", output_path=None):
     """
@@ -83,7 +114,7 @@ def compute_backward_map(proj_wh, forward_map, foreground, mode="ij", interpolat
 def naive_color_compensate(target_image, all_white_image, all_black_image, cam_width, cam_height, brightness_decrease=-127, projector_gamma=2.2, output_path=None, debug=False):
     """
     color compensate a projected image such that it appears closer to a target image from the perspective of a camera
-    loosly based on "Embedded entertainment with smart projectors"
+    based on "Embedded entertainment with smart projectors".
     :param target_image the desired image path from the perspective of the camera
     :param all_white_image a path to picture taken by camera when projector had all pixels fully on (float32)
     :param all_black_image a path to picture taken by camera when projector had all pixels fully off (float32)
@@ -117,7 +148,7 @@ def calibrate_procam(proj_wh, capture_dir,
                      output_dir=None, debug=False):
     """
     calibrates a projection-camera pair using local homographies
-    based on "Simple, accurate, and robust projector-camera calibration."
+    based on "Simple, accurate, and robust projector-camera calibration".
     note1: the calibration poses some reasonable constraints on the projector-camera pair:
     1) projector is assumed to have no distortion, and a square pixel aspect ratio.
     2) camera is assumed to have a square pixel aspect ratio, and principle axis is assumed to be the center of the image.
@@ -432,7 +463,8 @@ class GrayCode:
         :param mode: "xy" or "ij" decides the order of last dimension coordinates in the output (ij -> height first, xy -> width first)
         :param output_dir: if not None, saves the decoded images to this directory
         :param debug: if True, visualizes the map in an image using the red and green channels where R=X, G=Y, B=0, X increases from left to right, Y increases from top to bottom
-        :return: a 2D numpy array of shape (height, width, 2) mapping from camera pixels to projector pixels, and a foreground mask (height, width)
+        :return: a 2D numpy array of shape (height, width, 2) uint32 mapping from camera pixels to projector pixels
+        and a foreground mask (height, width) of booleans
         """
         if captures.ndim != 4:
             raise ValueError("captures must be a 4D numpy array")
