@@ -495,6 +495,7 @@ class GrayCode:
             raise ValueError("mode must be 'ij' or 'xy'")
         if output_dir is not None:
             np.save(Path(output_dir, "forward_map.npy"), forward_map)
+            np.save(Path(output_dir, "fg.npy"), fg)
             if debug:
                 save_images(imgs_binary[..., None], Path(output_dir, "imgs_binary"))
                 save_image(fg, Path(output_dir, "foreground.png"))

@@ -142,7 +142,9 @@ def poses_static_view(camera_poses=None, meshes=None, pointclouds=None, group_ca
             gviewer.register_pointcloud("pc_{}".format(i), pointcloud, radius=1e-4)
     gviewer.show()
 
-def calibration_static_view(camera_pose, projector_pose, camera_wh, projector_wh, camera_intrinsics=None, camera_distortion=None, projector_intrinsics=None, forward_map=None, fg=None, mode="xy"):
+def calibration_static_view(camera_pose, projector_pose, camera_wh, projector_wh,
+                            camera_intrinsics=None, camera_distortion=None, projector_intrinsics=None,
+                            forward_map=None, fg=None, RGB_color_image=None, mode="xy"):
     """
     visualizes a procam pair reconstruction
     :param camera_pose: (4, 4) np array of camera to world transform
@@ -159,6 +161,9 @@ def calibration_static_view(camera_pose, projector_pose, camera_wh, projector_wh
     gviewer.init(height=1024, width=1024)
     gviewer.ps.set_up_dir("z_up")
     edge_rad = 0.0005
+    typical_scale = (np.linalg.norm(camera_pose[:-1, :]) + np.linalg.norm(projector_pose[:-1, :])) / 2
+    camera_pose[:-1, :] /= typical_scale
+    projector_pose[:-1, :] /= typical_scale
     v_aabb, e_aabb, c_aabb = structures.get_aabb_coords()
     aabb_network = gviewer.ps.register_curve_network("aabb", v_aabb, e_aabb, radius=edge_rad)
     aabb_network.add_color_quantity("color", c_aabb, defined_on='edges', enabled=True)
@@ -167,8 +172,8 @@ def calibration_static_view(camera_pose, projector_pose, camera_wh, projector_wh
     gizmo_network.add_color_quantity("color", c_gizmo, defined_on='edges', enabled=True)
     coa = np.zeros((1, 3))
     gviewer.register_pointcloud("center_of_world", coa, c=np.array([1., 1., 1.])[None, :], radius=0.005, mode="sphere")
-    v_tot, e_tot, c_tot = gviewer.register_camera("camera", camera_pose[None, ...], edge_rad, True)
-    v_tot, e_tot, c_tot = gviewer.register_camera("projector", projector_pose[None, ...], edge_rad, True)
+    v_tot, e_tot, c_tot = gviewer.register_camera("camera", camera_pose[None, ...], edge_rad, True, 1.0, 10.0)
+    v_tot, e_tot, c_tot = gviewer.register_camera("projector", projector_pose[None, ...], edge_rad, True, 1.0, 10.0)
     camera_pixels = pixels_in_world_space(camera_wh, camera_intrinsics, camera_pose)
     projector_pixels = pixels_in_world_space(projector_wh, projector_intrinsics, projector_pose)
     # camera_screen_pc = gviewer.register_pointcloud("camera_screen", camera_pixels, radius=0.0002)
@@ -179,7 +184,7 @@ def calibration_static_view(camera_pose, projector_pose, camera_wh, projector_wh
     cam_pixels, projector_pixels = reconstruct_pointcloud(forward_map, fg,
                                                           camera_pose, projector_pose,
                                                           camera_intrinsics, camera_distortion, projector_intrinsics,
-                                                          mode=mode, color_image=load_image("D:/src/gsoup/tests/tests_resource/correspondence/0025.png")[..., :3], debug=True)
+                                                          mode=mode, color_image=RGB_color_image, debug=True)
     reconst = gviewer.register_pointcloud("reconstruction", points[:, :3], c=points[:, 3:], radius=0.0002)
     t = np.linspace(0, 3, 50)
     cam_ray_points = cam_origins[0] + t[:, None]*cam_directions[0][None, :]
