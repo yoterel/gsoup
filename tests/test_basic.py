@@ -191,9 +191,19 @@ def test_structures():
     v, f = gsoup.structures.icosehedron()
     gsoup.save_mesh(v, f, "resource/ico.obj")
     gsoup.save_mesh(v, f, "resource/ico.ply")
-    gsoup.save_mesh(v, f, "resource/ico_vcolor.ply", vertex_colors=np.random.randint(0, 255, size=v.shape).astype(np.uint8))
+    vc = np.random.randint(0, 255, size=v.shape).astype(np.uint8)
+    gsoup.save_mesh(v, f, "resource/ico_vcolor.ply", vertex_colors=vc)
+    v1, f1, vc1 = gsoup.load_mesh("resource/ico_vcolor.ply", return_vert_color=True)
+    assert np.allclose(v, v1)
+    assert np.allclose(f, f1)
+    assert np.allclose(vc, vc1*255.0)
     gsoup.save_mesh(v, f, "resource/ico_fcolor.ply", face_colors=np.random.randint(0, 255, size=f.shape).astype(np.uint8))
     gsoup.save_pointcloud(v, "resource/ico_pc.ply")
+    v1, f1 = gsoup.load_mesh("resource/ico_pc.ply")  # loads a pointcloud as a mesh
+    assert np.allclose(v, v1)
+    assert f1 == []
+    v1 = gsoup.load_pointcloud("resource/ico_pc.ply")
+    assert np.allclose(v, v1)
     v1, f1 = gsoup.load_mesh("resource/ico.obj")
     assert np.allclose(v, v1)
     assert np.allclose(f, f1)
@@ -391,7 +401,7 @@ def test_procam():
     cam_int, cam_dist,\
     proj_int, proj_dist,\
     proj_transform = result["cam_intrinsics"], result["cam_distortion"], result["proj_intrinsics"], result["proj_distortion"], result["proj_transform"]
-    proj_transform = cam_transform @ np.linalg.inv(proj_transform)  # c2w @ p2c = p2w
+    proj_transform = cam_transform @ np.linalg.inv(proj_transform)  # p2w = c2w @ p2c
     ### end calib ###
     # calibration_static_view(cam_transform, proj_transform, (800, 800), (800, 800), cam_int, cam_dist, proj_int, forward_map, fg, mode)
     pc = gsoup.reconstruct_pointcloud(forward_map, fg, cam_transform, proj_transform, cam_int, cam_dist, proj_int, mode=mode)

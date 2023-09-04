@@ -87,7 +87,8 @@ from .gsoup_io import (
     load_images,
     load_mesh,
     save_pointcloud,
-    save_pointclouds
+    save_pointclouds,
+    load_pointcloud
 )
 
 from .image import (

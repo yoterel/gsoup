@@ -195,16 +195,54 @@ def load_mesh(path: Path,
     :param to_torch: if True, returns a torch tensor
     :param device: device to load tensor to
     :param verbose: if True, prints out information about the mesh
-    :return: (V x 3) tensor of vertices, (F x 3) tensor of faces, and optionally (V x 3) tensor of normals
+    :return: (V x 3) tensor of vertices, (F x 3) tensor of faces, and more depending on flags
     """
     path = Path(path)
-    if path.suffix != ".obj":
-        raise ValueError("Only .obj format is supported for loading")
-    return load_obj(path,
-                    return_vert_uvs=return_vert_uvs,
-                    return_vert_norms=return_vert_norms,
-                    return_vert_color=return_vert_color,
-                    to_torch=to_torch, device=device, verbose=verbose)
+    supported = [".obj", ".ply"]
+    if path.suffix not in supported:
+        raise ValueError("Only {} formats are supported for loading".format(supported))
+    if path.suffix == ".obj":
+        return load_obj(path,
+                        return_vert_uvs=return_vert_uvs,
+                        return_vert_norms=return_vert_norms,
+                        return_vert_color=return_vert_color,
+                        to_torch=to_torch, device=device, verbose=verbose)
+    elif path.suffix == ".ply":
+        if return_vert_uvs or return_vert_norms:
+            raise ValueError("current ply parser does not support vertex uvs or normals")
+        return load_ply(path,
+                        return_vert_color=return_vert_color,
+                        to_torch=to_torch, device=device, verbose=verbose)
+    else:
+        raise ValueError("Only {} formats are supported for loading".format(supported))
+
+def load_ply(path: Path,
+             return_vert_color=False,
+             to_torch=False, device=None, verbose=True):
+    """
+    :param path: path to ply file
+    :return_vert_color: if True, returns a (V x 3) tensor of vertex colors in addition to vertices and faces
+    :param to_torch: if True, returns a torch tensor
+    :param device: device to load tensor to
+    :return: (V x 3) tensor, (F x 3) tensor, and optionally (V x 3) tensor
+    """
+    path = Path(path)
+    if not path.exists():
+        raise ValueError("Path does not exist")
+    if not path.is_file():
+        raise ValueError("Path must be a file")
+    if path.suffix != ".ply":
+        raise ValueError("Only .ply are supported")
+    v, f, vn, vc = parse_ply(path, verbose=verbose)
+    if to_torch and device is not None:
+        v = torch.tensor(v, dtype=torch.float, device=device)
+        f = torch.tensor(f, dtype=torch.long, device=device)
+        if return_vert_color and vc is not None:
+            vc = torch.tensor(vc, dtype=torch.float, device=device)
+    if return_vert_color:
+        return v, f, vc
+    else:
+        return v, f
 
 def load_obj(path: Path,
              return_vert_uvs=False,
@@ -215,7 +253,7 @@ def load_obj(path: Path,
     :param path: path to obj file
     :param to_torch: if True, returns a torch tensor
     :param device: device to load tensor to
-    :return: (V x 3) tensor, (F x 3) tensor, and optionally (V x 3) tensor
+    :return: (V x 3) tensor, (F x 3) tensor, and more depending on flags
     """
     path = Path(path)
     if not path.exists():
@@ -254,6 +292,99 @@ def load_obj(path: Path,
         return v, f, vc
     else:
         return v, f
+
+def parse_ply(path, verbose=True):
+    """
+    A simple (and naive) ply parser
+    currently supports ascii format only.
+    currently supports vertex (and optionally their color) and triangular face elements only
+    """
+    verts = []
+    faces = []
+    vert_colors = []
+    vert_norms = []
+    n_faces = 0
+    n_vertices = 0
+    has_vert_color = False
+    path = Path(path)
+    with open(path, 'r') as ply_file:
+        lines = ply_file.readlines()
+        lines = [x.strip() for x in lines]
+    try:
+        end_header_index = lines.index("end_header")
+    except ValueError:
+        raise ValueError("ply file header corrupted (no 'end_header' found)")
+    header = lines[:end_header_index]
+    data = lines[end_header_index+1:]
+    if header[0] != "ply":
+        raise ValueError("ply file header corrupted ('ply' keyword not found in first line)")
+    if header[1].split()[1] != "ascii":
+        raise ValueError("only ascii ply files are supported")
+    vert_properties = []
+    found_vertex_element = False
+    found_face_element = False
+    for line in header[2:]:
+        split = line.split()
+        if split[0] == "comment":
+            continue
+        if split[0] == "element":
+            found_vertex_element = False
+            found_face_element = False
+            if split[1] == "vertex":
+                n_vertices = int(split[2])
+                found_vertex_element = True
+            elif split[1] == "face":
+                n_faces = int(split[2])
+                found_face_element = True
+            else:
+                raise ValueError("ply file contains elements other than verticies or faces, which are not supported.")
+        if split[0] == "property":
+            if found_vertex_element:
+                vert_properties.append((split[2], split[1]))
+            elif found_face_element:
+                pass  # todo: support face properties
+            else:
+                raise ValueError("ply heder currupted (property found before element)")
+    if len(vert_properties) == 0:
+        raise ValueError("ply file header corrupted (no vertex properties found)")
+    vert_properties_names = [x[0] for x in vert_properties]
+    if "x" not in vert_properties_names or "y" not in vert_properties_names or "z" not in vert_properties_names:
+        raise ValueError("ply file header corrupted (could not find xyz properties for vertices)")
+    if "red" in vert_properties_names and "green" in vert_properties_names and "blue" in vert_properties_names:
+        has_vert_color = True
+    n_vert_properties = len(vert_properties)
+    result = {x[0]: [] for x in vert_properties}
+    for line in data[:n_vertices]:
+        split = line.split()
+        if len(split) != n_vert_properties:
+            raise ValueError("ply file data corrupted (number of vertex properties does not match header)")
+        for i, prop in enumerate(vert_properties_names):
+            result[prop].append(split[i])
+    verts = np.stack([np.array(result["x"], dtype=np.float32),
+                      np.array(result["y"], dtype=np.float32),
+                      np.array(result["z"], dtype=np.float32)], axis=1)
+    if len(verts) != n_vertices:
+        raise ValueError("ply file data corrupted (number of vertices does not match header)")
+    if has_vert_color:
+        vert_colors = np.stack([np.array(result["red"], dtype=np.float32),
+                                np.array(result["green"], dtype=np.float32),
+                                np.array(result["blue"], dtype=np.float32)], axis=1)
+        color_dtype = vert_properties[vert_properties_names.index("red")][1]
+        if color_dtype == "uchar":
+            vert_colors = vert_colors / 255.0
+        if len(vert_colors) != n_vertices:
+            raise ValueError("ply file data corrupted (number of vertex colors does not match header)")
+    if n_faces > 0:
+        for line in data[n_vertices:]:
+            split = line.split()
+            if split[0] != "3":
+                raise ValueError("only triangular faces are supported")
+            faces.append([int(x) for x in split[1:]])
+        faces = np.stack(faces)
+        if len(faces) != n_faces:
+            raise ValueError("ply file data corrupted (number of faces does not match header)")
+    return verts, faces, vert_norms, vert_colors
+            
 
 def parse_obj(path, verbose=True):
     """
@@ -439,7 +570,7 @@ def save_ply(vertices, path, faces=None, vertex_colors=None, face_colors=None, v
         if type(face_colors) == torch.Tensor:
             face_colors = to_np(face_colors)
         if face_colors.dtype != np.uint8:
-            raise ValueError("Faces colorss must be of type uint8")
+            raise ValueError("Faces colors must be of type uint8")
         if face_colors.shape != faces.shape:
             raise ValueError("Faces colors must be same shape as vertices")
         if np.isnan(face_colors).any():
@@ -528,6 +659,42 @@ def save_pointcloud(vertices, path, vertex_colors=None, vertex_normals=None):
         if vertex_normals.shape != vertices.shape:
             raise ValueError("Vertex normals must have same shape as vertices")
     save_ply(vertices, path, vertex_colors=vertex_colors, vertex_normals=vertex_normals)
+
+def load_pointcloud(path, 
+                    return_vert_norms=False,
+                    return_vert_color=False,
+                    to_torch=False, device=None, verbose=True):
+    """
+    :param path: path to ply file
+    :param to_torch: if True, returns a torch tensor
+    :param device: device to load tensor to
+    :return: (V x 3) np array (or torch tensor), and more depending on flags
+    """
+    path = Path(path)
+    supported = [".ply"]
+    if path.suffix not in supported:
+        raise ValueError("Only {} formats are supported for loading".format(supported))
+    if not path.exists():
+        raise ValueError("Path does not exist")
+    if not path.is_file():
+        raise ValueError("Path must be a file")
+    v, _, vn, vc  = parse_ply(path, verbose=verbose)
+    if to_torch and device is not None:
+        v = torch.tensor(v, dtype=torch.float, device=device)
+        if return_vert_norms and vn is not None:
+            vn = torch.tensor(vn, dtype=torch.float, device=device)
+        if return_vert_color and vc is not None:
+            vc = torch.tensor(vc, dtype=torch.float, device=device)
+    # very ew. consider returning a dict / named tuple ?
+    if return_vert_norms:
+        if return_vert_color:
+            return v, vc, vn
+        else:
+            return v, vn
+    elif return_vert_color:
+        return v, vc
+    else:
+        return v
 
 def save_pointclouds(vertices, path, file_names: list = [], vertex_colors=None, vertex_normals=None):
     """
