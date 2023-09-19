@@ -44,10 +44,10 @@ def poses_slider_callback():
             ui_float = len(poses)-1
         v_tot, e_tot, c_tot = gviewer.register_camera("poses", poses[int(ui_float)], edge_rad, group=True)
 
-def pcs_slide_view(v, v_attribute):
+def pcs_slide_view(v, v_attribute=None):
     """
-    given some vertices tXVx3 and faces tXFx3
-    show the mesh as it changes through time t and allow scrolling through using a slider.
+    given some point cloud tXVx3
+    show the point cloud as it changes through time t and allow scrolling through using a slider.
     """
     global pcs_v, pcs_attribute
     gviewer.init()
@@ -61,7 +61,10 @@ def pcs_slide_view(v, v_attribute):
     gizmo_network = gviewer.ps.register_curve_network("gizmo", v_gizmo, e_gizmo, radius=edge_rad)
     gizmo_network.add_color_quantity("color", c_gizmo, defined_on='edges', enabled=True)
     pcs_v = v
-    pcs_attribute = v_attribute
+    if v_attribute is None:
+        pcs_attribute = [None]
+    else:
+        pcs_attribute = v_attribute
     gviewer.ps.set_user_callback(pcs_slider_callback)
     gviewer.ps.set_up_dir("z_up")
     gviewer.register_pointcloud("pc", pcs_v[0], s=pcs_attribute[0], radius=0.0006)
