@@ -3,6 +3,7 @@ import numpy as np
 from .core import to_hom
 from .geometry_basic import get_edges, edge_contraction
 
+
 def compute_incident_triangles(f):
     """
     compute the incident triangles per vertex
@@ -16,6 +17,7 @@ def compute_incident_triangles(f):
             incident_triangles[vertex].append(i)
     return incident_triangles
 
+
 def compute_quadtratic_surface(v, f):
     """
     given a mesh, compute the quadratic surface coefficients per vertex in a tensor of size Vx4x4
@@ -26,10 +28,10 @@ def compute_quadtratic_surface(v, f):
     """
     e1 = v[f[:, 1]] - v[f[:, 0]]
     e2 = v[f[:, 2]] - v[f[:, 0]]
-    e1 = e1 / np.linalg.norm(e1, axis=-1)[: ,None]
-    e2 = e2 / np.linalg.norm(e2, axis=-1)[: ,None]
+    e1 = e1 / np.linalg.norm(e1, axis=-1)[:, None]
+    e2 = e2 / np.linalg.norm(e2, axis=-1)[:, None]
     n = np.cross(e1, e2)
-    n = n / np.linalg.norm(n, axis=-1)[: ,None]
+    n = n / np.linalg.norm(n, axis=-1)[:, None]
     d = ((-v[f[:, 0]])[:, None, :] @ n[:, :, None]).squeeze()
     Qf = np.zeros((f.shape[0], 4, 4), dtype=np.float32)
     Qf[:, :3, :3] = n[:, :, None] @ n[:, None, :]
@@ -38,6 +40,7 @@ def compute_quadtratic_surface(v, f):
     Qf[:, -1, -1] = d * d
     Qv = distribute_field(v, f, Qf)
     return Qv
+
 
 def compute_contraction_costs(v_hats, valid_pairs, Qv):
     """
@@ -51,6 +54,7 @@ def compute_contraction_costs(v_hats, valid_pairs, Qv):
     Q_hats = np.sum(Qv[valid_pairs], axis=1)
     return (v_hats[:, None, :] @ (Q_hats @ v_hats[:, :, None])).squeeze()
 
+
 def compute_v_hats(v, valid_pairs, Qv):
     """
     computes the optimal vertex positions for each valid pair of vertices given the quadratic surface coefficients of contracting the pairs
@@ -63,10 +67,17 @@ def compute_v_hats(v, valid_pairs, Qv):
     Q_hats = np.sum(Qv[valid_pairs], axis=1)
     Q_hats[:, -1, :] = np.array([0, 0, 0, 1])[None, :]
     mask = np.linalg.det(Q_hats) != 0
-    v_hats[mask] = (np.linalg.inv(Q_hats[mask]) @ np.array([0, 0, 0, 1])[None, :, None]).squeeze()[:, :3]  # d(cost)/d(v_hat) = 0
+    v_hats[mask] = (
+        np.linalg.inv(Q_hats[mask]) @ np.array([0, 0, 0, 1])[None, :, None]
+    ).squeeze()[
+        :, :3
+    ]  # d(cost)/d(v_hat) = 0
     # note: orig paper searches for the minimum along the segment between the two vertices if Q_hat is singular
-    v_hats[~mask] = np.mean(v[valid_pairs[~mask]], axis=1)  # if Q_hats is singular, use the mean of the two vertices
+    v_hats[~mask] = np.mean(
+        v[valid_pairs[~mask]], axis=1
+    )  # if Q_hats is singular, use the mean of the two vertices
     return v_hats
+
 
 def qem(v: np.ndarray, f: np.ndarray, budget: int):
     """
@@ -87,6 +98,7 @@ def qem(v: np.ndarray, f: np.ndarray, budget: int):
         lowest_cost = np.argmin(costs)
         v, f = edge_contraction(v, f, valid_pairs[lowest_cost], v_hats[lowest_cost])
     return v, f
+
 
 def distribute_field(v, f, field, avg=False):
     """
@@ -109,9 +121,12 @@ def distribute_field(v, f, field, avg=False):
         for vertex in face:
             field_per_vertex[vertex] += field[i]
     if avg:
-        n_incident_triangles = np.array([len(triangles) for triangles in incident_triangles])
+        n_incident_triangles = np.array(
+            [len(triangles) for triangles in incident_triangles]
+        )
         field_per_vertex /= n_incident_triangles[..., None]
     return field_per_vertex
+
 
 def distribute_scalar_field(num_vertices, f, per_face_scalar_field, avg=False):
     """
@@ -126,15 +141,28 @@ def distribute_scalar_field(num_vertices, f, per_face_scalar_field, avg=False):
     incident_face_areas = torch.zeros([num_vertices, 1], device=device)
     f_unrolled = f.flatten()
     face_indices_repeated_per_vertex = torch.arange(f.shape[0], device=f.device)
-    face_indices_repeated_per_vertex = torch.repeat_interleave(face_indices_repeated_per_vertex, repeats=3)
-    face_areas_repeated_per_face = per_face_scalar_field[face_indices_repeated_per_vertex].unsqueeze(-1)
-    incident_face_areas = torch.index_add(incident_face_areas, dim=0, index=f_unrolled,
-                                          source=face_areas_repeated_per_face)
+    face_indices_repeated_per_vertex = torch.repeat_interleave(
+        face_indices_repeated_per_vertex, repeats=3
+    )
+    face_areas_repeated_per_face = per_face_scalar_field[
+        face_indices_repeated_per_vertex
+    ].unsqueeze(-1)
+    incident_face_areas = torch.index_add(
+        incident_face_areas,
+        dim=0,
+        index=f_unrolled,
+        source=face_areas_repeated_per_face,
+    )
     if avg:
-        neighbors = torch.index_add(torch.zeros_like(incident_face_areas), dim=0, index=f_unrolled,
-                                    source=torch.ones_like(face_areas_repeated_per_face))
+        neighbors = torch.index_add(
+            torch.zeros_like(incident_face_areas),
+            dim=0,
+            index=f_unrolled,
+            source=torch.ones_like(face_areas_repeated_per_face),
+        )
         incident_face_areas = incident_face_areas / neighbors
     return incident_face_areas
+
 
 def distribute_vector_field(num_vertices, f, per_face_vector_field):
     """
@@ -148,10 +176,15 @@ def distribute_vector_field(num_vertices, f, per_face_vector_field):
     incident_face_areas = torch.zeros([num_vertices, 1], device=device)
     f_unrolled = f.flatten()
     face_indices_repeated_per_vertex = torch.arange(f.shape[0], device=f.device)
-    face_indices_repeated_per_vertex = torch.repeat_interleave(face_indices_repeated_per_vertex, repeats=3)
+    face_indices_repeated_per_vertex = torch.repeat_interleave(
+        face_indices_repeated_per_vertex, repeats=3
+    )
     normals_repeated_per_face = per_face_vector_field[face_indices_repeated_per_vertex]
     normals_repeated_per_face = normals_repeated_per_face
-    incident_face_vectors = torch.zeros([num_vertices,per_face_vector_field.shape[-1]], device=device)
-    incident_face_vectors = torch.index_add(incident_face_vectors, dim=0, index=f_unrolled,
-                                            source=normals_repeated_per_face)
+    incident_face_vectors = torch.zeros(
+        [num_vertices, per_face_vector_field.shape[-1]], device=device
+    )
+    incident_face_vectors = torch.index_add(
+        incident_face_vectors, dim=0, index=f_unrolled, source=normals_repeated_per_face
+    )
     return incident_face_vectors

@@ -7,21 +7,31 @@ import ffmpeg
 from .image import resize_images_naive
 import subprocess
 
+
 def get_ffmpeg_version():
     """
     :return: ffmpeg version
     """
     try:
-        ffmpeg_output = subprocess.run(["ffmpeg", "-version"], capture_output=True, text=True).stdout
+        ffmpeg_output = subprocess.run(
+            ["ffmpeg", "-version"], capture_output=True, text=True
+        ).stdout
         parts = ffmpeg_output.split()
         version = parts[parts.index("version") + 1]
         if version[0] != "5":
-            print("Warning, detected ffmpeg version: {}. Video module May fail for versions lower than 5".format(version))
+            print(
+                "Warning, detected ffmpeg version: {}. Video module May fail for versions lower than 5".format(
+                    version
+                )
+            )
     except ValueError:
         print("Warning, could not detect ffmpeg version. Video module May fail")
     except FileNotFoundError:
         print("Warning, ffmpeg not found. Video module May fail")
+
+
 get_ffmpeg_version()
+
 
 class FPS:
     """
@@ -32,16 +42,19 @@ class FPS:
             # do something
             print(fps())
     """
-    def __init__(self,avarageof=50):
+
+    def __init__(self, avarageof=50):
         self.frametimestamps = collections.deque(maxlen=avarageof)
+
     def __call__(self):
         self.frametimestamps.append(time.time())
         nominator = len(self.frametimestamps)
         denominator = self.frametimestamps[-1] - self.frametimestamps[0]
-        if(len(self.frametimestamps) > 1) and (denominator != 0):
+        if (len(self.frametimestamps) > 1) and (denominator != 0):
             return nominator / denominator
         else:
             return 0.0
+
 
 def get_video_info(video_path):
     """
@@ -53,14 +66,19 @@ def get_video_info(video_path):
     if not video_path.exists():
         raise FileNotFoundError("Video file not found: {}".format(video_path))
     probe = ffmpeg.probe(str(video_path))
-    video_stream = next((stream for stream in probe['streams'] if stream['codec_type'] == 'video'), None)
-    width = int(video_stream['width'])
-    height = int(video_stream['height'])
-    fps = float(video_stream['r_frame_rate'].split('/')[0]) / float(video_stream['r_frame_rate'].split('/')[1])
-    frame_count = int(video_stream['nb_frames'])
+    video_stream = next(
+        (stream for stream in probe["streams"] if stream["codec_type"] == "video"), None
+    )
+    width = int(video_stream["width"])
+    height = int(video_stream["height"])
+    fps = float(video_stream["r_frame_rate"].split("/")[0]) / float(
+        video_stream["r_frame_rate"].split("/")[1]
+    )
+    frame_count = int(video_stream["nb_frames"])
     # codec_name = video_stream['codec_name']
     # format_name = probe['format']['format_name']
     return height, width, fps, frame_count
+
 
 def get_frame_timestamps(video_path):
     """
@@ -70,7 +88,9 @@ def get_frame_timestamps(video_path):
     """
     video_path = Path(video_path)
     probe = ffmpeg.probe(str(video_path), show_frames="-show_frames")
-    video_frames = [frame for frame in probe['frames'] if frame['media_type'] == 'video']
+    video_frames = [
+        frame for frame in probe["frames"] if frame["media_type"] == "video"
+    ]
     frame_times = np.array([float(frame["pts_time"]) for frame in video_frames])
     return frame_times
 
@@ -83,13 +103,13 @@ def load_video(video_path, verbose=False):
     """
     h, w, _, _ = get_video_info(video_path)
     out, _ = (
-        ffmpeg
-        .input(str(video_path))
-        .output('pipe:', format='rawvideo', pix_fmt='rgb24')
+        ffmpeg.input(str(video_path))
+        .output("pipe:", format="rawvideo", pix_fmt="rgb24")
         .run(capture_stdout=True, quiet=not verbose)
     )
     video = np.frombuffer(out, np.uint8).reshape([-1, h, w, 3])
     return video
+
 
 def save_video(frames, output_path, fps, lossy=True, verbose=False):
     """
@@ -104,11 +124,16 @@ def save_video(frames, output_path, fps, lossy=True, verbose=False):
     if type(frames) == np.ndarray:
         if lossy:
             (
-            ffmpeg
-            .input('pipe:', format='rawvideo', pix_fmt='rgb24', s='{}x{}'.format(frames.shape[2], frames.shape[1]), r=fps)
-            .output(str(output_path), pix_fmt='yuv420p')
-            .overwrite_output()
-            .run(input=frames.tobytes(), quiet=not verbose)
+                ffmpeg.input(
+                    "pipe:",
+                    format="rawvideo",
+                    pix_fmt="rgb24",
+                    s="{}x{}".format(frames.shape[2], frames.shape[1]),
+                    r=fps,
+                )
+                .output(str(output_path), pix_fmt="yuv420p")
+                .overwrite_output()
+                .run(input=frames.tobytes(), quiet=not verbose)
             )
         else:
             if output_path.suffix == ".avi":
@@ -117,9 +142,14 @@ def save_video(frames, output_path, fps, lossy=True, verbose=False):
                 # todo: figure out lossless pixel formats for other containers
                 raise ValueError("Lossless video only supported for .avi container")
             (
-                ffmpeg
-                .input('pipe:', format='rawvideo', pix_fmt='rgb24', s='{}x{}'.format(frames.shape[2], frames.shape[1]), r=fps)
-                .output(str(output_path), vcodec='rawvideo', pix_fmt=pix_fmt)
+                ffmpeg.input(
+                    "pipe:",
+                    format="rawvideo",
+                    pix_fmt="rgb24",
+                    s="{}x{}".format(frames.shape[2], frames.shape[1]),
+                    r=fps,
+                )
+                .output(str(output_path), vcodec="rawvideo", pix_fmt=pix_fmt)
                 .overwrite_output()
                 .run(input=frames.tobytes(), quiet=not verbose)
             )
@@ -127,7 +157,9 @@ def save_video(frames, output_path, fps, lossy=True, verbose=False):
         if not frames.exists():
             raise FileNotFoundError("Image directory not found: {}".format(frames))
         if not frames.is_dir():
-            raise ValueError("frames must be numpy array or path to directory of images")
+            raise ValueError(
+                "frames must be numpy array or path to directory of images"
+            )
         files = sorted(list(frames.glob("*")))
         if len(files) == 0:
             raise FileNotFoundError("No images found in directory: {}".format(frames))
@@ -145,22 +177,53 @@ def save_video(frames, output_path, fps, lossy=True, verbose=False):
         stderr_stream = subprocess.PIPE if not verbose else None
         if lossy:
             # (
-            args = ["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", "ffmpeg_input.txt", "-framerate", str(fps), str(output_path)]
+            args = [
+                "ffmpeg",
+                "-y",
+                "-f",
+                "concat",
+                "-safe",
+                "0",
+                "-i",
+                "ffmpeg_input.txt",
+                "-framerate",
+                str(fps),
+                str(output_path),
+            ]
         else:
             if output_path.suffix == ".avi":
                 pix_fmt = "bgr24"
             else:
                 # todo: figure out lossless pixel formats for other containers
                 raise ValueError("Lossless video only supported for .avi container")
-            args = ["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", "ffmpeg_input.txt", "-framerate", str(fps), "-pix_fmt", pix_fmt, "-vcodec", "rawvideo", str(output_path)]
-        proc = subprocess.Popen(args, stdin=stdin_stream, stdout=stdout_stream, stderr=stderr_stream)
+            args = [
+                "ffmpeg",
+                "-y",
+                "-f",
+                "concat",
+                "-safe",
+                "0",
+                "-i",
+                "ffmpeg_input.txt",
+                "-framerate",
+                str(fps),
+                "-pix_fmt",
+                pix_fmt,
+                "-vcodec",
+                "rawvideo",
+                str(output_path),
+            ]
+        proc = subprocess.Popen(
+            args, stdin=stdin_stream, stdout=stdout_stream, stderr=stderr_stream
+        )
         out, err = proc.communicate(input)
         retcode = proc.poll()
         if retcode:
-            raise ValueError('ffmpeg', out, err)
+            raise ValueError("ffmpeg", out, err)
         Path("ffmpeg_input.txt").unlink()
     else:
         raise ValueError("frames must be numpy array or path to directory of images")
+
 
 def reverse_video(video_path, output_path=None, verbose=False):
     """
@@ -171,16 +234,16 @@ def reverse_video(video_path, output_path=None, verbose=False):
     """
     h, w, _, _ = get_video_info(video_path)
     out, _ = (
-        ffmpeg
-        .input(str(video_path))
-        .filter('reverse')
-        .output('pipe:', format='rawvideo', pix_fmt='rgb24')
+        ffmpeg.input(str(video_path))
+        .filter("reverse")
+        .output("pipe:", format="rawvideo", pix_fmt="rgb24")
         .run(capture_stdout=True, quiet=not verbose)
     )
     video = np.frombuffer(out, np.uint8).reshape([-1, h, w, 3])
     if output_path is not None:
         save_video(video, output_path)
     return video
+
 
 def compress_video(src, dst, verbose=False):
     """
@@ -191,12 +254,12 @@ def compress_video(src, dst, verbose=False):
     dst = Path(dst)
     dst.parent.mkdir(parents=True, exist_ok=True)
     (
-        ffmpeg
-        .input(str(src))
-        .output(str(dst), vcodec='libx264', crf=23, preset='slow')
+        ffmpeg.input(str(src))
+        .output(str(dst), vcodec="libx264", crf=23, preset="slow")
         .overwrite_output()
         .run(quiet=not verbose)
     )
+
 
 def video_to_images(src, dst, verbose=False):
     """
@@ -205,14 +268,16 @@ def video_to_images(src, dst, verbose=False):
     dst = Path(dst)
     dst.mkdir(parents=True, exist_ok=True)
     (
-        ffmpeg
-        .input(str(src))
-        .output(str(dst / '%04d.png'), vcodec='png', format='image2')
+        ffmpeg.input(str(src))
+        .output(str(dst / "%04d.png"), vcodec="png", format="image2")
         .overwrite_output()
         .run(quiet=not verbose)
     )
 
-def slice_from_video(src, every_n_frames=2, start_frame=0, end_frame=None, verbose=False):
+
+def slice_from_video(
+    src, every_n_frames=2, start_frame=0, end_frame=None, verbose=False
+):
     """
     slices a video into frames
     :param src: path to video
@@ -228,15 +293,15 @@ def slice_from_video(src, every_n_frames=2, start_frame=0, end_frame=None, verbo
     if end_frame is None:
         end_frame = fc + 1
     out, _ = (
-        ffmpeg
-        .input(str(src))
-        .trim(start_frame=start_frame, end_frame=end_frame+1)
-        .filter('select', 'not(mod(n,{}))'.format(every_n_frames))
-        .output('pipe:', format='rawvideo', pix_fmt='rgb24', fps_mode='passthrough')
+        ffmpeg.input(str(src))
+        .trim(start_frame=start_frame, end_frame=end_frame + 1)
+        .filter("select", "not(mod(n,{}))".format(every_n_frames))
+        .output("pipe:", format="rawvideo", pix_fmt="rgb24", fps_mode="passthrough")
         .run(capture_stdout=True, quiet=not verbose)
     )
     video = np.frombuffer(out, np.uint8).reshape([-1, h, w, 3])
     return video
+
 
 def get_frame_from_video(src, frame_index, verbose=False):
     """
@@ -247,20 +312,30 @@ def get_frame_from_video(src, frame_index, verbose=False):
     """
     h, w, _, _ = get_video_info(src)
     out, _ = (
-        ffmpeg
-        .input(str(src))
-        .filter('select', 'eq(n,{})'.format(frame_index))
-        .output('pipe:', format='rawvideo', pix_fmt='rgb24', fps_mode='passthrough')
+        ffmpeg.input(str(src))
+        .filter("select", "eq(n,{})".format(frame_index))
+        .output("pipe:", format="rawvideo", pix_fmt="rgb24", fps_mode="passthrough")
         .run(capture_stdout=True, quiet=not verbose)
     )
     frame = np.frombuffer(out, np.uint8).reshape([h, w, 3])
     return frame
 
+
 class VideoReader:
     """
     A (very) basic video iterator
     """
-    def __init__(self, video_path, h=None, w=None, every_n_frames=1, start_frame=0, end_frame=None, verbose=False):
+
+    def __init__(
+        self,
+        video_path,
+        h=None,
+        w=None,
+        every_n_frames=1,
+        start_frame=0,
+        end_frame=None,
+        verbose=False,
+    ):
         """
         :param video_path: path to video
         :param target_resolution: (h, w) tuple of target resolution (must have common divisor with original resolution)
@@ -272,7 +347,9 @@ class VideoReader:
         if h is not None and w is not None:
             self.th, self.tw = h, w
             if self.h % self.th != 0 or self.w % self.tw != 0:
-                raise ValueError("target resolution must have common divisor with original resolution")
+                raise ValueError(
+                    "target resolution must have common divisor with original resolution"
+                )
         self.start_frame = start_frame
         if end_frame is None:
             self.end_frame = self.fc + 1
@@ -280,11 +357,10 @@ class VideoReader:
             self.end_frame = end_frame
         self.every_n_frames = every_n_frames
         self.stream = (
-            ffmpeg
-            .input(str(self.video_path))
+            ffmpeg.input(str(self.video_path))
             .trim(start_frame=self.start_frame, end_frame=self.end_frame)
-            .filter('select', 'not(mod(n,{}))'.format(self.every_n_frames))
-            .output('pipe:', format='rawvideo', pix_fmt='rgb24', fps_mode='passthrough')
+            .filter("select", "not(mod(n,{}))".format(self.every_n_frames))
+            .output("pipe:", format="rawvideo", pix_fmt="rgb24", fps_mode="passthrough")
             .run_async(pipe_stdout=True, quiet=not verbose)
         )
 
@@ -300,7 +376,9 @@ class VideoReader:
                 raise StopIteration
             frame = np.frombuffer(in_bytes, np.uint8).reshape([self.h, self.w, 3])
             if self.th is not None:
-                frame = resize_images_naive(frame[None, ...], self.th, self.tw, mode="mean").squeeze()
+                frame = resize_images_naive(
+                    frame[None, ...], self.th, self.tw, mode="mean"
+                ).squeeze()
             self.n += 1
             return frame
         else:

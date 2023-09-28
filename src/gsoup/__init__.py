@@ -15,7 +15,7 @@ from .core import (
     broadcast_batch,
     map_range,
     map_to_01,
-    swap_columns
+    swap_columns,
 )
 
 from .transforms import (
@@ -66,14 +66,14 @@ from .geometry_basic import (
     get_center_of_attention,
     scale_poses,
     find_princple_componenets,
-    qslerp
+    qslerp,
 )
 
 from .geometry_advanced import (
     distribute_field,
     distribute_scalar_field,
     distribute_vector_field,
-    qem
+    qem,
 )
 
 from .gsoup_io import (
@@ -88,7 +88,7 @@ from .gsoup_io import (
     load_mesh,
     save_pointcloud,
     save_pointclouds,
-    load_pointcloud
+    load_pointcloud,
 )
 
 from .image import (
@@ -113,7 +113,7 @@ from .image import (
     pad_to_square,
     crop_to_square,
     mask_regions,
-    crop_center
+    crop_center,
 )
 
 from .video import (
@@ -126,7 +126,7 @@ from .video import (
     video_to_images,
     slice_from_video,
     VideoReader,
-    FPS
+    FPS,
 )
 
 from .procam import (
@@ -135,12 +135,9 @@ from .procam import (
     compute_backward_map,
     naive_color_compensate,
     reconstruct_pointcloud,
-    GrayCode
+    GrayCode,
 )
 
-from .sphere_trace import (
-    generate_rays,
-    render
-)
+from .sphere_trace import generate_rays, render
 
 from . import structures

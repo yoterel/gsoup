@@ -2,6 +2,7 @@ import torch
 import numpy as np
 from PIL import Image
 
+
 def is_np(x):
     """
     checks if x is a numpy array or torch tensor (will raise an error if x is neither)
@@ -15,6 +16,7 @@ def is_np(x):
     else:
         raise ValueError("input must be torch.Tensor or np.ndarray")
 
+
 def to_hom(x):
     """
     converts a vector to homogeneous coordinates (concatenates 1 along last dimension)
@@ -25,12 +27,15 @@ def to_hom(x):
         if x.ndim == 1:
             return np.concatenate((x, np.array([1], dtype=x.dtype)))
         else:
-            return np.concatenate((x, np.ones((*x.shape[:-1], 1), dtype=x.dtype)), axis=-1)
+            return np.concatenate(
+                (x, np.ones((*x.shape[:-1], 1), dtype=x.dtype)), axis=-1
+            )
     else:
         if x.ndim == 1:
             return torch.cat((x, torch.ones(1, device=x.device)))
         else:
             return torch.cat((x, torch.ones(*x.shape[:-1], 1, device=x.device)), dim=-1)
+
 
 def homogenize(x, keepdim=False):
     """
@@ -38,10 +43,11 @@ def homogenize(x, keepdim=False):
     :param x: nx3 numpy array
     :return: nx4 numpy array
     """
-    x = (x / x[..., -1:])
+    x = x / x[..., -1:]
     if not keepdim:
         x = x[..., :-1]
     return x
+
 
 def normalize(x, eps=1e-7):
     """
@@ -80,6 +86,7 @@ def broadcast_batch(*args):
                 new_args.append(np.broadcast_to(a, (batch_dim, *a.shape[1:])))
     return new_args
 
+
 def compose_rt(R: np.array, t: np.array, square=False):
     """
     composes a n x 3 x 4 numpy array from rotation and translation.
@@ -95,6 +102,7 @@ def compose_rt(R: np.array, t: np.array, square=False):
         Rt = to_44(Rt)
     return Rt
 
+
 def to_44(mat):
     """
     converts a 3x4 to a 4x4 matrix by concatenating 0 0 0 1
@@ -109,10 +117,13 @@ def to_44(mat):
         to_cat = np.broadcast_to(np.array([0, 0, 0, 1]), (*mat.shape[:-2], 1, 4))
         new_mat = np.concatenate((mat, to_cat), axis=-2)
     else:
-        to_cat = torch.zeros((*mat.shape[:-2], 1, 4), dtype=mat.dtype, device=mat.device)
+        to_cat = torch.zeros(
+            (*mat.shape[:-2], 1, 4), dtype=mat.dtype, device=mat.device
+        )
         to_cat[..., -1] = 1
         new_mat = torch.cat((mat, to_cat), dim=-2)
     return new_mat
+
 
 def to_34(mat: np.array):
     """
@@ -129,6 +140,7 @@ def to_34(mat: np.array):
             raise ValueError("mat must be 4x4")
         return mat[:-1, :]
 
+
 def to_np(arr: torch.Tensor):
     """
     converts a tensor to numpy array
@@ -143,6 +155,7 @@ def to_np(arr: torch.Tensor):
         return np.array(arr)
     return arr.detach().cpu().numpy()
 
+
 def to_numpy(arr: torch.Tensor):
     """
     converts a tensor to numpy array
@@ -150,6 +163,7 @@ def to_numpy(arr: torch.Tensor):
     :return: numpy array
     """
     return to_np(arr)
+
 
 def to_torch(arr: np.array, device="cpu", dtype=None):
     """
@@ -163,6 +177,7 @@ def to_torch(arr: np.array, device="cpu", dtype=None):
         return torch.tensor(arr, device=device)
     else:
         return torch.tensor(arr, dtype=dtype, device=device)
+
 
 def to_8b(x, clip=True):
     """
@@ -189,6 +204,7 @@ def to_8b(x, clip=True):
             return x.type(torch.uint8) * 255
         elif x.dtype == torch.uint8:
             return x
+
 
 def to_float(x, clip=True):
     """
@@ -220,6 +236,7 @@ def to_float(x, clip=True):
         else:
             raise ValueError("unsupported dtype")
 
+
 def to_PIL(x: np.array):
     """
     convert a numpy float array to a PIL image
@@ -233,6 +250,7 @@ def to_PIL(x: np.array):
     else:
         raise ValueError("unsupported array dimensions")
 
+
 def map_range(x, out_min, out_max):
     """
     given an input and a range, maps it to a new range
@@ -242,11 +260,20 @@ def map_range(x, out_min, out_max):
     :return: mapped input
     """
     if type(x) == np.ndarray:
-        return np.clip((x-x.min()) * (out_max-out_min) / (x.max()-x.min()) + out_min, out_min, out_max)
+        return np.clip(
+            (x - x.min()) * (out_max - out_min) / (x.max() - x.min()) + out_min,
+            out_min,
+            out_max,
+        )
     elif type(x) == torch.Tensor:
-        return torch.clamp((x-x.min()) * (out_max-out_min) / (x.max()-x.min()) + out_min, out_min, out_max)
+        return torch.clamp(
+            (x - x.min()) * (out_max - out_min) / (x.max() - x.min()) + out_min,
+            out_min,
+            out_max,
+        )
     else:
         raise ValueError("unsupported type")
+
 
 def map_to_01(x):
     """
@@ -255,6 +282,7 @@ def map_to_01(x):
     :return: mapped input
     """
     return map_range(x, 0, 1)
+
 
 def swap_columns(x, col1_index, col2_index):
     """
@@ -265,4 +293,4 @@ def swap_columns(x, col1_index, col2_index):
     :return: array with swapped columns
     """
     x[:, [col2_index, col1_index]] = x[:, [col1_index, col2_index]]
-    return x 
+    return x

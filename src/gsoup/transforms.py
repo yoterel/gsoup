@@ -2,6 +2,7 @@ import numpy as np
 from .core import to_44, compose_rt, normalize, broadcast_batch, is_np
 import torch
 
+
 def sincos(a, degrees=True):
     """
     sin and cos of an angle
@@ -11,6 +12,7 @@ def sincos(a, degrees=True):
     if degrees:
         a = np.deg2rad(a)
     return np.sin(a), np.cos(a)
+
 
 def translate(t):
     """
@@ -25,6 +27,7 @@ def translate(t):
     mat = np.concatenate((np.eye(3)[None, :, :], t[:, :, None]), axis=-1)
     return to_44(mat)
 
+
 def scale(s):
     """
     creates a scaling matrix from a scaling vector
@@ -38,6 +41,7 @@ def scale(s):
     mat = np.diag(s)
     return to_44(mat)
 
+
 def rotate(a, r):
     """
     creates a rotation matrix from an angle a and an axis of rotation r
@@ -46,10 +50,16 @@ def rotate(a, r):
     r = normalize(r)
     nc = 1 - c
     x, y, z = r
-    return np.array([[x*x*nc +   c, x*y*nc - z*s, x*z*nc + y*s, 0],
-                      [y*x*nc + z*s, y*y*nc +   c, y*z*nc - x*s, 0],
-                      [x*z*nc - y*s, y*z*nc + x*s, z*z*nc +   c, 0],
-                      [           0,            0,            0, 1]])
+    return np.array(
+        [
+            [x * x * nc + c, x * y * nc - z * s, x * z * nc + y * s, 0],
+            [y * x * nc + z * s, y * y * nc + c, y * z * nc - x * s, 0],
+            [x * z * nc - y * s, y * z * nc + x * s, z * z * nc + c, 0],
+            [0, 0, 0, 1],
+        ]
+    )
+
+
 def rotx(a, degrees=True):
     """
     creates a homogeneous 3D rotation matrix around the x axis
@@ -57,10 +67,8 @@ def rotx(a, degrees=True):
     degrees: if True, a is in degrees, else radians
     """
     s, c = sincos(a, degrees)
-    return np.array([[1,0,0,0],
-                      [0,c,-s,0],
-                      [0,s,c,0],
-                      [0,0,0,1]])
+    return np.array([[1, 0, 0, 0], [0, c, -s, 0], [0, s, c, 0], [0, 0, 0, 1]])
+
 
 def roty(a, degrees=True):
     """
@@ -69,10 +77,8 @@ def roty(a, degrees=True):
     degrees: if True, a is in degrees, else radians
     """
     s, c = sincos(a, degrees)
-    return np.array([[c,0,s,0],
-                      [0,1,0,0],
-                      [-s,0,c,0],
-                      [0,0,0,1]])
+    return np.array([[c, 0, s, 0], [0, 1, 0, 0], [-s, 0, c, 0], [0, 0, 0, 1]])
+
 
 def rotz(a, degrees=True):
     """
@@ -81,10 +87,8 @@ def rotz(a, degrees=True):
     degrees: if True, a is in degrees, else radians
     """
     s, c = sincos(a, degrees)
-    return np.array([[c,-s,0,0],
-                      [s,c,0,0],
-                      [0,0,1,0],
-                      [0,0,0,1]])
+    return np.array([[c, -s, 0, 0], [s, c, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]])
+
 
 def find_rigid_transform(A, B):
     """
@@ -109,6 +113,7 @@ def find_rigid_transform(A, B):
     t = centroid_B - R @ centroid_A
     return compose_rt(R[None, :], t[None, :], square=True)
 
+
 def find_affine_transformation(A, B):
     """
     finds best 3d affine transformation between pc a and pc b (in the least squares sense)
@@ -128,11 +133,12 @@ def find_affine_transformation(A, B):
     new_A[2::3, :8] = 0
     new_B = B.flatten()
     if len(A) == 4:
-        #solve linear system
+        # solve linear system
         W = np.linalg.inv(new_A) @ new_B
     else:
         W = np.linalg.lstsq(new_A, new_B, rcond=None)[0]
     return to_44(W.reshape(3, 4))
+
 
 def decompose_affine(A44):
     """
@@ -153,8 +159,8 @@ def decompose_affine(A44):
     Implementation of "Decomposing a matrix into simple transformations".
     """
     A44 = np.asarray(A44)
-    T = A44[:-1,-1]
-    RZS = A44[:-1,:-1]
+    T = A44[:-1, -1]
+    RZS = A44[:-1, :-1]
     # compute scales and shears
     M0, M1, M2 = np.array(RZS).T
     # extract x scale and normalize
@@ -170,7 +176,7 @@ def decompose_affine(A44):
     # orthogonalize M2 with respect to M0 and M1
     sx_sxz = np.dot(M0, M2)
     sy_syz = np.dot(M1, M2)
-    M2 -= (sx_sxz * M0 + sy_syz * M1)
+    M2 -= sx_sxz * M0 + sy_syz * M1
     # extract z scale and normalize
     sz = np.sqrt(np.sum(M2**2))
     M2 /= sz
@@ -180,8 +186,9 @@ def decompose_affine(A44):
     Rmat = np.array([M0, M1, M2]).T
     if np.linalg.det(Rmat) < 0:
         sx *= -1
-        Rmat[:,0] *= -1
+        Rmat[:, 0] *= -1
     return T, Rmat, np.array([sx, sy, sz]), np.array([sxy, sxz, syz])
+
 
 def look_at_np(eye, at, up, opengl=False):
     """
@@ -206,12 +213,13 @@ def look_at_np(eye, at, up, opengl=False):
         c2w = opencv_c2w_to_opengl_c2w(c2w)
     return c2w
 
+
 def look_at_torch(
-        eye:torch.Tensor, #3
-        at:torch.Tensor, #3
-        up:torch.Tensor, #3
-        opengl:bool=False
-    ) -> torch.Tensor: #4,4
+    eye: torch.Tensor,  # 3
+    at: torch.Tensor,  # 3
+    up: torch.Tensor,  # 3
+    opengl: bool = False,
+) -> torch.Tensor:  # 4,4
     """
     creates a lookat transform matrix
     :param eye: where the camera is
@@ -228,11 +236,12 @@ def look_at_torch(
     y = torch.cross(z, x).type(torch.float32)
     y /= torch.norm(y)
     c2w = torch.eye(4, device=z.device)
-    c2w[:3,:3] = torch.stack([x,y,z],dim=1)
-    c2w[:3,3] = eye
+    c2w[:3, :3] = torch.stack([x, y, z], dim=1)
+    c2w[:3, 3] = eye
     if opengl:
         c2w = opencv_c2w_to_opengl_c2w(c2w)
     return c2w
+
 
 def orthographic_projection(l, r, b, t, n, f):
     """
@@ -251,10 +260,15 @@ def orthographic_projection(l, r, b, t, n, f):
     rx = -(r + l) / (r - l)
     ry = -(t + b) / (t - b)
     rz = -(f + n) / (f - n)
-    return np.array([[2.0/dx,0,0,rx],
-                      [0,2.0/dy,0,ry],
-                      [0,0,-2.0/dz,rz],
-                      [0,0,0,1]])
+    return np.array(
+        [
+            [2.0 / dx, 0, 0, rx],
+            [0, 2.0 / dy, 0, ry],
+            [0, 0, -2.0 / dz, rz],
+            [0, 0, 0, 1],
+        ]
+    )
+
 
 def perspective_projection(fovy=45, aspect=1.0, n=0.1, f=100.0):
     """
@@ -265,14 +279,12 @@ def perspective_projection(fovy=45, aspect=1.0, n=0.1, f=100.0):
     :param f: far plane
     :return: 4x4 projection matrix
     """
-    s = 1.0/np.tan(np.deg2rad(fovy)/2.0)
+    s = 1.0 / np.tan(np.deg2rad(fovy) / 2.0)
     sx, sy = s / aspect, s
-    zz = (f+n)/(n-f)
-    zw = 2*f*n/(n-f)
-    return np.array([[sx,0,0,0],
-                      [0,sy,0,0],
-                      [0,0,zz,zw],
-                      [0,0,-1,0]])
+    zz = (f + n) / (n - f)
+    zw = 2 * f * n / (n - f)
+    return np.array([[sx, 0, 0, 0], [0, sy, 0, 0], [0, 0, zz, zw], [0, 0, -1, 0]])
+
 
 def frustum_projection(x0, x1, y0, y1, z0, z1):
     """
@@ -285,18 +297,18 @@ def frustum_projection(x0, x1, y0, y1, z0, z1):
     :param z1: far
     :return: 4x4 projection matrix
     """
-    a = (x1+x0)/(x1-x0)
-    b = (y1+y0)/(y1-y0)
-    c = -(z1+z0)/(z1-z0)
-    d = -2*z1*z0/(z1-z0)
-    sx = 2*z0/(x1-x0)
-    sy = 2*z0/(y1-y0)
-    return np.array([[sx, 0, a, 0],
-                      [ 0,sy, b, 0],
-                      [ 0, 0, c, d],
-                      [ 0, 0,-1, 0]])
+    a = (x1 + x0) / (x1 - x0)
+    b = (y1 + y0) / (y1 - y0)
+    c = -(z1 + z0) / (z1 - z0)
+    d = -2 * z1 * z0 / (z1 - z0)
+    sx = 2 * z0 / (x1 - x0)
+    sy = 2 * z0 / (y1 - y0)
+    return np.array([[sx, 0, a, 0], [0, sy, b, 0], [0, 0, c, d], [0, 0, -1, 0]])
 
-def opengl_project_from_opencv_intrinsics(opencv_intrinsics, width, height, near=0.1, far=100.0, window_coords_inverted=False):
+
+def opengl_project_from_opencv_intrinsics(
+    opencv_intrinsics, width, height, near=0.1, far=100.0, window_coords_inverted=False
+):
     """
     given a matrix K from opencv, returns the corresponding projection matrix for OpenGL ("Eye/Camera/View space -> Clip Space")
     :param opencv_intrinsics: 3x3 intrinsics matrix from opencv
@@ -314,11 +326,16 @@ def opengl_project_from_opencv_intrinsics(opencv_intrinsics, width, height, near
     factor = 1.0
     if window_coords_inverted:
         factor = -1.0
-    opengl_mtx = np.array([[2*fx/width, 0.0, (width - 2*cx)/width, 0.0],
-                           [0.0, factor*2*fy/height, factor*(height - 2*cy)/height, 0.0],
-                           [0.0, 0.0, (-far - near) / (far - near), -2.0*far*near/(far-near)],
-                           [0.0, 0.0, -1.0, 0.0]])
+    opengl_mtx = np.array(
+        [
+            [2 * fx / width, 0.0, (width - 2 * cx) / width, 0.0],
+            [0.0, factor * 2 * fy / height, factor * (height - 2 * cy) / height, 0.0],
+            [0.0, 0.0, (-far - near) / (far - near), -2.0 * far * near / (far - near)],
+            [0.0, 0.0, -1.0, 0.0],
+        ]
+    )
     return opengl_mtx
+
 
 def opencv_intrinsics_from_opengl_project(opengl_project, width, height):
     """
@@ -333,10 +350,9 @@ def opencv_intrinsics_from_opengl_project(opengl_project, width, height):
     fy = opengl_project[1, 1] * height / 2
     cx = width / 2
     cy = height / 2
-    opencv_mtx = np.array([[fx, 0.0, cx],
-                           [0.0, fy, cy],
-                           [0.0, 0.0, 1]])
+    opencv_mtx = np.array([[fx, 0.0, cx], [0.0, fy, cy], [0.0, 0.0, 1]])
     return opencv_mtx
+
 
 def opengl_c2w_to_opencv_c2w(opengl_transforms, is_column_major=False):
     """
@@ -364,13 +380,17 @@ def opengl_c2w_to_opencv_c2w(opengl_transforms, is_column_major=False):
         my_transforms[:, :, 2] *= -1
     return my_transforms.reshape(opengl_transforms.shape)
 
+
 def opencv_c2w_to_opengl_c2w(opencv_transform, to_column_major=False):
     """
     converts coordinates of "vision" (opencv) to OpenGL coordinates by flipping y and z axes
     """
     return opengl_c2w_to_opencv_c2w(opencv_transform, to_column_major)
 
-def create_random_cameras_on_unit_sphere(n_cams, radius, normal=None, opengl=False, device="cpu"):
+
+def create_random_cameras_on_unit_sphere(
+    n_cams, radius, normal=None, opengl=False, device="cpu"
+):
     """
     creates a batch of world2view ("ModelView" matrix) and view2clip ("Projection" matrix) transforms on a unit sphere looking at the center
     :param n_cams: number of cameras
@@ -391,16 +411,19 @@ def create_random_cameras_on_unit_sphere(n_cams, radius, normal=None, opengl=Fal
     locs = locs * radius
     matrices = torch.empty((n_cams, 4, 4), dtype=torch.float32, device=device)
     for i in range(len(locs)):
-        matrices[i] = look_at_torch(locs[i],
-                                    torch.zeros(3, dtype=torch.float32, device=device),
-                                    torch.tensor([0.,0.,1.], device=device),
-                                    opengl=opengl)
+        matrices[i] = look_at_torch(
+            locs[i],
+            torch.zeros(3, dtype=torch.float32, device=device),
+            torch.tensor([0.0, 0.0, 1.0], device=device),
+            opengl=opengl,
+        )
     v2w = matrices  # c2w
     w2v = torch.inverse(v2w)
     v2c = perspective_projection()
     v2c = np.tile(v2c[None, :], (n_cams, 1, 1))
     v2c = torch.tensor(v2c, dtype=torch.float32, device=device)
     return w2v, v2c
+
 
 def pixels_in_world_space(camera_wh, K, Rt):
     """
@@ -410,17 +433,23 @@ def pixels_in_world_space(camera_wh, K, Rt):
     :param Rt: the camera to world matrix 4x4
     :return: np array n x 3 for pixels locations (in world space)
     """
-    x, y = np.meshgrid(np.arange(camera_wh[0], dtype=np.float32),
-                       np.arange(camera_wh[1], dtype=np.float32), indexing='xy')
+    x, y = np.meshgrid(
+        np.arange(camera_wh[0], dtype=np.float32),
+        np.arange(camera_wh[1], dtype=np.float32),
+        indexing="xy",
+    )
     x = x.reshape(-1)[:, None]
     y = y.reshape(-1)[:, None]
     ones = np.ones(len(x))[:, None]
     pixels_image = np.concatenate((x, y, ones), axis=-1)
     pixels_camera = np.linalg.inv(K) @ pixels_image.T
-    pixels_camera_hom = np.concatenate((pixels_camera.T, np.ones(len(pixels_camera.T))[:, None]), axis=-1)
+    pixels_camera_hom = np.concatenate(
+        (pixels_camera.T, np.ones(len(pixels_camera.T))[:, None]), axis=-1
+    )
     pixels_world = Rt @ pixels_camera_hom.T
     pc = pixels_world.T[:, :3]
     return pc
+
 
 def random_qvec(n: int):
     """
@@ -434,14 +463,15 @@ def random_qvec(n: int):
     o = o / denom
     return o
 
+
 def random_affine(ang_range=20.0, trans_range=10.0, scale=2.0):
     """
     generates a random 2D affine transformation matrix
     """
     R = np.eye(3)
-    ang_rot = np.random.uniform(ang_range)-ang_range/2
-    tx = trans_range*np.random.uniform()-trans_range/2
-    ty = trans_range*np.random.uniform()-trans_range/2
+    ang_rot = np.random.uniform(ang_range) - ang_range / 2
+    tx = trans_range * np.random.uniform() - trans_range / 2
+    ty = trans_range * np.random.uniform() - trans_range / 2
     sx = np.random.rand() * scale
     sy = np.random.rand() * scale
     R[0, 0] = np.cos(ang_rot * np.pi / 180)
@@ -457,6 +487,7 @@ def random_affine(ang_range=20.0, trans_range=10.0, scale=2.0):
     H = T @ S @ R
     return H
 
+
 def random_perspective():
     """
     generates a random 2D perspective transformation matrix
@@ -465,6 +496,7 @@ def random_perspective():
     P[2, 0] = np.random.rand() / 100
     P[2, 1] = np.random.rand() / 100
     return P
+
 
 def random_vectors_on_sphere(n, normal=None, device="cpu"):
     """
@@ -485,6 +517,7 @@ def random_vectors_on_sphere(n, normal=None, device="cpu"):
         locs[dot_product < 0] *= -1
     return locs
 
+
 def vec2skew(v):
     """
     returns the skew operator matrix given a vector
@@ -492,6 +525,7 @@ def vec2skew(v):
     :return:   (3, 3)
     """
     return batch_vec2skew(v[None, :])[0]
+
 
 def batch_vec2skew(v):
     """
@@ -506,6 +540,7 @@ def batch_vec2skew(v):
     skew_v = torch.stack([skew_v0, skew_v1, skew_v2], dim=1)  # (B, 3, 3)
     return skew_v  # (B, 3, 3)
 
+
 def batch_rotvec2mat(r: torch.Tensor):
     """so(3) vector to SO(3) matrix
     :param r: (3, ) axis-angle, torch tensor
@@ -516,8 +551,13 @@ def batch_rotvec2mat(r: torch.Tensor):
     skew_r = batch_vec2skew(r)  # (3, 3)
     norm_r = r.norm(dim=-1, keepdim=True)[:, :, None] + 1e-15
     eye = torch.eye(3, dtype=torch.float32, device=r.device)[None, :]
-    R = eye + (torch.sin(norm_r) / norm_r) * skew_r + ((1 - torch.cos(norm_r)) / norm_r ** 2) * (skew_r @ skew_r)
+    R = (
+        eye
+        + (torch.sin(norm_r) / norm_r) * skew_r
+        + ((1 - torch.cos(norm_r)) / norm_r**2) * (skew_r @ skew_r)
+    )
     return R
+
 
 def rotvec2mat(r: torch.Tensor):
     """so(3) vector to SO(3) matrix
@@ -525,6 +565,7 @@ def rotvec2mat(r: torch.Tensor):
     :return:  (3, 3)
     """
     return batch_rotvec2mat(r[None, :])[0]
+
 
 def mat2rotvec(r: torch.Tensor):
     """SO(3) matrix to so(3) vector
@@ -541,6 +582,7 @@ def mat2rotvec(r: torch.Tensor):
     raise NotImplementedError("please verify this function implementation before usage")
     return rotvec * angle2
 
+
 def qvec2mat(qvec):
     """
     Converts a quaternion to a rotation matrix
@@ -548,6 +590,7 @@ def qvec2mat(qvec):
     :return: rotation matrix 3x3
     """
     return batch_qvec2mat(qvec[None, :])[0]
+
 
 def batch_qvec2mat(qvecs):
     """
@@ -568,17 +611,22 @@ def batch_qvec2mat(qvecs):
         r, i, j, k = torch.unbind(qvecs, -1)
         stacking_func = torch.stack
     two_s = 2.0 / (qvecs * qvecs).sum(-1)
-    o = stacking_func([1 - two_s * (j * j + k * k),
-                       two_s * (i * j - k * r),
-                       two_s * (i * k + j * r),
-                       two_s * (i * j + k * r),
-                       1 - two_s * (i * i + k * k),
-                       two_s * (j * k - i * r),
-                       two_s * (i * k - j * r),
-                       two_s * (j * k + i * r),
-                       1 - two_s * (i * i + j * j)],
-                       -1)
+    o = stacking_func(
+        [
+            1 - two_s * (j * j + k * k),
+            two_s * (i * j - k * r),
+            two_s * (i * k + j * r),
+            two_s * (i * j + k * r),
+            1 - two_s * (i * i + k * k),
+            two_s * (j * k - i * r),
+            two_s * (i * k - j * r),
+            two_s * (j * k + i * r),
+            1 - two_s * (i * i + j * j),
+        ],
+        -1,
+    )
     return o.reshape(qvecs.shape[:-1] + (3, 3))
+
 
 def mat2qvec_numpy(R: np.array):
     """
@@ -592,8 +640,8 @@ def mat2qvec_numpy(R: np.array):
     choice = np.argmax(expanded_trace, axis=-1)
     mask = choice != 3
     i = choice[mask]
-    j = (i+1) % 3
-    k = (j+1) % 3
+    j = (i + 1) % 3
+    k = (j + 1) % 3
     ii = np.concatenate((i, i), axis=1)
     ij = np.concatenate((i, j), axis=1)
     ik = np.concatenate((i, k), axis=1)
@@ -602,7 +650,7 @@ def mat2qvec_numpy(R: np.array):
     q[:, 1] = R[:, 0, 2] - R[:, 2, 0]
     q[:, 2] = R[:, 1, 0] - R[:, 0, 1]
     q[:, 3] = 1 + trace
-    q[mask, 0] = 1 - trace + 2*R[ii]
+    q[mask, 0] = 1 - trace + 2 * R[ii]
     q[mask, 1] = R[np.flip(ij)] + R[ij]
     q[mask, 2] = R[np.flip(ik)] + R[ik]
     q[mask, 3] = R[np.flip(jk)] - R[jk]
@@ -620,8 +668,10 @@ def mat2qvec_numpy(R: np.array):
     # return qvec
     return q
 
+
 def mat2qvec(matrix):
     return batch_mat2qvec(matrix[None, :])[0]
+
 
 def batch_mat2qvec(matrix):
     """
@@ -637,14 +687,14 @@ def batch_mat2qvec(matrix):
         matrix.reshape(batch_dim + (9,)), dim=-1
     )
     q = torch.stack(
-            [
-                1.0 + m00 + m11 + m22,
-                1.0 + m00 - m11 - m22,
-                1.0 - m00 + m11 - m22,
-                1.0 - m00 - m11 + m22,
-            ],
-            dim=-1,
-        )
+        [
+            1.0 + m00 + m11 + m22,
+            1.0 + m00 - m11 - m22,
+            1.0 - m00 + m11 - m22,
+            1.0 - m00 - m11 + m22,
+        ],
+        dim=-1,
+    )
     q_abs = torch.zeros_like(q)
     positive_mask = q > 0
     q_abs[positive_mask] = torch.sqrt(q[positive_mask])
@@ -664,4 +714,6 @@ def batch_mat2qvec(matrix):
     quat_candidates = quat_by_rijk / (2.0 * q_abs[..., None].max(flr))
     # if not for numerical problems, quat_candidates[i] should be same (up to a sign),
     # forall i; we pick the best-conditioned one (with the largest denominator)
-    return quat_candidates[torch.nn.functional.one_hot(q_abs.argmax(dim=-1), num_classes=4) > 0.5, :].reshape(batch_dim + (4,))
+    return quat_candidates[
+        torch.nn.functional.one_hot(q_abs.argmax(dim=-1), num_classes=4) > 0.5, :
+    ].reshape(batch_dim + (4,))

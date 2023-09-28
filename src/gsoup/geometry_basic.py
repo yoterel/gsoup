@@ -2,6 +2,7 @@ import torch
 import numpy as np
 from .core import is_np, broadcast_batch
 
+
 def point_line_distance(p, v0, v1):
     """
     returns the distance between a point p and a line defined by the points v0 and v1
@@ -10,7 +11,10 @@ def point_line_distance(p, v0, v1):
     :param v1: second vertex of the line (3,)
     :return the distance between the point and the line
     """
-    return np.linalg.norm(np.cross(v1 - v0, p - v0), axis=-1) / np.linalg.norm(v1 - v0, axis=-1)
+    return np.linalg.norm(np.cross(v1 - v0, p - v0), axis=-1) / np.linalg.norm(
+        v1 - v0, axis=-1
+    )
+
 
 def edge_function(v0, v1, p):
     """
@@ -21,6 +25,7 @@ def edge_function(v0, v1, p):
     :param p: point to check (3,) or batch of points to check (B, 3)
     """
     return np.cross(v1 - v0, p - v0)
+
 
 def is_inside_triangle(p, v0, v1, v2):
     """
@@ -34,7 +39,8 @@ def is_inside_triangle(p, v0, v1, v2):
     b = np.all(edge_function(v1, v2, p) >= 0, axis=-1)
     c = np.all(edge_function(v2, v0, p) >= 0, axis=-1)
     return a & b & c
-    
+
+
 def duplicate_faces(f):
     """
     duplicates *every* face in the mesh, with flipped orientation (and appends it to the end of the tensor)
@@ -53,6 +59,7 @@ def duplicate_faces(f):
         f_new = torch.tensor(f_new, dtype=f.dtype, device=f.device)
     return f_new
 
+
 def remove_duplicate_faces(f):
     """
     remove duplicate faces from a mesh
@@ -69,7 +76,8 @@ def remove_duplicate_faces(f):
     if not is_np(f):
         f_new = torch.tensor(f_new, dtype=f.dtype, device=f.device)
     return f_new
-    
+
+
 def get_aspect_ratio(v: torch.Tensor, f: torch.Tensor):
     """
     measure aspect ratio of all triangles using: (circumradius / 2inradius)
@@ -84,7 +92,8 @@ def get_aspect_ratio(v: torch.Tensor, f: torch.Tensor):
     b = (v0 - v2).norm(dim=-1)
     c = (v1 - v2).norm(dim=-1)
     s = (a + b + c) / 2
-    return a*b*c/(8*(s-a)*(s-b)*(s-c))
+    return a * b * c / (8 * (s - a) * (s - b) * (s - c))
+
 
 def get_face_areas(v, f, eps=1e-7):
     """
@@ -102,6 +111,7 @@ def get_face_areas(v, f, eps=1e-7):
     face_areas = norms / 2
     face_areas[face_areas < eps] = eps
     return face_areas
+
 
 def normalize_vertices(vertices, mode="unit_sphere"):
     """
@@ -123,7 +133,10 @@ def normalize_vertices(vertices, mode="unit_sphere"):
             raise NotImplementedError
     return vertices
 
-def calc_face_normals(vertices: torch.Tensor, faces: torch.Tensor, normalize: bool = False):
+
+def calc_face_normals(
+    vertices: torch.Tensor, faces: torch.Tensor, normalize: bool = False
+):
     """
     # V,3 first vertex may be unreferenced
     # F,3 long, first face may be all zeros
@@ -141,7 +154,10 @@ def calc_face_normals(vertices: torch.Tensor, faces: torch.Tensor, normalize: bo
         face_normals = torch.nn.functional.normalize(face_normals, eps=1e-6, dim=1)
     return face_normals  # F,3
 
-def calc_vertex_normals(vertices: torch.Tensor, faces: torch.Tensor, face_normals: torch.Tensor = None):
+
+def calc_vertex_normals(
+    vertices: torch.Tensor, faces: torch.Tensor, face_normals: torch.Tensor = None
+):
     """
     # V,3 first vertex may be unreferenced
     # F,3 long, first face may be all zero
@@ -150,14 +166,21 @@ def calc_vertex_normals(vertices: torch.Tensor, faces: torch.Tensor, face_normal
     F = faces.shape[0]
     if face_normals is None:
         face_normals = calc_face_normals(vertices, faces)
-    vertex_normals = torch.zeros((vertices.shape[0], 3, 3), dtype=vertices.dtype, device=vertices.device)  # V,C=3,3
-    vertex_normals.scatter_add_(dim=0, index=faces[:, :, None].expand(F, 3, 3),
-                                src=face_normals[:, None, :].expand(F, 3, 3))
+    vertex_normals = torch.zeros(
+        (vertices.shape[0], 3, 3), dtype=vertices.dtype, device=vertices.device
+    )  # V,C=3,3
+    vertex_normals.scatter_add_(
+        dim=0,
+        index=faces[:, :, None].expand(F, 3, 3),
+        src=face_normals[:, None, :].expand(F, 3, 3),
+    )
     vertex_normals = vertex_normals.sum(dim=1)  # V,3
     return torch.nn.functional.normalize(vertex_normals, eps=1e-6, dim=1)
 
+
 def get_face_centroids(v, f):
     return torch.mean(v[f], dim=-2)
+
 
 def calc_edges(faces: torch.Tensor, with_edge_to_face: bool = False, with_dummies=True):
     """
@@ -182,21 +205,30 @@ def calc_edges(faces: torch.Tensor, with_edge_to_face: bool = False, with_dummie
     sorted_edges, _ = full_edges.sort(dim=-1)  # F*3,2 todo min/max faster?
 
     # make unique edges
-    edges, full_to_unique = torch.unique(input=sorted_edges, return_inverse=True, dim=0)  # (E,2),(F*3)
+    edges, full_to_unique = torch.unique(
+        input=sorted_edges, return_inverse=True, dim=0
+    )  # (E,2),(F*3)
     E = edges.shape[0]
     face_to_edge = full_to_unique.reshape(F, 3)  # F,3
     if not with_edge_to_face:
         return edges, face_to_edge
 
     is_right = full_edges[:, 0] != sorted_edges[:, 0]  # F*3
-    edge_to_face = torch.zeros((E, 2, 2), dtype=torch.long, device=faces.device)  # E,LR=2,S=2
-    scatter_src = torch.cartesian_prod(torch.arange(0, F, device=faces.device),
-                                       torch.arange(0, 3, device=faces.device))  # F*3,2
-    edge_to_face.reshape(2 * E, 2).scatter_(dim=0, index=(2 * full_to_unique + is_right)[:, None].expand(F * 3, 2),
-                                            src=scatter_src)  # E,LR=2,S=2
+    edge_to_face = torch.zeros(
+        (E, 2, 2), dtype=torch.long, device=faces.device
+    )  # E,LR=2,S=2
+    scatter_src = torch.cartesian_prod(
+        torch.arange(0, F, device=faces.device), torch.arange(0, 3, device=faces.device)
+    )  # F*3,2
+    edge_to_face.reshape(2 * E, 2).scatter_(
+        dim=0,
+        index=(2 * full_to_unique + is_right)[:, None].expand(F * 3, 2),
+        src=scatter_src,
+    )  # E,LR=2,S=2
     if with_dummies:
         edge_to_face[0] = 0
     return edges, face_to_edge, edge_to_face
+
 
 def calc_edge_length(vertices: torch.Tensor, edges: torch.Tensor):
     """
@@ -207,6 +239,7 @@ def calc_edge_length(vertices: torch.Tensor, edges: torch.Tensor):
     a, b = full_vertices.unbind(dim=1)  # E,3
     return torch.norm(a - b, p=2, dim=-1)
 
+
 def prepend_dummies(vertices: torch.Tensor, faces: torch.Tensor):
     """
     prepend dummy elements to vertices and faces to enable "masked" scatter operations
@@ -214,8 +247,13 @@ def prepend_dummies(vertices: torch.Tensor, faces: torch.Tensor):
     :param faces (F,3) long
     """
     V, D = vertices.shape
-    vertices = torch.concat((torch.full((1, D), fill_value=torch.nan, device=vertices.device), vertices), dim=0)
-    faces = torch.concat((torch.zeros((1, 3), dtype=torch.long, device=faces.device), faces + 1), dim=0)
+    vertices = torch.concat(
+        (torch.full((1, D), fill_value=torch.nan, device=vertices.device), vertices),
+        dim=0,
+    )
+    faces = torch.concat(
+        (torch.zeros((1, 3), dtype=torch.long, device=faces.device), faces + 1), dim=0
+    )
     return vertices, faces
 
 
@@ -228,6 +266,7 @@ def remove_dummies(vertices: torch.Tensor, faces: torch.Tensor):
     """
     return vertices[1:], faces[1:] - 1
 
+
 def ray_sphere_intersection(sphere_origin, sphere_radius, ray_origin, ray_direction):
     """
     returns the distance along a ray to the intersection point between a sphere and a ray
@@ -235,19 +274,20 @@ def ray_sphere_intersection(sphere_origin, sphere_radius, ray_origin, ray_direct
     # returns: # B
     """
     radius = sphere_radius
-    radius2 = radius ** 2
+    radius2 = radius**2
     center = sphere_origin
-    L = (center - ray_origin)
+    L = center - ray_origin
     tca = torch.bmm(L[:, None, :], ray_direction[:, :, None]).squeeze()
     tca[tca < 0] = float("Inf")
     d2 = torch.bmm(L[:, None, :], L[:, :, None]).squeeze() - tca * tca
-    d2[d2 > radius2] = -float('inf')
+    d2[d2 > radius2] = -float("inf")
     thc = torch.sqrt(radius2 - d2)
     t0 = tca - thc
     t1 = tca + thc
     mask = t0 > t1
     t0[mask] = t1[mask]
     return t0
+
 
 def qslerp(qa, qb, t):
     """
@@ -264,13 +304,16 @@ def qslerp(qa, qb, t):
         return qm
     halfTheta = np.arccos(cosHalfTheta)
     sinHalfTheta = np.sqrt(1.0 - cosHalfTheta * cosHalfTheta)
-    if np.fabs(sinHalfTheta) < 0.001:  # if theta = 180 degrees then result is not fully defined
-        qm = qa*0.5 + qb*0.5
+    if (
+        np.fabs(sinHalfTheta) < 0.001
+    ):  # if theta = 180 degrees then result is not fully defined
+        qm = qa * 0.5 + qb * 0.5
         return qm
     ratioA = np.sin((1 - t) * halfTheta) / sinHalfTheta
     ratioB = np.sin(t * halfTheta) / sinHalfTheta
-    qm = qa*ratioA + qb*ratioB
+    qm = qa * ratioA + qb * ratioB
     return qm
+
 
 def ray_ray_intersection(oa, da, ob, db):
     """
@@ -311,6 +354,7 @@ def ray_ray_intersection(oa, da, ob, db):
         points = points[0]
     return points, denom
 
+
 def get_center_of_attention(c2w):
     """
     find a central point of a batch of c2w transforms 4x4 they are all looking at.
@@ -319,9 +363,9 @@ def get_center_of_attention(c2w):
     :return: the center of attention in 3d world coordinates
     """
     if c2w.ndim != 3:
-        raise ValueError('c2w must be a 3d array of 4x4 matrices')
+        raise ValueError("c2w must be a 3d array of 4x4 matrices")
     if c2w.shape[1] != 4 or c2w.shape[2] != 4:
-        raise ValueError('c2w must be a 3d array of 4x4 matrices')
+        raise ValueError("c2w must be a 3d array of 4x4 matrices")
     totw = 0.0
     totp = np.array([0.0, 0.0, 0.0])
     ps = []
@@ -337,7 +381,8 @@ def get_center_of_attention(c2w):
                 # ps.append(p)
                 # rays.append([mf[:, 3], mf[:, 2], mg[:, 3], mg[:, 2]])
     totp /= totw
-    return totp # np.array(rays), np.array(ps)
+    return totp  # np.array(rays), np.array(ps)
+
 
 def scale_poses(c2w, n=1.0):
     """
@@ -351,6 +396,7 @@ def scale_poses(c2w, n=1.0):
     c2w[:, 0:3, 3] *= n / avglen
     return c2w, avglen
 
+
 def merge_meshes(v1, f1, v2=None, f2=None):
     """merge two meshes into one"""
     if v2 is None or f2 is None:
@@ -358,6 +404,7 @@ def merge_meshes(v1, f1, v2=None, f2=None):
     v = np.concatenate([v1, v2], axis=0)
     f = np.concatenate([f1, f2 + v1.shape[0]], axis=0)
     return v, f
+
 
 def find_princple_componenets(v: torch.Tensor):
     """
@@ -369,14 +416,17 @@ def find_princple_componenets(v: torch.Tensor):
         cov = v.T @ v
         _, vecs = torch.linalg.eig(cov)
         if torch.imag(vecs).any():
-            raise ValueError('imaginary eigenvectors')
+            raise ValueError("imaginary eigenvectors")
         vecs = torch.real(vecs)
         if torch.det(vecs) < 0:
-            swap_axis = torch.tensor([[1, 0, 0], [0, 0, 1], [0, 1, 0]], dtype=v.dtype, device=v.device)
+            swap_axis = torch.tensor(
+                [[1, 0, 0], [0, 0, 1], [0, 1, 0]], dtype=v.dtype, device=v.device
+            )
             vecs = swap_axis @ vecs
     else:
-        raise TypeError('v must be a torch tenor')
+        raise TypeError("v must be a torch tenor")
     return vecs
+
 
 def remove_unreferenced_vertices(v, f):
     """
@@ -421,15 +471,16 @@ def edge_contraction(v, f, edge_to_contract, new_v_location):
     v1 = edge_to_contract[0]
     v2 = edge_to_contract[1]
     # replace all instances of v1 with v2 in f
-    f[f==v1] = v2
+    f[f == v1] = v2
     # remove degenerate triangles
     degenerate_mask = (np.diff(np.sort(f, axis=-1)) == 0).any(axis=-1)
-    f = f[~degenerate_mask] 
+    f = f[~degenerate_mask]
     # place v2 in v_hat
     v[v2] = new_v_location
     # remove v1 from v
     v, f, _ = remove_unreferenced_vertices(v, f)
     return v, f
+
 
 def clean_infinite_vertices(v, f):
     """
