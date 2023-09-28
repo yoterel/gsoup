@@ -41,10 +41,10 @@ class gviewer:
             if height is None:
                 height = width
             poly_dict = {
-                "windowHeight": width,
+                "windowHeight": height,
                 "windowPosX": 50,
                 "windowPosY": 50,
-                "windowWidth": height,
+                "windowWidth": width,
             }
             write_to_json(poly_dict, "./.polyscope.ini")
         try:
