@@ -19,38 +19,65 @@ ui_float = 0.0
 poses = None
 meshes_v = None
 meshes_f = None
-meshes_attribute = None
+gv_scalar, gv_color, gv_vector, gf_scalar, gf_color = None, None, None, None, None
 pcs_v = None
-pcs_attribute = None
 #### globals
 
 
 def pcs_slider_callback():
-    global ui_float, pcs_v
+    global ui_float, pcs_v, gv_scalar, gv_color
     changed, ui_float = gviewer.psim.SliderFloat(
         "step", ui_float, v_min=0, v_max=len(pcs_v)
     )
     if changed:
         if int(ui_float) >= len(pcs_v):
             ui_float = len(pcs_v) - 1
-        gviewer.register_pointcloud(
-            "pc", pcs_v[int(ui_float)], s=pcs_attribute[int(ui_float)], radius=0.0006
-        )
+        if gv_scalar[0] is not None:
+            gviewer.register_pointcloud(
+                "pc", pcs_v[int(ui_float)], s=gv_scalar[int(ui_float)], radius=0.0006
+            )
+        elif gv_color[0] is not None:
+            gviewer.register_pointcloud(
+                "pc", pcs_v[int(ui_float)], c=gv_color[int(ui_float)], radius=0.0006
+            )
+        else:
+            gviewer.register_pointcloud("pc", pcs_v[int(ui_float)], radius=0.0006)
 
 
 def meshes_slider_callback():
-    global ui_float, meshes_v, meshes_f
+    global ui_float, meshes_v, meshes_f, gv_scalar, gv_color, gv_vector, gf_scalar, gf_color
     changed, ui_float = gviewer.psim.SliderFloat(
         "step", ui_float, v_min=0, v_max=len(meshes_v)
     )
     if changed:
         if int(ui_float) >= len(meshes_v):
             ui_float = len(meshes_v) - 1
+        float1, float2, float3, float4, float5 = (
+            ui_float,
+            ui_float,
+            ui_float,
+            ui_float,
+            ui_float,
+        )
+        if gv_scalar[0] is None:
+            float1 = 0
+        if gv_color[0] is None:
+            float2 = 0
+        if gv_vector[0] is None:
+            float3 = 0
+        if gf_scalar[0] is None:
+            float4 = 0
+        if gf_color[0] is None:
+            float5 = 0
         gviewer.register_mesh(
             "mesh",
             meshes_v[int(ui_float)],
             meshes_f[int(ui_float)],
-            v_vertices=meshes_attribute[int(ui_float)],
+            s_vertices=gv_scalar[int(float1)],
+            c_vertices=gv_color[int(float2)],
+            v_vertices=gv_vector[int(float3)],
+            s_faces=gf_scalar[int(float4)],
+            c_faces=gf_color[int(float5)],
             edge_width=1.0,
         )
 
@@ -69,12 +96,12 @@ def poses_slider_callback():
         )
 
 
-def pcs_slide_view(v, v_attribute=None):
+def pcs_slide_view(v, s_vertices=None, c_vertices=None):
     """
     given some point cloud tXVx3
     show the point cloud as it changes through time t and allow scrolling through using a slider.
     """
-    global pcs_v, pcs_attribute
+    global pcs_v, gv_scalar, gv_color
     gviewer.init()
     gviewer.ps.set_up_dir("z_up")
     gviewer.ps.set_ground_plane_mode("none")
@@ -90,30 +117,67 @@ def pcs_slide_view(v, v_attribute=None):
     )
     gizmo_network.add_color_quantity("color", c_gizmo, defined_on="edges", enabled=True)
     pcs_v = v
-    if v_attribute is None:
-        pcs_attribute = [None]
+    if s_vertices is None:
+        gv_scalar = [None]
     else:
-        pcs_attribute = v_attribute
+        gv_scalar = s_vertices
+    if c_vertices is None:
+        gv_color = [None]
+    else:
+        gv_color = c_vertices
     gviewer.ps.set_user_callback(pcs_slider_callback)
     gviewer.ps.set_up_dir("z_up")
-    gviewer.register_pointcloud("pc", pcs_v[0], s=pcs_attribute[0], radius=0.0006)
+    gviewer.register_pointcloud(
+        "pc", pcs_v[0], s=gv_scalar[0], c=gv_color[0], radius=0.0006
+    )
     gviewer.show()
 
 
-def meshes_slide_view(v, f, v_attribute):
+def meshes_slide_view(
+    v, f, s_vertices=None, c_vertices=None, v_vertice=None, s_faces=None, c_faces=None
+):
     """
     given some vertices tXVx3 and faces tXFx3
     show the mesh as it changes through time t and allow scrolling through using a slider.
     """
-    global meshes_v, meshes_f, meshes_attribute
+    global meshes_v, meshes_f, gv_scalar, gv_color, gv_vector, gf_scalar, gf_color
     gviewer.init()
     meshes_v = v
     meshes_f = f
-    meshes_attribute = v_attribute
+    ### next hack is very eww
+    if s_vertices is None:
+        gv_scalar = [None]
+    else:
+        gv_scalar = s_vertices
+    if c_vertices is None:
+        gv_color = [None]
+    else:
+        gv_color = c_vertices
+    if v_vertice is None:
+        gv_vector = [None]
+    else:
+        gv_vector = v_vertice
+    if s_faces is None:
+        gf_scalar = [None]
+    else:
+        gf_scalar = s_faces
+    if c_faces is None:
+        gf_color = [None]
+    else:
+        gf_color = c_faces
+
     gviewer.ps.set_user_callback(meshes_slider_callback)
     gviewer.ps.set_up_dir("z_up")
     gviewer.register_mesh(
-        "mesh", meshes_v[0], meshes_f[0], v_vertices=meshes_attribute[0], edge_width=1.0
+        "mesh",
+        meshes_v[0],
+        meshes_f[0],
+        s_vertices=gv_scalar[0],
+        c_vertices=gv_color[0],
+        v_vertices=gv_vector[0],
+        s_faces=gf_scalar[0],
+        c_faces=gf_color[0],
+        edge_width=1.0,
     )
     gviewer.show()
 
