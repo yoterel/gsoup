@@ -71,13 +71,25 @@ class gviewer:
         self.is_init = True
 
     def register_pointcloud(
-        self, name, points, c=None, s=None, v=None, radius=1e-2, mode="quad"
+        self,
+        name,
+        points,
+        c=None,
+        s=None,
+        v=None,
+        radius=1e-2,
+        mode="quad",
+        enabled=True,
     ):
         """
         register a point cloud to polyscope
         """
         ps_pointcloud = self.ps.register_point_cloud(
-            name, points, radius=radius, point_render_mode=mode
+            name,
+            points,
+            radius=radius,
+            point_render_mode=mode,
+            enabled=enabled,
         )  # color=np.array([0.5, 0.1, 0.3])  # sphere / quad
         if c is not None:
             ps_pointcloud.add_color_quantity("colors", c, enabled=True)
@@ -134,10 +146,11 @@ class gviewer:
         edge_width=0.0,
         color=[0.5, 0.5, 0.5],
         smooth_shade=True,
+        s_vertices=None,
         c_vertices=None,
-        c_faces=None,
-        s_faces=None,
         v_vertices=None,
+        s_faces=None,
+        c_faces=None,
         cmap=None,
         enabled=True,
     ):
@@ -150,10 +163,11 @@ class gviewer:
         :param transparency: transparency of the mesh
         :param edge_width: edge width of the mesh
         :param smooth_shade: smooth shading
+        :param s_vertices: vertex scalar values
         :param c_vertices: vertex scalar values
-        :param c_faces: face scalar values
-        :param s_faces: face colors
         :param v_vertices: vertex vectors
+        :param s_faces: face scalar values
+        :param c_faces: face colors
         """
         ps_mesh = self.ps.register_surface_mesh(
             name,
@@ -167,31 +181,21 @@ class gviewer:
         )
         if cmap is None:
             cmap = "reds"
-        if c_vertices is not None:
-            c = (c_vertices - np.min(c_vertices)) / (
-                np.max(c_vertices) - np.min(c_vertices)
+        if s_vertices is not None:
+            s = (s_vertices - np.min(s_vertices)) / (
+                np.max(s_vertices) - np.min(s_vertices)
             )
             ps_mesh.add_scalar_quantity(
-                "vscalar",
-                c,
+                "scalar",
+                s,
                 defined_on="vertices",
                 enabled=True,
                 vminmax=(0.0, 1.0),
                 cmap=cmap,
             )
-        if c_faces is not None:
-            c = (c_faces - np.min(c_faces)) / (np.max(c_faces) - np.min(c_faces))
-            ps_mesh.add_scalar_quantity(
-                "fscalar",
-                c,
-                defined_on="faces",
-                enabled=True,
-                vminmax=(0.0, 1.0),
-                cmap=cmap,
-            )
-        if s_faces is not None:
+        if c_vertices is not None:
             ps_mesh.add_color_quantity(
-                "fcolor", s_faces, defined_on="faces", enabled=True
+                "color", c_vertices, defined_on="vertices", enabled=True
             )
         if v_vertices is not None:
             ps_mesh.add_vector_quantity(
@@ -202,6 +206,20 @@ class gviewer:
                 radius=0.01,
                 length=0.1,
                 color=(0.2, 0.5, 0.5),
+            )
+        if s_faces is not None:
+            s = (s_faces - np.min(s_faces)) / (np.max(s_faces) - np.min(s_faces))
+            ps_mesh.add_scalar_quantity(
+                "fscalar",
+                s,
+                defined_on="faces",
+                enabled=True,
+                vminmax=(0.0, 1.0),
+                cmap=cmap,
+            )
+        if c_faces is not None:
+            ps_mesh.add_color_quantity(
+                "fcolor", c_faces, defined_on="faces", enabled=True
             )
         return ps_mesh
 
