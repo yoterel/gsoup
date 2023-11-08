@@ -111,7 +111,7 @@ def load_video(video_path, verbose=False):
     return video
 
 
-def save_video(frames, output_path, fps, lossy=True, verbose=False):
+def save_video(frames, output_path, fps, bit_rate="1M", lossy=True, verbose=False):
     """
     saves a video from a t x h x w x 3 numpy tensor
     :param frames: (t x h x w x 3) numpy array or directory path containing images of same format and resolution
@@ -131,7 +131,7 @@ def save_video(frames, output_path, fps, lossy=True, verbose=False):
                     s="{}x{}".format(frames.shape[2], frames.shape[1]),
                     r=fps,
                 )
-                .output(str(output_path), pix_fmt="yuv420p")
+                .output(str(output_path), pix_fmt="yuv420p", b=bit_rate)
                 .overwrite_output()
                 .run(input=frames.tobytes(), quiet=not verbose)
             )
@@ -163,6 +163,8 @@ def save_video(frames, output_path, fps, lossy=True, verbose=False):
         files = sorted(list(frames.glob("*")))
         if len(files) == 0:
             raise FileNotFoundError("No images found in directory: {}".format(frames))
+        files = [x for x in files if x.is_file()]
+        files = [x for x in files if x.suffix in [".png", ".jpg", ".jpeg"]]
         extensions = []
         for file in files:
             extensions.append(file.suffix)
@@ -188,6 +190,8 @@ def save_video(frames, output_path, fps, lossy=True, verbose=False):
                 "ffmpeg_input.txt",
                 "-framerate",
                 str(fps),
+                "-b",
+                bit_rate,
                 str(output_path),
             ]
         else:

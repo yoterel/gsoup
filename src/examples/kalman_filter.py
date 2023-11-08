@@ -19,7 +19,7 @@ numberTimeSteps = 1000
 k = 10
 # for a more elaborate use case: missing measurements stride
 mask_interval = 10
-
+gt_motion = "sawtooth"  # sine, constant_acc, sawtooth
 # assume that for short durations, the motion is constant acceleration
 A = np.matrix(
     [
@@ -50,25 +50,30 @@ acceleration = np.zeros(np.size(timeVector))
 
 # simulate the system behavior
 for i in np.arange(np.size(timeVector)):
-    # lets use a saw tooth wave
-    position[i] = 5 * signal.sawtooth(i / 100, 0.5)
-    # its derivative
-    velocity[i] = 2 * np.pi * 5 / 100 * signal.square(i / 100, 0.5)
-    # formally should take value 1, -1 in peaks...lets just use 0
-    acceleration[i] = 0
-    # sine wave
-    # position[i] = 5 * np.sin(0.1 * timeVector[i])
-    # velocity[i] = 0.1 * 5 * np.cos(0.1 * timeVector[i])
-    # acceleration[i] = 0.1 * 0.1 * 5 * -np.sin(0.1 * timeVector[i])
-    # constant acc
-    # position[i] = (
-    #     initialPosition
-    #     + initialVelocity * timeVector[i]
-    #     + (acceleration * timeVector[i] ** 2) / 2
-    # )
-    # velocity[i] = initialVelocity + acceleration * timeVector[i]
-    # acceleration[i] = acceleration
-
+    if gt_motion == "sawtooth":
+        amp = 5
+        # lets use a saw tooth wave
+        position[i] = amp * signal.sawtooth(i / 20, 0.5)
+        # its derivative
+        velocity[i] = 2 * np.pi * 5 / 20 * signal.square(i / 20, 0.5)
+        # formally should take value 1, -1 in peaks...lets just use 0
+        acceleration[i] = 0
+    elif gt_motion == "sine":
+        # sine wave
+        position[i] = 5 * np.sin(0.1 * timeVector[i])
+        velocity[i] = 0.1 * 5 * np.cos(0.1 * timeVector[i])
+        acceleration[i] = 0.1 * 0.1 * 5 * -np.sin(0.1 * timeVector[i])
+    elif gt_motion == "constant_acc":
+        # constant acc
+        position[i] = (
+            initialPosition
+            + initialVelocity * timeVector[i]
+            + (acceleration * timeVector[i] ** 2) / 2
+        )
+        velocity[i] = initialVelocity + acceleration * timeVector[i]
+        acceleration[i] = acceleration
+if gt_motion == "sawtooth":
+    acceleration = np.concatenate((np.diff(velocity), np.zeros(1)))
 # add the measurement noise
 positionNoisy = position + np.random.normal(0, noiseStd, size=np.size(timeVector))
 # verify the position vector by plotting the results
@@ -164,7 +169,7 @@ ax[0].scatter(
     color="orange",
     s=3,
     # linestyle="-",
-    label="Estimate of position (k=10)",
+    label="k={} lookahead steps".format(k),
 )
 ax[0].scatter(
     steps,
@@ -172,7 +177,7 @@ ax[0].scatter(
     color="blue",
     s=3,
     # linestyle="-",
-    label="Estimate of position",
+    label="k=1 lookahead steps",
 )
 ax[0].scatter(
     steps,
@@ -180,7 +185,7 @@ ax[0].scatter(
     color="green",
     s=3,
     # linestyle="-",
-    label="Estimate of position",
+    label="{}/{} missing measurements".format(mask_interval-1, mask_interval),
 )
 ax[0].scatter(
     steps,
@@ -188,7 +193,7 @@ ax[0].scatter(
     color="red",
     s=3,
     # linestyle="-",
-    label="True value of position",
+    label="ground truth",
 )
 
 ax[0].set_xlabel("Discrete-time steps k", fontsize=14)
@@ -201,28 +206,28 @@ ax[1].plot(
     estimate2_k,
     color="orange",
     linestyle="-",
-    label="Estimate of velocity (k=10)",
+    label="k={} lookahead steps".format(k),
 )
 ax[1].plot(
     steps,
     estimate2,
     color="blue",
     linestyle="-",
-    label="Estimate of velocity",
+    label="k=1 lookahead steps",
 )
 ax[1].plot(
     steps,
     estimate2_masked,
     color="green",
     linestyle="-",
-    label="Estimate of position",
+    label="{}/{} missing measurements".format(mask_interval-1, mask_interval),
 )
 ax[1].plot(
     steps,
     estimate2true,
     color="red",
     linestyle="-",
-    label="True value of velocity",
+    label="ground truth",
 )
 
 ax[1].set_xlabel("Discrete-time steps k", fontsize=14)
@@ -235,28 +240,28 @@ ax[2].plot(
     estimate3_k,
     color="orange",
     linestyle="-",
-    label="Estimate of acceleration (k=10)",
+    label="k={} lookahead steps".format(k),
 )
 ax[2].plot(
     steps,
     estimate3,
     color="blue",
     linestyle="-",
-    label="Estimate of acceleration",
+    label="k=1 lookahead steps",
 )
 ax[2].plot(
     steps,
     estimate3_masked,
     color="green",
     linestyle="-",
-    label="Estimate of position",
+    label="{}/{} missing measurements".format(mask_interval-1, mask_interval),
 )
 ax[2].plot(
     steps,
     estimate3true,
     color="red",
     linestyle="-",
-    label="True value of acceleration",
+    label="ground truth",
 )
 
 ax[2].set_xlabel("Discrete-time steps k", fontsize=14)
