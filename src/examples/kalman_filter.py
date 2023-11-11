@@ -185,7 +185,7 @@ ax[0].scatter(
     color="green",
     s=3,
     # linestyle="-",
-    label="{}/{} missing measurements".format(mask_interval-1, mask_interval),
+    label="{}/{} missing measurements".format(mask_interval - 1, mask_interval),
 )
 ax[0].scatter(
     steps,
@@ -220,7 +220,7 @@ ax[1].plot(
     estimate2_masked,
     color="green",
     linestyle="-",
-    label="{}/{} missing measurements".format(mask_interval-1, mask_interval),
+    label="{}/{} missing measurements".format(mask_interval - 1, mask_interval),
 )
 ax[1].plot(
     steps,
@@ -254,7 +254,7 @@ ax[2].plot(
     estimate3_masked,
     color="green",
     linestyle="-",
-    label="{}/{} missing measurements".format(mask_interval-1, mask_interval),
+    label="{}/{} missing measurements".format(mask_interval - 1, mask_interval),
 )
 ax[2].plot(
     steps,
