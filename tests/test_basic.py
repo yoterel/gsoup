@@ -346,7 +346,7 @@ def test_video():
     import os
 
     if platform.system() == "Windows":
-        FFMPEG_DIR = os.path.join("D:/tools/ffmpeg-5.1-essentials_build/bin")
+        FFMPEG_DIR = os.path.join("C:/tools/ffmpeg-6.0-essentials_build/bin")
         os.environ["PATH"] = FFMPEG_DIR + ";" + os.environ["PATH"]
     else:
         FFMPEG_DIR = os.path.join("/usr/bin")
@@ -367,9 +367,12 @@ def test_video():
     gsoup.save_video(images, Path("resource/lossy_video.avi"), lossy=True, fps=10)
     reader = gsoup.VideoReader(Path("resource/lossless_video.avi"), h=h, w=w)
     fps = gsoup.FPS()
+    reader_has_frames = False
     for i, frame in enumerate(reader):
+        reader_has_frames = True
         print("{}: {}, fps: {}".format(i, frame.shape, fps()))
         assert np.all(frame == images[i])
+    assert reader_has_frames
     video_frames = gsoup.load_video(Path("resource/lossless_video.avi"))
     assert video_frames.shape == (frame_number, h, w, 3)
     assert np.all(video_frames == images)

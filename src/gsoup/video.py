@@ -6,6 +6,7 @@ from pathlib import Path
 import ffmpeg
 from .image import resize_images_naive
 import subprocess
+import cv2
 
 
 def get_ffmpeg_version():
@@ -348,12 +349,11 @@ class VideoReader:
         self.h, self.w, self.fps, self.fc = get_video_info(video_path)
         self.th = None
         self.tw = None
-        if h is not None and w is not None:
-            self.th, self.tw = h, w
-            if self.h % self.th != 0 or self.w % self.tw != 0:
-                raise ValueError(
-                    "target resolution must have common divisor with original resolution"
-                )
+        if h is not None:
+            if w is not None:
+                self.th, self.tw = h, w
+            else:
+                raise ValueError("if h or w are specified, both must be specified")
         self.start_frame = start_frame
         if end_frame is None:
             self.end_frame = self.fc + 1
@@ -380,9 +380,8 @@ class VideoReader:
                 raise StopIteration
             frame = np.frombuffer(in_bytes, np.uint8).reshape([self.h, self.w, 3])
             if self.th is not None:
-                frame = resize_images_naive(
-                    frame[None, ...], self.th, self.tw, mode="mean"
-                ).squeeze()
+                if self.th != self.h or self.tw != self.w:
+                    frame = cv2.resize(frame, (self.tw, self.th))
             self.n += 1
             return frame
         else:
