@@ -53,7 +53,9 @@ def pcs_slide_view(v, v_attribute=None):
     gviewer.init()
     gviewer.ps.set_up_dir("z_up")
     gviewer.ps.set_ground_plane_mode("none")
-    edge_rad = 0.0005
+    typical_scale = np.linalg.norm(v, axis=-1).max()
+    v /= typical_scale[..., None]
+    edge_rad = 0.01
     v_aabb, e_aabb, c_aabb = structures.get_aabb_coords()
     aabb_network = gviewer.ps.register_curve_network("aabb", v_aabb, e_aabb, radius=edge_rad)
     aabb_network.add_color_quantity("color", c_aabb, defined_on='edges', enabled=True)
@@ -67,7 +69,7 @@ def pcs_slide_view(v, v_attribute=None):
         pcs_attribute = v_attribute
     gviewer.ps.set_user_callback(pcs_slider_callback)
     gviewer.ps.set_up_dir("z_up")
-    gviewer.register_pointcloud("pc", pcs_v[0], s=pcs_attribute[0], radius=0.0006)
+    gviewer.register_pointcloud("pc", pcs_v[0], s=pcs_attribute[0], radius=0.01)
     gviewer.show()
 
 def meshes_slide_view(v, f, v_attribute):
