@@ -134,3 +134,4 @@ dmypy.json
 #local resource folder
 resource/
 data/
+benchmark_results/

@@ -27,6 +27,7 @@ def test_type_conversions():
     test_float_from_8bit = gsoup.to_float(test_8bit_from_float)
     assert test_float_from_8bit.dtype == torch.float32
 
+
 def test_broadcast_batch():
     R = np.random.randn(1, 3, 3)
     t = np.random.randn(1, 3)
@@ -63,6 +64,7 @@ def test_broadcast_batch():
     with pytest.raises(ValueError):
         R, t = gsoup.broadcast_batch(R, t)
 
+
 def test_transforms():
     R = np.random.randn(2, 3, 3)
     t = np.random.randn(1, 3)
@@ -73,10 +75,14 @@ def test_transforms():
     at = np.array([0, 0, 0], dtype=np.float32)
     up = np.array([0, 0, 1], dtype=np.float32)
     transform_np = gsoup.look_at_np(eye, at, up)
-    transform_torch = gsoup.look_at_torch(gsoup.to_torch(eye), gsoup.to_torch(at), gsoup.to_torch(up))
+    transform_torch = gsoup.look_at_torch(
+        gsoup.to_torch(eye), gsoup.to_torch(at), gsoup.to_torch(up)
+    )
     assert np.allclose(transform_np, gsoup.to_numpy(transform_torch))
     transform_np_opengl = gsoup.look_at_np(eye, at, up, opengl=True)
-    transform_torch_opengl = gsoup.look_at_torch(gsoup.to_torch(eye), gsoup.to_torch(at), gsoup.to_torch(up), opengl=True)
+    transform_torch_opengl = gsoup.look_at_torch(
+        gsoup.to_torch(eye), gsoup.to_torch(at), gsoup.to_torch(up), opengl=True
+    )
     assert np.allclose(transform_np_opengl, gsoup.to_numpy(transform_torch_opengl))
     normal = torch.tensor([0, 0, 1.0])
 
@@ -85,28 +91,31 @@ def test_transforms():
     location4d = gsoup.to_hom(location3d)
     location4d_noise = gsoup.to_hom(location3d_noise)
     # sanity on opengl projection
-    v2w = gsoup.look_at_np(np.array([1., 0, 0]), location3d, np.array([0, 0, 1.0]), opengl=True)[0]
+    v2w = gsoup.look_at_np(
+        np.array([1.0, 0, 0]), location3d, np.array([0, 0, 1.0]), opengl=True
+    )[0]
     w2v = np.linalg.inv(v2w)
     v2c = gsoup.perspective_projection()
     opengl_location = v2c @ w2v @ location4d
     opengl_location = gsoup.homogenize(opengl_location)
     assert np.allclose(opengl_location[:2], np.zeros(2))
     # sanity on opencv projection
-    c2w = gsoup.look_at_np(np.array([1., 0, 0]), location3d, np.array([0, 0, 1.0]))[0]
+    c2w = gsoup.look_at_np(np.array([1.0, 0, 0]), location3d, np.array([0, 0, 1.0]))[0]
     w2c = np.linalg.inv(c2w)
     K = gsoup.opencv_intrinsics_from_opengl_project(v2c, 1, 1)
     opencv_location = K @ gsoup.to_34(w2c) @ location4d
     opencv_location = gsoup.homogenize(opencv_location)
-    assert np.allclose(opencv_location[:2], np.ones(2)*0.5)
+    assert np.allclose(opencv_location[:2], np.ones(2) * 0.5)
     # test opencv / opengl conversion
     opengl_location = v2c @ w2v @ location4d_noise
     opengl_location = gsoup.homogenize(opengl_location)
     opencv_location = K @ gsoup.to_34(w2c) @ location4d_noise
     opencv_location = gsoup.homogenize(opencv_location)
     # x is in same direction, but opengl screen is -1 to 1 (while opencv is 0 to 1)
-    assert np.allclose((opencv_location[0] - opengl_location[0]/2), 0.5)
+    assert np.allclose((opencv_location[0] - opengl_location[0] / 2), 0.5)
     # y is in opposite direction, but opengl screen is -1 to 1 (while opencv is 0 to 1)
-    assert np.allclose((opencv_location[1] + opengl_location[1]/2), 0.5)
+    assert np.allclose((opencv_location[1] + opengl_location[1] / 2), 0.5)
+
 
 def test_rotations():
     qvecs = gsoup.random_qvec(10)
@@ -116,14 +125,14 @@ def test_rotations():
     rotmats = gsoup.batch_qvec2mat(torch_qvecs)
     assert rotmats.shape == (10, 3, 3)
     new_qvecs = gsoup.batch_mat2qvec(rotmats)
-    mask1 = (torch.abs(new_qvecs - torch_qvecs) < 1e-6)
-    mask2 = (torch.abs(new_qvecs + torch_qvecs) < 1e-6)
+    mask1 = torch.abs(new_qvecs - torch_qvecs) < 1e-6
+    mask2 = torch.abs(new_qvecs + torch_qvecs) < 1e-6
     assert torch.all(mask1 | mask2)
     rotmat = gsoup.qvec2mat(torch_qvecs[0])
     assert rotmat.shape == (3, 3)
     new_qvec = gsoup.mat2qvec(rotmat)
-    mask1 = (torch.abs(new_qvec - torch_qvecs[0]) < 1e-6)
-    mask2 = (torch.abs(new_qvec + torch_qvecs[0]) < 1e-6)
+    mask1 = torch.abs(new_qvec - torch_qvecs[0]) < 1e-6
+    mask2 = torch.abs(new_qvec + torch_qvecs[0]) < 1e-6
     assert torch.all(mask1 | mask2)
     normal = torch.tensor([0, 0, 1.0])
     random_vectors = gsoup.random_vectors_on_sphere(10, normal=normal)
@@ -133,8 +142,11 @@ def test_rotations():
     random_vectors = gsoup.random_vectors_on_sphere(10, normal=normal)
     assert random_vectors.shape == (10, 3)
     assert (random_vectors[:, None, :] @ normal[:, :, None]).all() > 0
-    rotx = gsoup.rotx(np.pi/2, degrees=False)
-    assert np.allclose(rotx, np.array([[1., 0, 0, 0], [0, 0, -1, 0], [0, 1, 0, 0], [0, 0, 0, 1]]))
+    rotx = gsoup.rotx(np.pi / 2, degrees=False)
+    assert np.allclose(
+        rotx, np.array([[1.0, 0, 0, 0], [0, 0, -1, 0], [0, 1, 0, 0], [0, 0, 0, 1]])
+    )
+
 
 def test_homogenize():
     x = np.random.rand(100, 2)
@@ -152,6 +164,7 @@ def test_homogenize():
     dehom_x = gsoup.homogenize(hom_x)
     assert dehom_x.shape == (3,)
 
+
 def test_normalize_vertices():
     v = np.random.rand(100, 3) * 100
     v_normalized = gsoup.normalize_vertices(v)
@@ -160,6 +173,7 @@ def test_normalize_vertices():
     v = torch.rand(100, 3) * 100
     v_normalized = gsoup.normalize_vertices(v)
     assert (v_normalized < 1.0).all()
+
 
 def test_point_to_line_distance():
     p = np.array([0, 0, 0])
@@ -182,6 +196,7 @@ def test_point_to_line_distance():
     dist = gsoup.point_line_distance(p, v0, v1)
     assert (dist == np.array([1.0, 1.0])).all()
 
+
 def test_structures():
     v, f = gsoup.structures.cube()
     gsoup.save_mesh(v, f, "resource/cube.obj")
@@ -196,8 +211,13 @@ def test_structures():
     v1, f1, vc1 = gsoup.load_mesh("resource/ico_vcolor.ply", return_vert_color=True)
     assert np.allclose(v, v1)
     assert np.allclose(f, f1)
-    assert np.allclose(vc, vc1*255.0)
-    gsoup.save_mesh(v, f, "resource/ico_fcolor.ply", face_colors=np.random.randint(0, 255, size=f.shape).astype(np.uint8))
+    assert np.allclose(vc, vc1 * 255.0)
+    gsoup.save_mesh(
+        v,
+        f,
+        "resource/ico_fcolor.ply",
+        face_colors=np.random.randint(0, 255, size=f.shape).astype(np.uint8),
+    )
     gsoup.save_pointcloud(v, "resource/ico_pc.ply")
     v1, f1 = gsoup.load_mesh("resource/ico_pc.ply")  # loads a pointcloud as a mesh
     assert np.allclose(v, v1)
@@ -211,20 +231,25 @@ def test_structures():
     assert v.shape[0] == 8
     assert f.shape[0] == 12
 
+
 def test_image():
     checkboard = gsoup.generate_checkerboard(512, 512, 8)
     gsoup.save_image(checkboard, "resource/checkboard.png")
     checkboard_RGBA = np.tile(checkboard, (1, 1, 4))
     checkboard_RGB = gsoup.alpha_compose(checkboard_RGBA, ~checkboard_RGBA[..., :3])
     assert (checkboard_RGB == 1.0).all()
-    checkboard_RGB = gsoup.alpha_compose(checkboard_RGBA, bg_color=np.array([0.0, 0.0, 1.0]))
+    checkboard_RGB = gsoup.alpha_compose(
+        checkboard_RGBA, bg_color=np.array([0.0, 0.0, 1.0])
+    )
     assert (checkboard_RGB[..., -1] == 1.0).all()
     lollipop_path = Path("resource/lollipop.png")
     lollipop = gsoup.generate_lollipop_pattern(512, 512, dst=lollipop_path)
     gsoup.save_image(lollipop, lollipop_path)
     lollipop2 = gsoup.load_image(lollipop_path)
     assert np.allclose(lollipop, lollipop2)
-    gsoup.save_images(lollipop[None, ...], lollipop_path.parent, file_names=["test_save.png"])
+    gsoup.save_images(
+        lollipop[None, ...], lollipop_path.parent, file_names=["test_save.png"]
+    )
     lollipop_pad = gsoup.pad_to_res(lollipop[None, ...], 512, 1024)
     assert lollipop_pad.shape == (1, 512, 1024, 3)
     lollipop_padded_square = gsoup.pad_to_square(lollipop_pad)
@@ -235,7 +260,9 @@ def test_image():
     lollipop_linear = gsoup.srgb_to_linear(lollipop_srgb)
     assert np.allclose(lollipop, lollipop_linear)
     gsoup.generate_concentric_circles(256, 512, dst=Path("resource/circles.png"))
-    gsoup.generate_stripe_pattern(256, 512, direction="both", dst=Path("resource/stripe.png"))
+    gsoup.generate_stripe_pattern(
+        256, 512, direction="both", dst=Path("resource/stripe.png")
+    )
     gsoup.generate_dot_pattern(512, 256, dst=Path("resource/dots.png"))
     gray1 = gsoup.generate_gray_gradient(256, 256, grayscale=True)
     assert gray1.shape == (256, 256)
@@ -262,15 +289,15 @@ def test_image():
     img = gsoup.load_image(dst, float=True)
     assert img.shape == (512, 512, 3)
     assert img.dtype == np.float32
-    assert (img>=0.0).all()
-    assert (img<=1.0).all()
+    assert (img >= 0.0).all()
+    assert (img <= 1.0).all()
     img = gsoup.load_image(dst, channels_last=False)
     assert img.shape == (3, 512, 512)
     img = gsoup.load_image(dst, float=True, as_grayscale=True)
     assert img.shape == (512, 512)
     assert img.dtype == np.float32
-    assert (img>=0.0).all()
-    assert (img<=1.0).all()
+    assert (img >= 0.0).all()
+    assert (img <= 1.0).all()
     img = gsoup.load_image(dst, channels_last=False, as_grayscale=True)
     assert img.shape == (512, 512)
     img = gsoup.load_images([dst])
@@ -283,7 +310,9 @@ def test_image():
     assert img.shape == (4, 512, 512, 3)
     resized_img = gsoup.resize_images_naive(img, 256, 256, mode="mean")
     assert resized_img.shape == (4, 256, 256, 3)
-    resized_img_float = gsoup.resize_images_naive(gsoup.to_float(img), 256, 256, mode="mean")
+    resized_img_float = gsoup.resize_images_naive(
+        gsoup.to_float(img), 256, 256, mode="mean"
+    )
     assert resized_img_float.shape == (4, 256, 256, 3)
     assert resized_img_float.dtype == np.float32
     resized_img_gray = gsoup.resize_images_naive(img[..., 0:1], 256, 256, mode="mean")
@@ -292,29 +321,43 @@ def test_image():
     assert grid.shape == (512, 512, 3)
     img = gsoup.load_images([dst, dst, dst, dst], as_grayscale=True)
     assert img.shape == (4, 512, 512)
-    img = gsoup.load_images([dst, dst, dst, dst], as_grayscale=True, channels_last=False)
+    img = gsoup.load_images(
+        [dst, dst, dst, dst], as_grayscale=True, channels_last=False
+    )
     assert img.shape == (4, 512, 512)
     img = gsoup.load_images([dst, dst, dst, dst], resize_wh=(128, 128))
     assert img.shape == (4, 128, 128, 3)
-    img, paths = gsoup.load_images([dst, dst, dst, dst], resize_wh=(128, 256), as_grayscale=True, channels_last=False, return_paths=True, float=True, to_torch=True)
+    img, paths = gsoup.load_images(
+        [dst, dst, dst, dst],
+        resize_wh=(128, 256),
+        as_grayscale=True,
+        channels_last=False,
+        return_paths=True,
+        float=True,
+        to_torch=True,
+    )
     assert len(paths) == 4
     assert img.dtype == torch.float32
     assert img.shape == (4, 256, 128)
 
+
 def test_video():
     import platform
     import os
+
     if platform.system() == "Windows":
-        FFMPEG_DIR = os.path.join("D:/tools/ffmpeg-5.1-essentials_build/bin")
-        os.environ['PATH'] = FFMPEG_DIR + ";" + os.environ['PATH']
+        FFMPEG_DIR = os.path.join("C:/tools/ffmpeg-6.0-essentials_build/bin")
+        os.environ["PATH"] = FFMPEG_DIR + ";" + os.environ["PATH"]
     else:
         FFMPEG_DIR = os.path.join("/usr/bin")
-        os.environ['PATH'] = FFMPEG_DIR + ":" + os.environ['PATH']
+        os.environ["PATH"] = FFMPEG_DIR + ":" + os.environ["PATH"]
     frame_number = 100
     h = 128
     w = 128
     # images = np.random.randint(0, 255, (frame_number, 512, 512, 3), dtype=np.uint8)
-    images = np.array([gsoup.generate_concentric_circles(h, w, n=5) for i in range(100)])
+    images = np.array(
+        [gsoup.generate_concentric_circles(h, w, n=5) for i in range(100)]
+    )
     # im1 = gsoup.generate_voronoi_diagram(512, 512, 1000)
     # im2 = gsoup.generate_voronoi_diagram(512, 512, 1000)
     # im1s = np.tile(im1[None, ...], (10, 1, 1, 1))
@@ -324,38 +367,69 @@ def test_video():
     gsoup.save_video(images, Path("resource/lossy_video.avi"), lossy=True, fps=10)
     reader = gsoup.VideoReader(Path("resource/lossless_video.avi"), h=h, w=w)
     fps = gsoup.FPS()
+    reader_has_frames = False
     for i, frame in enumerate(reader):
+        reader_has_frames = True
         print("{}: {}, fps: {}".format(i, frame.shape, fps()))
         assert np.all(frame == images[i])
+    assert reader_has_frames
     video_frames = gsoup.load_video(Path("resource/lossless_video.avi"))
     assert video_frames.shape == (frame_number, h, w, 3)
     assert np.all(video_frames == images)
     video_frames_reversed = gsoup.reverse_video(Path("resource/lossless_video.avi"))
     assert (video_frames_reversed[-1] == video_frames[0]).all()
-    sliced_frames = gsoup.slice_from_video(Path("resource/lossless_video.avi"), every_n_frames=2, start_frame=0, end_frame=6)
+    sliced_frames = gsoup.slice_from_video(
+        Path("resource/lossless_video.avi"),
+        every_n_frames=2,
+        start_frame=0,
+        end_frame=6,
+    )
     assert (sliced_frames == video_frames[:7:2, :, :, :]).all()
-    gsoup.video_to_images(Path("resource/lossless_video.avi"), Path("resource/ffmpeg_reconstructed_images"))
-    gsoup.save_video(Path("resource/ffmpeg_reconstructed_images"), Path("resource/reconst_lossy.avi"), fps=10, lossy=True)
-    gsoup.save_video(Path("resource/ffmpeg_reconstructed_images"), Path("resource/reconst_lossless.avi"), fps=10, lossy=False)
+    gsoup.video_to_images(
+        Path("resource/lossless_video.avi"),
+        Path("resource/ffmpeg_reconstructed_images"),
+    )
+    gsoup.save_video(
+        Path("resource/ffmpeg_reconstructed_images"),
+        Path("resource/reconst_lossy.avi"),
+        fps=10,
+        lossy=True,
+    )
+    gsoup.save_video(
+        Path("resource/ffmpeg_reconstructed_images"),
+        Path("resource/reconst_lossless.avi"),
+        fps=10,
+        lossy=False,
+    )
     discrete_images = gsoup.load_images(Path("resource/ffmpeg_reconstructed_images"))
     assert discrete_images.shape == (frame_number, h, w, 3)
     timestamps = gsoup.get_frame_timestamps(Path("resource/lossless_video.avi"))
     assert timestamps[0] == 0
 
+
 def test_procam():
     gray = gsoup.GrayCode()
     patterns = gray.encode((128, 128))
     mode = "ij"
-    forward_map, fg = gray.decode(patterns, (128, 128),
-                                  output_dir=Path("resource/pix2pix"), mode=mode, debug=True)
-    backward_map = gsoup.compute_backward_map((128, 128), forward_map, fg,
-                                              output_dir=Path("resource/pix2pix"), debug=True)
+    forward_map, fg = gray.decode(
+        patterns, (128, 128), output_dir=Path("resource/pix2pix"), mode=mode, debug=True
+    )
+    backward_map = gsoup.compute_backward_map(
+        (128, 128), forward_map, fg, output_dir=Path("resource/pix2pix"), debug=True
+    )
     desired = gsoup.generate_lollipop_pattern(128, 128)
-    warp_image = gsoup.warp_image(backward_map, desired, cam_wh=(forward_map.shape[1], forward_map.shape[0]), mode=mode,
-                                  output_path=Path("resource/warp.png"))
+    warp_image = gsoup.warp_image(
+        backward_map,
+        desired,
+        cam_wh=(forward_map.shape[1], forward_map.shape[0]),
+        mode=mode,
+        output_path=Path("resource/warp.png"),
+    )
     assert warp_image.shape == (128, 128, 3)
     assert warp_image.dtype == np.uint8
-    assert np.mean(np.abs(desired - warp_image)) < 10  # identity correspondence & warp should be very similar
+    assert (
+        np.mean(np.abs(desired - warp_image)) < 10
+    )  # identity correspondence & warp should be very similar
     # calibration_dir = Path("resource/calibration")
     # calibration_dir.mkdir(exist_ok=True, parents=True)
     checkerboard = gsoup.generate_checkerboard(128, 128, 16)
@@ -371,16 +445,36 @@ def test_procam():
     patterns = gsoup.load_images(Path("tests/tests_resource/correspondence"))
     cam_wh = (patterns[0].shape[1], patterns[0].shape[0])
     proj_wh = (800, 800)
-    forward_map, fg = gray.decode(patterns, (800, 800), output_dir="resource/forward", debug=True, mode=mode)
-    backward_map = gsoup.compute_backward_map((800, 800), forward_map, fg, mode=mode, output_dir="resource/backward_not_interp", debug=True, interpolate=False)
-    backward_map = gsoup.compute_backward_map((800, 800), forward_map, fg, mode=mode, output_dir="resource/backward_interp", debug=True, interpolate=True)
+    forward_map, fg = gray.decode(
+        patterns, (800, 800), output_dir="resource/forward", debug=True, mode=mode
+    )
+    backward_map = gsoup.compute_backward_map(
+        (800, 800),
+        forward_map,
+        fg,
+        mode=mode,
+        output_dir="resource/backward_not_interp",
+        debug=True,
+        interpolate=False,
+    )
+    backward_map = gsoup.compute_backward_map(
+        (800, 800),
+        forward_map,
+        fg,
+        mode=mode,
+        output_dir="resource/backward_interp",
+        debug=True,
+        interpolate=True,
+    )
     desired = gsoup.generate_lollipop_pattern(800, 800)
-    warp_image = gsoup.warp_image(backward_map, desired, cam_wh=cam_wh, mode=mode,
-                                  output_path=Path("resource/debug/warp.png"))
-    blend_to_cv = np.array([[1.0, 0, 0, 0],
-                            [0, -1, 0, 0],
-                            [0, 0, -1, 0],
-                            [0, 0, 0, 1]])
+    warp_image = gsoup.warp_image(
+        backward_map,
+        desired,
+        cam_wh=cam_wh,
+        mode=mode,
+        output_path=Path("resource/debug/warp.png"),
+    )
+    blend_to_cv = np.array([[1.0, 0, 0, 0], [0, -1, 0, 0], [0, 0, -1, 0], [0, 0, 0, 1]])
     cam_transform = np.array([[0, 0, 1, 1], [1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 0, 1.0]])
     cam_transform = cam_transform @ blend_to_cv
     ### gt ###
@@ -394,25 +488,49 @@ def test_procam():
     # cam_dist = None
     ### end gt ###
     ### calib ###
-    result = gsoup.calibrate_procam((800, 800), Path("tests/tests_resource/calibration"),
-                                            chess_vert=15, chess_hori=15,
-                                            chess_block_size=0.0185, output_dir="resource/calibration",
-                                            projector_orientation="none", debug=True)
-    cam_int, cam_dist,\
-    proj_int, proj_dist,\
-    proj_transform = result["cam_intrinsics"], result["cam_distortion"], result["proj_intrinsics"], result["proj_distortion"], result["proj_transform"]
+    result = gsoup.calibrate_procam(
+        (800, 800),
+        Path("tests/tests_resource/calibration"),
+        chess_vert=15,
+        chess_hori=15,
+        chess_block_size=0.0185,
+        output_dir="resource/calibration",
+        projector_orientation="none",
+        debug=True,
+    )
+    cam_int, cam_dist, proj_int, proj_dist, proj_transform = (
+        result["cam_intrinsics"],
+        result["cam_distortion"],
+        result["proj_intrinsics"],
+        result["proj_distortion"],
+        result["proj_transform"],
+    )
     proj_transform = cam_transform @ np.linalg.inv(proj_transform)  # p2w = c2w @ p2c
     ### end calib ###
     # calibration_static_view(cam_transform, proj_transform, (800, 800), (800, 800), cam_int, cam_dist, proj_int, forward_map, fg, mode)
-    pc = gsoup.reconstruct_pointcloud(forward_map, fg, cam_transform, proj_transform, cam_int, cam_dist, proj_int, mode=mode)
+    pc = gsoup.reconstruct_pointcloud(
+        forward_map,
+        fg,
+        cam_transform,
+        proj_transform,
+        cam_int,
+        cam_dist,
+        proj_int,
+        mode=mode,
+    )
     gsoup.save_pointcloud(pc, "resource/points.ply")
+
 
 def test_sphere_tracer():
     image_size = 512
     # device = "cuda:0"
     device = "cpu"
-    w2v, v2c = gsoup.create_random_cameras_on_unit_sphere(5, 1.0, opengl=True, device=device)
-    ray_origins, ray_directions = gsoup.generate_rays(w2v, v2c[0], image_size, image_size, device=device)
+    w2v, v2c = gsoup.create_random_cameras_on_unit_sphere(
+        5, 1.0, opengl=True, device=device
+    )
+    ray_origins, ray_directions = gsoup.generate_rays(
+        w2v, v2c[0], image_size, image_size, device=device
+    )
     sdf = gsoup.structures.sphere_sdf(0.25)
     images = []
     for o, d in zip(ray_origins, ray_directions):
@@ -420,10 +538,13 @@ def test_sphere_tracer():
         images.append(result.view(image_size, image_size, 4))
     images = gsoup.to_np(torch.stack(images))
     images = gsoup.alpha_compose(images)
-    gizmo_images = gsoup.draw_gizmo_on_image(images, gsoup.to_np(v2c @ w2v), opengl=True)
+    gizmo_images = gsoup.draw_gizmo_on_image(
+        images, gsoup.to_np(v2c @ w2v), opengl=True
+    )
     gsoup.save_images(gizmo_images, Path("resource/sphere_trace"))
+
 
 def test_qem():
     v, f = gsoup.structures.cube()
-    v_new, f_new = gsoup.qem(v, f, budget = 4)
+    v_new, f_new = gsoup.qem(v, f, budget=4)
     assert f_new.shape[0] == 4

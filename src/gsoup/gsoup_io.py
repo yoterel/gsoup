@@ -6,6 +6,7 @@ from .image import alpha_compose
 from PIL import Image
 import json
 
+
 def write_to_json(data, dst):
     """
     writes data to json file
@@ -16,6 +17,7 @@ def write_to_json(data, dst):
     dst.parent.mkdir(parents=True, exist_ok=True)
     with open(dst, "w") as f:
         json.dump(data, f, indent=4, sort_keys=True)
+
 
 def save_animation(images, dst):
     """
@@ -31,13 +33,29 @@ def save_animation(images, dst):
     if images.dtype != np.uint8:
         images = to_8b(images)
     if images.shape[-1] == 1:
-        images = [Image.fromarray(image[..., 0], mode="L").convert('P') for image in images]
+        images = [
+            Image.fromarray(image[..., 0], mode="L").convert("P") for image in images
+        ]
     else:
         images = [Image.fromarray(image) for image in images]
     dst = Path(dst.parent, dst.stem)
-    images[0].save(str(dst)+".gif", save_all=True, append_images=images[1:], optimize=False, duration=100, loop=0)
+    images[0].save(
+        str(dst) + ".gif",
+        save_all=True,
+        append_images=images[1:],
+        optimize=False,
+        duration=100,
+        loop=0,
+    )
 
-def save_image(image, dst, force_grayscale: bool = False, overwrite: bool = True, extension: str = "png"):
+
+def save_image(
+    image,
+    dst,
+    force_grayscale: bool = False,
+    overwrite: bool = True,
+    extension: str = "png",
+):
     """
     saves single image as png
     :param image: (H x W x C) tensor or (H x W) tensor
@@ -50,9 +68,19 @@ def save_image(image, dst, force_grayscale: bool = False, overwrite: bool = True
     if image.ndim != 3:
         raise ValueError("Image must be 2 or 3 dimensional")
     dst = Path(dst)
-    save_images(image[None, ...], dst.parent, [dst.name], force_grayscale, overwrite, extension)
+    save_images(
+        image[None, ...], dst.parent, [dst.name], force_grayscale, overwrite, extension
+    )
 
-def save_images(images, dst, file_names: list = [], force_grayscale: bool = False, overwrite: bool = True, extension: str = "png"):
+
+def save_images(
+    images,
+    dst,
+    file_names: list = [],
+    force_grayscale: bool = False,
+    overwrite: bool = True,
+    extension: str = "png",
+):
     """
     saves images as png
     :param images: (b x H x W x C) tensor
@@ -65,15 +93,23 @@ def save_images(images, dst, file_names: list = [], force_grayscale: bool = Fals
     if np.isnan(images).any():
         raise ValueError("Images must be finite")
     if extension != "tiff":
-        if images.dtype == np.float32 or images.dtype == np.float64 or images.dtype == bool:
+        if (
+            images.dtype == np.float32
+            or images.dtype == np.float64
+            or images.dtype == bool
+        ):
             images = to_8b(images)
         if images.dtype != np.uint8:
-            raise ValueError("Images must be of type uint8 (or float32/64, which will be converted to uint8)")
+            raise ValueError(
+                "Images must be of type uint8 (or float32/64, which will be converted to uint8)"
+            )
     if images.ndim != 4:
         raise ValueError("Images must be of shape (b x H x W x C)")
     if file_names:
         if images.shape[0] != len(file_names):
-            raise ValueError("Number of images and length of file names list must match")
+            raise ValueError(
+                "Number of images and length of file names list must match"
+            )
         file_names = [Path(x).stem for x in file_names]  # remove suffix
     dst = Path(dst)
     dst.mkdir(parents=True, exist_ok=True)
@@ -96,7 +132,16 @@ def save_images(images, dst, file_names: list = [], force_grayscale: bool = Fals
                 continue
         pil_image.save(str(cur_dst))
 
-def load_image(path, float=False, channels_last=True, to_torch=False, device=None, resize_wh=None, as_grayscale=False):
+
+def load_image(
+    path,
+    float=False,
+    channels_last=True,
+    to_torch=False,
+    device=None,
+    resize_wh=None,
+    as_grayscale=False,
+):
     """
     loads an image from a single file
     :param path: path to file
@@ -114,10 +159,29 @@ def load_image(path, float=False, channels_last=True, to_torch=False, device=Non
     if path.is_dir():
         raise FileNotFoundError("Path must be a file")
     elif path.is_file():
-        image = load_images([path], float=float, channels_last=channels_last, return_paths=False, to_torch=to_torch, device=device, resize_wh=resize_wh, as_grayscale=as_grayscale)
+        image = load_images(
+            [path],
+            float=float,
+            channels_last=channels_last,
+            return_paths=False,
+            to_torch=to_torch,
+            device=device,
+            resize_wh=resize_wh,
+            as_grayscale=as_grayscale,
+        )
         return image[0]
 
-def load_images(source, float=False, channels_last=True, return_paths=False, to_torch=False, device=None, resize_wh=None, as_grayscale=False):
+
+def load_images(
+    source,
+    float=False,
+    channels_last=True,
+    return_paths=False,
+    to_torch=False,
+    device=None,
+    resize_wh=None,
+    as_grayscale=False,
+):
     """
     loads images from a list of paths, a folder or a single file
     :param source: path to folder with images / path to image file / list of paths
@@ -150,7 +214,9 @@ def load_images(source, float=False, channels_last=True, return_paths=False, to_
         if not path.exists():
             raise FileNotFoundError("Path does not exist: {}".format(path))
         if not path.is_dir():
-            raise FileNotFoundError("Path must be a folder or a list/tuple/array of paths")
+            raise FileNotFoundError(
+                "Path must be a folder or a list/tuple/array of paths"
+            )
         for image in sorted(path.iterdir()):
             if image.suffix in supported_suffixes:
                 im = Image.open(str(image))
@@ -162,7 +228,9 @@ def load_images(source, float=False, channels_last=True, return_paths=False, to_
                 file_paths.append(image)
     images = np.stack(images, axis=0)
     if as_grayscale and images.ndim == 4:
-        if images.shape[-1] == 4:  # alpha compose before converting to grayscale as alpha is not affected by averaging
+        if (
+            images.shape[-1] == 4
+        ):  # alpha compose before converting to grayscale as alpha is not affected by averaging
             images = alpha_compose(images)
         else:
             images = to_float(images)
@@ -181,11 +249,16 @@ def load_images(source, float=False, channels_last=True, return_paths=False, to_
     else:
         return images
 
-def load_mesh(path: Path,
-              return_vert_uvs=False,
-              return_vert_norms=False,
-              return_vert_color=False,
-              to_torch=False, device=None, verbose=True):
+
+def load_mesh(
+    path: Path,
+    return_vert_uvs=False,
+    return_vert_norms=False,
+    return_vert_color=False,
+    to_torch=False,
+    device=None,
+    verbose=True,
+):
     """
     loads a mesh from a file
     :param path: path to mesh file
@@ -202,23 +275,34 @@ def load_mesh(path: Path,
     if path.suffix not in supported:
         raise ValueError("Only {} formats are supported for loading".format(supported))
     if path.suffix == ".obj":
-        return load_obj(path,
-                        return_vert_uvs=return_vert_uvs,
-                        return_vert_norms=return_vert_norms,
-                        return_vert_color=return_vert_color,
-                        to_torch=to_torch, device=device, verbose=verbose)
+        return load_obj(
+            path,
+            return_vert_uvs=return_vert_uvs,
+            return_vert_norms=return_vert_norms,
+            return_vert_color=return_vert_color,
+            to_torch=to_torch,
+            device=device,
+            verbose=verbose,
+        )
     elif path.suffix == ".ply":
         if return_vert_uvs or return_vert_norms:
-            raise ValueError("current ply parser does not support vertex uvs or normals")
-        return load_ply(path,
-                        return_vert_color=return_vert_color,
-                        to_torch=to_torch, device=device, verbose=verbose)
+            raise ValueError(
+                "current ply parser does not support vertex uvs or normals"
+            )
+        return load_ply(
+            path,
+            return_vert_color=return_vert_color,
+            to_torch=to_torch,
+            device=device,
+            verbose=verbose,
+        )
     else:
         raise ValueError("Only {} formats are supported for loading".format(supported))
 
-def load_ply(path: Path,
-             return_vert_color=False,
-             to_torch=False, device=None, verbose=True):
+
+def load_ply(
+    path: Path, return_vert_color=False, to_torch=False, device=None, verbose=True
+):
     """
     :param path: path to ply file
     :return_vert_color: if True, returns a (V x 3) tensor of vertex colors in addition to vertices and faces
@@ -244,11 +328,16 @@ def load_ply(path: Path,
     else:
         return v, f
 
-def load_obj(path: Path,
-             return_vert_uvs=False,
-             return_vert_norms=False,
-             return_vert_color=False,
-             to_torch=False, device=None, verbose=True):
+
+def load_obj(
+    path: Path,
+    return_vert_uvs=False,
+    return_vert_norms=False,
+    return_vert_color=False,
+    to_torch=False,
+    device=None,
+    verbose=True,
+):
     """
     :param path: path to obj file
     :param to_torch: if True, returns a torch tensor
@@ -293,6 +382,7 @@ def load_obj(path: Path,
     else:
         return v, f
 
+
 def parse_ply(path, verbose=True):
     """
     A simple (and naive) ply parser
@@ -307,7 +397,7 @@ def parse_ply(path, verbose=True):
     n_vertices = 0
     has_vert_color = False
     path = Path(path)
-    with open(path, 'r') as ply_file:
+    with open(path, "r") as ply_file:
         lines = ply_file.readlines()
         lines = [x.strip() for x in lines]
     try:
@@ -315,9 +405,11 @@ def parse_ply(path, verbose=True):
     except ValueError:
         raise ValueError("ply file header corrupted (no 'end_header' found)")
     header = lines[:end_header_index]
-    data = lines[end_header_index+1:]
+    data = lines[end_header_index + 1 :]
     if header[0] != "ply":
-        raise ValueError("ply file header corrupted ('ply' keyword not found in first line)")
+        raise ValueError(
+            "ply file header corrupted ('ply' keyword not found in first line)"
+        )
     if header[1].split()[1] != "ascii":
         raise ValueError("only ascii ply files are supported")
     vert_properties = []
@@ -337,7 +429,9 @@ def parse_ply(path, verbose=True):
                 n_faces = int(split[2])
                 found_face_element = True
             else:
-                raise ValueError("ply file contains elements other than verticies or faces, which are not supported.")
+                raise ValueError(
+                    "ply file contains elements other than verticies or faces, which are not supported."
+                )
         if split[0] == "property":
             if found_vertex_element:
                 vert_properties.append((split[2], split[1]))
@@ -348,32 +442,58 @@ def parse_ply(path, verbose=True):
     if len(vert_properties) == 0:
         raise ValueError("ply file header corrupted (no vertex properties found)")
     vert_properties_names = [x[0] for x in vert_properties]
-    if "x" not in vert_properties_names or "y" not in vert_properties_names or "z" not in vert_properties_names:
-        raise ValueError("ply file header corrupted (could not find xyz properties for vertices)")
-    if "red" in vert_properties_names and "green" in vert_properties_names and "blue" in vert_properties_names:
+    if (
+        "x" not in vert_properties_names
+        or "y" not in vert_properties_names
+        or "z" not in vert_properties_names
+    ):
+        raise ValueError(
+            "ply file header corrupted (could not find xyz properties for vertices)"
+        )
+    if (
+        "red" in vert_properties_names
+        and "green" in vert_properties_names
+        and "blue" in vert_properties_names
+    ):
         has_vert_color = True
     n_vert_properties = len(vert_properties)
     result = {x[0]: [] for x in vert_properties}
     for line in data[:n_vertices]:
         split = line.split()
         if len(split) != n_vert_properties:
-            raise ValueError("ply file data corrupted (number of vertex properties does not match header)")
+            raise ValueError(
+                "ply file data corrupted (number of vertex properties does not match header)"
+            )
         for i, prop in enumerate(vert_properties_names):
             result[prop].append(split[i])
-    verts = np.stack([np.array(result["x"], dtype=np.float32),
-                      np.array(result["y"], dtype=np.float32),
-                      np.array(result["z"], dtype=np.float32)], axis=1)
+    verts = np.stack(
+        [
+            np.array(result["x"], dtype=np.float32),
+            np.array(result["y"], dtype=np.float32),
+            np.array(result["z"], dtype=np.float32),
+        ],
+        axis=1,
+    )
     if len(verts) != n_vertices:
-        raise ValueError("ply file data corrupted (number of vertices does not match header)")
+        raise ValueError(
+            "ply file data corrupted (number of vertices does not match header)"
+        )
     if has_vert_color:
-        vert_colors = np.stack([np.array(result["red"], dtype=np.float32),
-                                np.array(result["green"], dtype=np.float32),
-                                np.array(result["blue"], dtype=np.float32)], axis=1)
+        vert_colors = np.stack(
+            [
+                np.array(result["red"], dtype=np.float32),
+                np.array(result["green"], dtype=np.float32),
+                np.array(result["blue"], dtype=np.float32),
+            ],
+            axis=1,
+        )
         color_dtype = vert_properties[vert_properties_names.index("red")][1]
         if color_dtype == "uchar":
             vert_colors = vert_colors / 255.0
         if len(vert_colors) != n_vertices:
-            raise ValueError("ply file data corrupted (number of vertex colors does not match header)")
+            raise ValueError(
+                "ply file data corrupted (number of vertex colors does not match header)"
+            )
     if n_faces > 0:
         for line in data[n_vertices:]:
             split = line.split()
@@ -382,9 +502,11 @@ def parse_ply(path, verbose=True):
             faces.append([int(x) for x in split[1:]])
         faces = np.stack(faces)
         if len(faces) != n_faces:
-            raise ValueError("ply file data corrupted (number of faces does not match header)")
+            raise ValueError(
+                "ply file data corrupted (number of faces does not match header)"
+            )
     return verts, faces, vert_norms, vert_colors
-            
+
 
 def parse_obj(path, verbose=True):
     """
@@ -400,7 +522,7 @@ def parse_obj(path, verbose=True):
     face_texture_list = []
     face_normal_list = []
     finite_flag = False
-    with open(path, 'r') as objFile:
+    with open(path, "r") as objFile:
         for line in objFile:
             line = line.split("#")[0]  # remove comments
             split = line.split()
@@ -410,7 +532,7 @@ def parse_obj(path, verbose=True):
                 if 3 <= len(split[1:]) <= 4:  # x y z [w]
                     float_vertex = np.array([np.float64(x) for x in split[1:]])
                     if not np.isfinite(float_vertex).all():
-                        finite_flag=True
+                        finite_flag = True
                     vertex_list.append(float_vertex)
                 elif len(split[1:]) == 6:
                     float_vertex = np.array([np.float64(x) for x in split[1:4]])
@@ -420,7 +542,11 @@ def parse_obj(path, verbose=True):
                     vertex_list.append(float_vertex)
                     color_list.append(float_color)
                 else:
-                    raise ValueError("vertex {} has {} entries, but only 3 or 6 are supported".format(len(vertex_list), len(split[1:])))
+                    raise ValueError(
+                        "vertex {} has {} entries, but only 3 or 6 are supported".format(
+                            len(vertex_list), len(split[1:])
+                        )
+                    )
             elif split[0] == "f":
                 if len(split[1:]) != 3:
                     raise ValueError("only triangular faces are supported")
@@ -434,14 +560,16 @@ def parse_obj(path, verbose=True):
                         face_list.append(int_face[:, 0])
                         face_texture_list.append(int_face[:, 1])
                     elif face.shape == (3, 3):  # v/vt/vn or v/vn
-                        if np.all([len(x)==0 for x in face[:, 1]]):  # v//vn
+                        if np.all([len(x) == 0 for x in face[:, 1]]):  # v//vn
                             face = face[:, 0::2]
                             int_face = face.astype(np.int32) - 1
                             face_list.append(int_face[:, 0])
                             face_normal_list.append(int_face[:, 1])
                         else:  # v/vt/vn
-                            if np.any([len(x)==0 for x in face[:, 1]]):
-                                raise ValueError("face {} is corrupt".format(len(face_list)))
+                            if np.any([len(x) == 0 for x in face[:, 1]]):
+                                raise ValueError(
+                                    "face {} is corrupt".format(len(face_list))
+                                )
                             else:
                                 int_face = face.astype(np.int32) - 1
                                 face_list.append(int_face[:, 0])
@@ -451,7 +579,11 @@ def parse_obj(path, verbose=True):
                         raise ValueError("negative face indices are not supported")
             elif split[0] == "vn":
                 if len(split[1:]) != 3:  # xn yn zn
-                    raise ValueError("vertex normal {} has {} entries, but only 3 are supported".format(len(vertex_normal_list), len(split[1:])))
+                    raise ValueError(
+                        "vertex normal {} has {} entries, but only 3 are supported".format(
+                            len(vertex_normal_list), len(split[1:])
+                        )
+                    )
                 else:
                     float_vertex_normal = np.array([np.float64(x) for x in split[1:]])
                     vertex_normal_list.append(float_vertex_normal)
@@ -459,12 +591,18 @@ def parse_obj(path, verbose=True):
                 if 2 <= len(split[1:]) <= 3:  # u [v, w]
                     float_vertex_tex = np.array([np.float64(x) for x in split[1:]])
                     if (float_vertex_tex < 0).any():
-                        raise ValueError("negative texture coordinates are not supported")
+                        raise ValueError(
+                            "negative texture coordinates are not supported"
+                        )
                     if (float_vertex_tex > 1).any():
                         raise ValueError("texture coordinates must be between 0 and 1")
                     vertex_texture_list.append(float_vertex_tex)
                 else:
-                    raise ValueError("vertex normal {} has {} entries, but only 3 are supported".format(len(vertex_normal_list), len(split[1:])))
+                    raise ValueError(
+                        "vertex normal {} has {} entries, but only 3 are supported".format(
+                            len(vertex_normal_list), len(split[1:])
+                        )
+                    )
             elif split[0] == "l":  # ignore polyline elements
                 continue
             elif split[0] == "vp":  # ignore parameter space vertices
@@ -495,8 +633,9 @@ def parse_obj(path, verbose=True):
         fn = None
     return v, f, vt, vn, vc, ft, fn
 
+
 def save_obj(vertices, faces, path):
-    """"
+    """ "
     :param vertices: (n x 3) tensor of vertices
     :param faces: (m x 3) tensor of vertex indices
     :param path: path to save obj file to
@@ -525,9 +664,19 @@ def save_obj(vertices, faces, path):
         for v in vertices:
             file.write("v {} {} {}\n".format(v[0], v[1], v[2]))  # write vertices
         for f in faces:
-            file.write("f {} {} {}\n".format(f[0] + 1, f[1] + 1, f[2] + 1))  # obj indices start at 1
+            file.write(
+                "f {} {} {}\n".format(f[0] + 1, f[1] + 1, f[2] + 1)
+            )  # obj indices start at 1
 
-def save_ply(vertices, path, faces=None, vertex_colors=None, face_colors=None, vertex_normals=None):
+
+def save_ply(
+    vertices,
+    path,
+    faces=None,
+    vertex_colors=None,
+    face_colors=None,
+    vertex_normals=None,
+):
     """
     saves a ply file in a human readable format
     :param vertices: (n x 3) np array or torch tensor of vertices float32/float64
@@ -625,7 +774,10 @@ def save_ply(vertices, path, faces=None, vertex_colors=None, face_colors=None, v
                     file.write(" {} {} {}".format(c[0], c[1], c[2]))
                 file.write("\n")
 
-def save_mesh(vertices, faces, path, vertex_normals=None, vertex_colors=None, face_colors=None):
+
+def save_mesh(
+    vertices, faces, path, vertex_normals=None, vertex_colors=None, face_colors=None
+):
     """
     saves a mesh to a file
     :param vertices: (n x 3) tensor of vertices
@@ -641,10 +793,22 @@ def save_mesh(vertices, faces, path, vertex_normals=None, vertex_colors=None, fa
     else:
         if path.suffix == ".obj":
             if vertex_colors is not None or face_colors is not None:
-                raise ValueError("obj does not officially support vertex or face colors")
-            save_obj(vertices, faces, path)  # will ignore vertex_normals/vertex_colors/face_colors
+                raise ValueError(
+                    "obj does not officially support vertex or face colors"
+                )
+            save_obj(
+                vertices, faces, path
+            )  # will ignore vertex_normals/vertex_colors/face_colors
         elif path.suffix == ".ply":
-            save_ply(vertices, path, faces=faces, vertex_normals=vertex_normals, vertex_colors=vertex_colors, face_colors=face_colors)
+            save_ply(
+                vertices,
+                path,
+                faces=faces,
+                vertex_normals=vertex_normals,
+                vertex_colors=vertex_colors,
+                face_colors=face_colors,
+            )
+
 
 def save_pointcloud(vertices, path, vertex_colors=None, vertex_normals=None):
     path = Path(path)
@@ -660,10 +824,15 @@ def save_pointcloud(vertices, path, vertex_colors=None, vertex_normals=None):
             raise ValueError("Vertex normals must have same shape as vertices")
     save_ply(vertices, path, vertex_colors=vertex_colors, vertex_normals=vertex_normals)
 
-def load_pointcloud(path, 
-                    return_vert_norms=False,
-                    return_vert_color=False,
-                    to_torch=False, device=None, verbose=True):
+
+def load_pointcloud(
+    path,
+    return_vert_norms=False,
+    return_vert_color=False,
+    to_torch=False,
+    device=None,
+    verbose=True,
+):
     """
     :param path: path to ply file
     :param to_torch: if True, returns a torch tensor
@@ -678,7 +847,7 @@ def load_pointcloud(path,
         raise ValueError("Path does not exist")
     if not path.is_file():
         raise ValueError("Path must be a file")
-    v, _, vn, vc  = parse_ply(path, verbose=verbose)
+    v, _, vn, vc = parse_ply(path, verbose=verbose)
     if to_torch and device is not None:
         v = torch.tensor(v, dtype=torch.float, device=device)
         if return_vert_norms and vn is not None:
@@ -696,7 +865,10 @@ def load_pointcloud(path,
     else:
         return v
 
-def save_pointclouds(vertices, path, file_names: list = [], vertex_colors=None, vertex_normals=None):
+
+def save_pointclouds(
+    vertices, path, file_names: list = [], vertex_colors=None, vertex_normals=None
+):
     """
     saves a batch of pointclouds to a folder
     :param path: path to save meshes to
@@ -720,9 +892,20 @@ def save_pointclouds(vertices, path, file_names: list = [], vertex_colors=None, 
             cur_vert_norm = vertex_normals[i]
         if file_names:
             file_name = Path(file_names[i]).stem
-            save_pointcloud(v, path / "{}.ply".format(file_name), vertex_colors=cur_vert_colors, vertex_normals=cur_vert_norm)
+            save_pointcloud(
+                v,
+                path / "{}.ply".format(file_name),
+                vertex_colors=cur_vert_colors,
+                vertex_normals=cur_vert_norm,
+            )
         else:
-            save_pointcloud(v, path / "{:05d}.ply".format(i), vertex_colors=cur_vert_colors, vertex_normals=cur_vert_norm)
+            save_pointcloud(
+                v,
+                path / "{:05d}.ply".format(i),
+                vertex_colors=cur_vert_colors,
+                vertex_normals=cur_vert_norm,
+            )
+
 
 def save_meshes(vertices, faces, path, file_names: list = []):
     """
