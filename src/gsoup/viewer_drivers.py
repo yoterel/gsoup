@@ -270,7 +270,9 @@ def poses_static_view(
                 "mesh_{}".format(i), mesh[0], mesh[1], transparency=0.5
             )
     if pointclouds is not None:
+        typical_scale = np.linalg.norm(pointclouds, axis=-1).max()
         for i, pointcloud in enumerate(pointclouds):
+            pointcloud /= typical_scale[..., None]
             gviewer.register_pointcloud("pc_{}".format(i), pointcloud, radius=1e-4)
     gviewer.show()
 

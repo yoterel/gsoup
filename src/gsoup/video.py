@@ -9,29 +9,34 @@ import subprocess
 import cv2
 
 
-def get_ffmpeg_version():
+def get_ffmpeg_version(verbose=False):
     """
     :return: ffmpeg version
     """
+    version = None
     try:
         ffmpeg_output = subprocess.run(
             ["ffmpeg", "-version"], capture_output=True, text=True
         ).stdout
         parts = ffmpeg_output.split()
         version = parts[parts.index("version") + 1]
-        if version[0] != "5":
-            print(
-                "Warning, detected ffmpeg version: {}. Video module May fail for versions lower than 5".format(
-                    version
+        if verbose:
+            if version[0] != "5":
+                print(
+                    "Warning, detected ffmpeg version: {}. Video module May fail for versions lower than 5".format(
+                        version
+                    )
                 )
-            )
     except ValueError:
-        print("Warning, could not detect ffmpeg version. Video module May fail")
+        if verbose:
+            print("Warning, could not detect ffmpeg version. Video module May fail")
     except FileNotFoundError:
-        print("Warning, ffmpeg not found. Video module May fail")
+        if verbose:
+            print("Warning, ffmpeg not found. Video module May fail")
+    return version
 
 
-get_ffmpeg_version()
+get_ffmpeg_version(True)
 
 
 class FPS:
@@ -98,9 +103,9 @@ def get_frame_timestamps(video_path):
 
 def load_video(video_path, verbose=False):
     """
-    loads a video from disk into a numpy tensor (uint8, channels last, RGB)
+    loads a video from disk into a numpy array (uint8, channels last, RGB)
     :param video_path: path to video
-    :return: (n x h x w x 3) tensor
+    :return: (n x h x w x 3) numpy array
     """
     h, w, _, _ = get_video_info(video_path)
     out, _ = (
@@ -114,7 +119,7 @@ def load_video(video_path, verbose=False):
 
 def save_video(frames, output_path, fps, bit_rate="1M", lossy=True, verbose=False):
     """
-    saves a video from a t x h x w x 3 numpy tensor
+    saves a video from a t x h x w x 3 numpy array
     :param frames: (t x h x w x 3) numpy array or directory path containing images of same format and resolution
     :param output_path: path to save video to
     :param fps: frames per second of output video
@@ -232,7 +237,7 @@ def save_video(frames, output_path, fps, bit_rate="1M", lossy=True, verbose=Fals
 
 def reverse_video(video_path, output_path=None, verbose=False):
     """
-    reverses a video and possibly saves it to disk
+    reverses a video and optionally saves it to disk
     :param video_path: path to video
     :param output_path: path to save video to
     :return: (n x h x w x 3) tensor of reversed video
@@ -250,12 +255,16 @@ def reverse_video(video_path, output_path=None, verbose=False):
     return video
 
 
-def compress_video(src, dst, verbose=False):
+def compress_video(src, dst, crf=23, verbose=False):
     """
-    compresses a video using ffmpeg
+    compresses a video using ffmpeg & libx264, saving it to disk
     :param src: path to video
     :param dst: path to save compressed video to
+    :param crf: constant rate factor (lower is better quality, 0-51, 0 is lossless)
+    :param verbose: if True, print ffmpeg output
     """
+    if not (0 <= crf <= 51):
+        raise ValueError("crf must be between 0 and 51")
     dst = Path(dst)
     dst.parent.mkdir(parents=True, exist_ok=True)
     (
@@ -269,6 +278,9 @@ def compress_video(src, dst, verbose=False):
 def video_to_images(src, dst, verbose=False):
     """
     creates a folder of images from a video
+    :param src: path to video
+    :param dst: path to save images to (images will be named 0000.png, 0001.png, etc.)
+    :param verbose: if True, print ffmpeg output
     """
     dst = Path(dst)
     dst.mkdir(parents=True, exist_ok=True)
@@ -284,7 +296,7 @@ def slice_from_video(
     src, every_n_frames=2, start_frame=0, end_frame=None, verbose=False
 ):
     """
-    slices a video into frames
+    slices a video into frames, returning a numpy array of frames
     :param src: path to video
     :param every_n_frames: stride between selected frames
     :param start_frame: first frame to take (inclusive)

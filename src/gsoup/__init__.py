@@ -117,6 +117,7 @@ from .image import (
 )
 
 from .video import (
+    get_ffmpeg_version,
     get_video_info,
     get_frame_timestamps,
     load_video,
