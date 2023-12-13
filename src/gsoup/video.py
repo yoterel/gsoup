@@ -180,8 +180,7 @@ def save_video(frames, output_path, fps, bit_rate="1M", lossy=True, verbose=Fals
             for filename in files:
                 mystr = "file '{}'\n".format(str(filename.resolve()).replace("\\", "/"))
                 outfile.write(mystr.encode())
-                # todo: change duration to fit fps
-                mystr = "duration 0.03333\n"
+                mystr = "duration {:.05f}\n".format(1 / fps)
                 outfile.write(mystr.encode())
         stdin_stream = None
         stdout_stream = subprocess.PIPE if not verbose else None
