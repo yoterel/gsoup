@@ -276,7 +276,10 @@ def compress_video(src, dst, crf=23, verbose=False):
         .run(quiet=not verbose)
     )
 
-def images_to_video(src: Path, dst: Path, fps, bit_rate="1M", lossy=True, verbose=False):
+
+def images_to_video(
+    src: Path, dst: Path, fps, bit_rate="1M", lossy=True, verbose=False
+):
     """
     creates a video from a folder of images
     :param src: path to images
@@ -287,7 +290,6 @@ def images_to_video(src: Path, dst: Path, fps, bit_rate="1M", lossy=True, verbos
     :param verbose: if True, print ffmpeg output
     """
     save_video(src, dst, fps=fps, bit_rate=bit_rate, lossy=lossy, verbose=verbose)
-
 
 
 def video_to_images(src, dst, verbose=False):
