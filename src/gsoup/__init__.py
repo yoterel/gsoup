@@ -125,6 +125,7 @@ from .video import (
     reverse_video,
     compress_video,
     video_to_images,
+    images_to_video,
     slice_from_video,
     VideoReader,
     FPS,

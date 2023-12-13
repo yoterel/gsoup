@@ -123,7 +123,7 @@ def save_video(frames, output_path, fps, bit_rate="1M", lossy=True, verbose=Fals
     :param frames: (t x h x w x 3) numpy array or directory path containing images of same format and resolution
     :param output_path: path to save video to
     :param fps: frames per second of output video
-    :param lossy: if True, use lossy compression (default: False, but then only .avi is supported)
+    :param lossy: if true, use lossy compression (if False, only .avi is supported)
     """
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -275,6 +275,19 @@ def compress_video(src, dst, crf=23, verbose=False):
         .overwrite_output()
         .run(quiet=not verbose)
     )
+
+def images_to_video(src: Path, dst: Path, fps, bit_rate="1M", lossy=True, verbose=False):
+    """
+    creates a video from a folder of images
+    :param src: path to images
+    :param dst: path to save video to
+    :param fps: frames per second of output video
+    :param bit_rate: bit rate of output video
+    :param lossy: if true, use lossy compression (if False, only .avi is supported)
+    :param verbose: if True, print ffmpeg output
+    """
+    save_video(src, dst, fps=fps, bit_rate=bit_rate, lossy=lossy, verbose=verbose)
+
 
 
 def video_to_images(src, dst, verbose=False):
