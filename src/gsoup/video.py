@@ -170,7 +170,7 @@ def save_video(frames, output_path, fps, bit_rate="1M", lossy=True, verbose=Fals
         if len(files) == 0:
             raise FileNotFoundError("No images found in directory: {}".format(frames))
         files = [x for x in files if x.is_file()]
-        files = [x for x in files if x.suffix in [".png", ".jpg", ".jpeg"]]
+        files = [x for x in files if x.suffix in [".png", ".jpg", ".jpeg", ".bmp"]]
         extensions = []
         for file in files:
             extensions.append(file.suffix)
@@ -179,6 +179,9 @@ def save_video(frames, output_path, fps, bit_rate="1M", lossy=True, verbose=Fals
         with open("ffmpeg_input.txt", "wb") as outfile:
             for filename in files:
                 mystr = "file '{}'\n".format(str(filename.resolve()).replace("\\", "/"))
+                outfile.write(mystr.encode())
+                # todo: change duration to fit fps
+                mystr = "duration 0.03333\n"
                 outfile.write(mystr.encode())
         stdin_stream = None
         stdout_stream = subprocess.PIPE if not verbose else None
