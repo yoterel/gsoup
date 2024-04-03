@@ -542,6 +542,7 @@ def reconstruct_pointcloud(
     projector_directions = projector_directions / np.linalg.norm(
         projector_directions, axis=-1, keepdims=True
     )
+    # note: using ray-ray is slightly naive. A better way is to minimize a reprojection error, and then ray-ray
     points, weight_factor = ray_ray_intersection(
         cam_origins, cam_directions, projector_origins, projector_directions
     )
