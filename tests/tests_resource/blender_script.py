@@ -252,9 +252,9 @@ def pack_textures(textures, proj_width, proj_height):
 def swap_projector_texture(texture_name):
     projector_name = "Projector"
     bpy.data.images[texture_name].colorspace_settings.name = "Linear"
-    bpy.data.lights[projector_name].node_tree.nodes[
-        "Image Texture"
-    ].image = bpy.data.images[texture_name]
+    bpy.data.lights[projector_name].node_tree.nodes["Image Texture"].image = (
+        bpy.data.images[texture_name]
+    )
 
 
 def hide_object_and_children(obj, hide=True):
