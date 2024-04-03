@@ -23,16 +23,18 @@ def get_ffmpeg_version(verbose=False):
         if verbose:
             if version[0] != "5":
                 print(
-                    "Warning, detected ffmpeg version: {}. Video module May fail for versions lower than 5".format(
+                    "gsoup warning: detected ffmpeg version: {}. Video module May fail for versions lower than 5".format(
                         version
                     )
                 )
     except ValueError:
         if verbose:
-            print("Warning, could not detect ffmpeg version. Video module May fail")
+            print(
+                "gsoup warning: could not detect ffmpeg version. Video module May fail"
+            )
     except FileNotFoundError:
         if verbose:
-            print("Warning, ffmpeg not found. Video module May fail")
+            print("gsoup warning: ffmpeg not found. Video module May fail")
     return version
 
 
@@ -66,7 +68,7 @@ def get_video_info(video_path):
     """
     returns basic video info
     :param video_path: path to video
-    :return: height, width, fps
+    :return: height, width, fps, frame_count
     """
     video_path = Path(video_path)
     if not video_path.exists():
@@ -81,9 +83,16 @@ def get_video_info(video_path):
         video_stream["r_frame_rate"].split("/")[1]
     )
     frame_count = int(video_stream["nb_frames"])
-    # codec_name = video_stream['codec_name']
-    # format_name = probe['format']['format_name']
-    return height, width, fps, frame_count
+    info = {
+        "height": height,
+        "width": width,
+        "pixel_format": video_stream["pix_fmt"],
+        "fps": fps,
+        "frame_count": frame_count,
+        "codec_name": video_stream["codec_name"],
+        "bit_rate": video_stream["bit_rate"],
+    }
+    return info
 
 
 def get_frame_timestamps(video_path):
@@ -107,13 +116,13 @@ def load_video(video_path, verbose=False):
     :param video_path: path to video
     :return: (n x h x w x 3) numpy array
     """
-    h, w, _, _ = get_video_info(video_path)
+    info = get_video_info(video_path)
     out, _ = (
         ffmpeg.input(str(video_path))
         .output("pipe:", format="rawvideo", pix_fmt="rgb24")
         .run(capture_stdout=True, quiet=not verbose)
     )
-    video = np.frombuffer(out, np.uint8).reshape([-1, h, w, 3])
+    video = np.frombuffer(out, np.uint8).reshape([-1, info["height"], info["width"], 3])
     return video
 
 
@@ -244,14 +253,14 @@ def reverse_video(video_path, output_path=None, verbose=False):
     :param output_path: path to save video to
     :return: (n x h x w x 3) tensor of reversed video
     """
-    h, w, _, _ = get_video_info(video_path)
+    info = get_video_info(video_path)
     out, _ = (
         ffmpeg.input(str(video_path))
         .filter("reverse")
         .output("pipe:", format="rawvideo", pix_fmt="rgb24")
         .run(capture_stdout=True, quiet=not verbose)
     )
-    video = np.frombuffer(out, np.uint8).reshape([-1, h, w, 3])
+    video = np.frombuffer(out, np.uint8).reshape([-1, info["height"], info["width"], 3])
     if output_path is not None:
         save_video(video, output_path)
     return video
@@ -271,7 +280,7 @@ def compress_video(src, dst, crf=23, verbose=False):
     dst.parent.mkdir(parents=True, exist_ok=True)
     (
         ffmpeg.input(str(src))
-        .output(str(dst), vcodec="libx264", crf=23, preset="slow")
+        .output(str(dst), vcodec="libx264", crf=crf, preset="slow")
         .overwrite_output()
         .run(quiet=not verbose)
     )
@@ -323,7 +332,8 @@ def slice_from_video(
     src = Path(src)
     if not src.exists():
         raise FileNotFoundError("Video file not found: {}".format(src))
-    h, w, _, fc = get_video_info(src)
+    info = get_video_info(src)
+    h, w, fc = info["height"], info["width"], info["frame_count"]
     if end_frame is None:
         end_frame = fc + 1
     out, _ = (
@@ -344,15 +354,42 @@ def get_frame_from_video(src, frame_index, verbose=False):
     :param frame_num: frame number to get
     :return: (h x w x 3) tensor of frame
     """
-    h, w, _, _ = get_video_info(src)
+    info = get_video_info(src)
     out, _ = (
         ffmpeg.input(str(src))
         .filter("select", "eq(n,{})".format(frame_index))
         .output("pipe:", format="rawvideo", pix_fmt="rgb24", fps_mode="passthrough")
         .run(capture_stdout=True, quiet=not verbose)
     )
-    frame = np.frombuffer(out, np.uint8).reshape([h, w, 3])
+    frame = np.frombuffer(out, np.uint8).reshape([info["height"], info["width"], 3])
     return frame
+
+
+def trim_video(src, dst, start_frame=0, end_frame=None, verbose=False):
+    """
+    trim a video from disk and save it to disk
+    note: will reencode video
+    :param src: path to video
+    :param dst: path to save trimmed video to
+    :param start_frame: first frame to take (inclusive)
+    :param end_frame: last frame to take (inclusive)
+    :param verbose: if True, print ffmpeg output
+    """
+    src = Path(src)
+    if not src.exists():
+        raise FileNotFoundError("Video file not found: {}".format(src))
+    info = get_video_info(src)
+    if end_frame is None:
+        end_frame = info["frame_count"] + 1
+    out, _ = (
+        ffmpeg.input(str(src))
+        .trim(start_frame=start_frame, end_frame=end_frame + 1)
+        .output(
+            str(dst), vcodec="libx264", b=info["bit_rate"], pix_fmt=info["pixel_format"]
+        )
+        .overwrite_output()
+        .run(capture_stdout=True, quiet=not verbose)
+    )
 
 
 class VideoReader:
@@ -375,7 +412,13 @@ class VideoReader:
         :param target_resolution: (h, w) tuple of target resolution (must have common divisor with original resolution)
         """
         self.video_path = Path(video_path)
-        self.h, self.w, self.fps, self.fc = get_video_info(video_path)
+        info = get_video_info(video_path)
+        self.h, self.w, self.fps, self.fc = (
+            info["width"],
+            info["height"],
+            info["fps"],
+            info["frame_count"],
+        )
         self.th = None
         self.tw = None
         if h is not None:

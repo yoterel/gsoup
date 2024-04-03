@@ -365,6 +365,13 @@ def test_video():
     # images = np.vstack([im1s, im2s])
     gsoup.save_video(images, Path("resource/lossless_video.avi"), lossy=False, fps=10)
     gsoup.save_video(images, Path("resource/lossy_video.avi"), lossy=True, fps=10)
+    gsoup.trim_video(
+        Path("resource/lossless_video.avi"),
+        Path("resource/trimmed.avi"),
+        0,
+        100,
+        True,
+    )
     reader = gsoup.VideoReader(Path("resource/lossless_video.avi"), h=h, w=w)
     fps = gsoup.FPS()
     reader_has_frames = False

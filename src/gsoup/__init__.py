@@ -127,6 +127,7 @@ from .video import (
     video_to_images,
     images_to_video,
     slice_from_video,
+    trim_video,
     VideoReader,
     FPS,
 )
