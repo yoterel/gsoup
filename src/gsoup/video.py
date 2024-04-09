@@ -4,19 +4,28 @@ import numpy as np
 import pathlib
 from pathlib import Path
 import ffmpeg
-from .image import resize_images_naive
 import subprocess
 import cv2
+
+# import os
+# FFMPEG_PATH = ""
 
 
 def get_ffmpeg_version(verbose=False):
     """
     :return: ffmpeg version
     """
+    # global FFMPEG_PATH
+    FFMPEG_PATH = ""
     version = None
+    # env_var = os.environ.get("FFMPEG_PATHa")
+    # if env_var:
+    #     FFMPEG_PATH = env_var
     try:
         ffmpeg_output = subprocess.run(
-            ["ffmpeg", "-version"], capture_output=True, text=True
+            [str(Path(FFMPEG_PATH, "ffmpeg")), "-version"],
+            capture_output=True,
+            text=True,
         ).stdout
         parts = ffmpeg_output.split()
         version = parts[parts.index("version") + 1]
@@ -27,14 +36,29 @@ def get_ffmpeg_version(verbose=False):
                         version
                     )
                 )
+                # print(
+                #     "you can set the environment variable "
+                #     "FFMPEG_PATH"
+                #     " to the path of ffmpeg binary"
+                # )
     except ValueError:
         if verbose:
             print(
                 "gsoup warning: could not detect ffmpeg version. Video module May fail"
             )
+            # print(
+            #     "you can set the environment variable "
+            #     "FFMPEG_PATH"
+            #     " to the path of ffmpeg binary"
+            # )
     except FileNotFoundError:
         if verbose:
             print("gsoup warning: ffmpeg not found. Video module May fail")
+            # print(
+            #     "you can set the environment variable "
+            #     "FFMPEG_PATH"
+            #     " to the path of ffmpeg binary"
+            # )
     return version
 
 
@@ -180,9 +204,7 @@ def save_video(frames, output_path, fps, bit_rate="1M", lossy=True, verbose=Fals
             raise FileNotFoundError("No images found in directory: {}".format(frames))
         files = [x for x in files if x.is_file()]
         files = [x for x in files if x.suffix in [".png", ".jpg", ".jpeg", ".bmp"]]
-        extensions = []
-        for file in files:
-            extensions.append(file.suffix)
+        extensions = [file.suffix for file in files]
         if len(set(extensions)) > 1:
             raise ValueError("All images in directory must have same extension")
         with open("ffmpeg_input.txt", "wb") as outfile:
@@ -195,7 +217,6 @@ def save_video(frames, output_path, fps, bit_rate="1M", lossy=True, verbose=Fals
         stdout_stream = subprocess.PIPE if not verbose else None
         stderr_stream = subprocess.PIPE if not verbose else None
         if lossy:
-            # (
             args = [
                 "ffmpeg",
                 "-y",
@@ -205,10 +226,10 @@ def save_video(frames, output_path, fps, bit_rate="1M", lossy=True, verbose=Fals
                 "0",
                 "-i",
                 "ffmpeg_input.txt",
-                "-framerate",
-                str(fps),
                 "-b",
                 bit_rate,
+                "-r",
+                str(fps),
                 str(output_path),
             ]
         else:
@@ -226,7 +247,7 @@ def save_video(frames, output_path, fps, bit_rate="1M", lossy=True, verbose=Fals
                 "0",
                 "-i",
                 "ffmpeg_input.txt",
-                "-framerate",
+                "-r",
                 str(fps),
                 "-pix_fmt",
                 pix_fmt,
