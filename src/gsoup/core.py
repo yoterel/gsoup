@@ -187,7 +187,7 @@ def to_8b(x, clip=True):
     :return: 8 bit array
     """
     if is_np(x):
-        if x.dtype == np.float32 or x.dtype == np.float64:
+        if x.dtype == np.float16 or x.dtype == np.float32 or x.dtype == np.float64:
             if clip:
                 x = np.clip(x, 0, 1)
             return (255 * x).round().astype(np.uint8)

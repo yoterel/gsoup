@@ -346,7 +346,7 @@ def test_video():
     import os
 
     if platform.system() == "Windows":
-        FFMPEG_DIR = os.path.join("C:/tools/ffmpeg-6.0-essentials_build/bin")
+        FFMPEG_DIR = os.path.join("C:/tools/ffmpeg-7.0.1-essentials_build/bin")
         os.environ["PATH"] = FFMPEG_DIR + ";" + os.environ["PATH"]
     else:
         FFMPEG_DIR = os.path.join("/usr/bin")

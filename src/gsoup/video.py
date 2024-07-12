@@ -18,7 +18,7 @@ def get_ffmpeg_version(verbose=False):
     # global FFMPEG_PATH
     FFMPEG_PATH = ""
     version = None
-    # env_var = os.environ.get("FFMPEG_PATHa")
+    # env_var = os.environ.get("FFMPEG_PATH")
     # if env_var:
     #     FFMPEG_PATH = env_var
     try:
