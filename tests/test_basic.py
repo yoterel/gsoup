@@ -196,6 +196,8 @@ def test_point_to_line_distance():
     dist = gsoup.point_line_distance(p, v0, v1)
     assert (dist == np.array([1.0, 1.0])).all()
 
+def test_parsers():
+    return
 
 def test_structures():
     v, f = gsoup.structures.cube()
