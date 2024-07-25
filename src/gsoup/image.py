@@ -14,6 +14,7 @@ from .core import (
 )
 from .structures import get_gizmo_coords
 
+
 def add_alpha(images, alphas):
     """
     adds an alpha channel to a batch of images
@@ -31,7 +32,9 @@ def add_alpha(images, alphas):
         raise ValueError("images and alphas must have the same number of dimensions")
     if images.ndim == 4:
         if images.shape[0] != alphas.shape[0] and alphas.shape[0] != 1:
-            raise ValueError("images and alpha must have the same batch size, or alphas batch size must equal 1")
+            raise ValueError(
+                "images and alpha must have the same batch size, or alphas batch size must equal 1"
+            )
         if images.shape[1:3] != alphas.shape[1:3]:
             raise ValueError("images and alphas must have the same spatial size")
         images, alphas = broadcast_batch(images, alphas)
@@ -43,6 +46,7 @@ def add_alpha(images, alphas):
         return np.concatenate((images, alphas), axis=-1)
     else:
         return torch.cat((images, alphas), dim=-1)
+
 
 def alpha_compose(images, backgrounds=None, bg_color=None):
     """
