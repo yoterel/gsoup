@@ -233,9 +233,14 @@ def test_structures():
 
 
 def test_image():
-    checkboard = gsoup.generate_checkerboard(512, 512, 8)
+    checkboard = gsoup.generate_checkerboard(512, 512, 8)  # H, W, 1
     gsoup.save_image(checkboard, "resource/checkboard.png")
-    checkboard_RGBA = np.tile(checkboard, (1, 1, 4))
+    checkboard_RGB = np.tile(checkboard, (1, 1, 3)) # H, W, 3
+    checkboard_RGBA = gsoup.add_alpha(checkboard_RGB, checkboard)
+    checkboard_RGBA2 = np.tile(checkboard, (1, 1, 4))  # H, W, 4
+    assert (checkboard_RGBA == checkboard_RGBA2).all()
+    checkboard_RGB_batch = np.tile(checkboard[None, ...], (10, 1, 1, 3))
+    checkboard_RGBA_batch = gsoup.add_alpha(checkboard_RGB_batch, checkboard[None, ...])
     checkboard_RGB = gsoup.alpha_compose(checkboard_RGBA, ~checkboard_RGBA[..., :3])
     assert (checkboard_RGB == 1.0).all()
     checkboard_RGB = gsoup.alpha_compose(
@@ -372,7 +377,7 @@ def test_video():
         100,
         True,
     )
-    reader = gsoup.VideoReader(Path("resource/lossless_video.avi"), h=h, w=w)
+    reader = gsoup.VideoReader(Path("resource/lossless_video.avi"), h=h, w=w, verbose=True)
     fps = gsoup.FPS()
     reader_has_frames = False
     for i, frame in enumerate(reader):

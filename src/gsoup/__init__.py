@@ -92,6 +92,7 @@ from .gsoup_io import (
 )
 
 from .image import (
+    add_alpha,
     alpha_compose,
     draw_text_on_image,
     draw_gizmo_on_image,
