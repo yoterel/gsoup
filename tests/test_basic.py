@@ -196,24 +196,32 @@ def test_point_to_line_distance():
     dist = gsoup.point_line_distance(p, v0, v1)
     assert (dist == np.array([1.0, 1.0])).all()
 
-def test_parsers():
-    return
 
 def test_structures():
+    v, f = gsoup.structures.cube()
+    assert v.shape[0] == 8
+    assert f.shape[0] == 12
+    v, f = gsoup.structures.icosehedron()
+    assert v.shape[0] == 12
+    assert f.shape[0] == 20
+
+
+def test_parsers():
+    # obj save and load
     v, f = gsoup.structures.cube()
     gsoup.save_mesh(v, f, "resource/cube.obj")
     v1, f1 = gsoup.load_mesh("resource/cube.obj")
     assert np.allclose(v, v1)
     assert np.allclose(f, f1)
     v, f = gsoup.structures.icosehedron()
-    gsoup.save_mesh(v, f, "resource/ico.obj")
-    gsoup.save_mesh(v, f, "resource/ico.ply")
     vc = np.random.randint(0, 255, size=v.shape).astype(np.uint8)
-    gsoup.save_mesh(v, f, "resource/ico_vcolor.ply", vertex_colors=vc)
-    v1, f1, vc1 = gsoup.load_mesh("resource/ico_vcolor.ply", return_vert_color=True)
+    gsoup.save_mesh(v, f, "resource/ico.obj")
+    v1, f1 = gsoup.load_mesh("resource/ico.obj")
     assert np.allclose(v, v1)
     assert np.allclose(f, f1)
-    assert np.allclose(vc, vc1 * 255.0)
+    # ply save
+    gsoup.save_mesh(v, f, "resource/ico.ply")
+    gsoup.save_mesh(v, f, "resource/ico_vcolor.ply", vertex_colors=vc)
     gsoup.save_mesh(
         v,
         f,
@@ -221,17 +229,20 @@ def test_structures():
         face_colors=np.random.randint(0, 255, size=f.shape).astype(np.uint8),
     )
     gsoup.save_pointcloud(v, "resource/ico_pc.ply")
-    v1, f1 = gsoup.load_mesh("resource/ico_pc.ply")  # loads a pointcloud as a mesh
-    assert np.allclose(v, v1)
-    assert f1 == []
-    v1 = gsoup.load_pointcloud("resource/ico_pc.ply")
-    assert np.allclose(v, v1)
-    v1, f1 = gsoup.load_mesh("resource/ico.obj")
+    # test ascii ply loader
+    v1, f1, vc1 = gsoup.load_mesh("resource/ico_vcolor.ply", return_vert_color=True)
     assert np.allclose(v, v1)
     assert np.allclose(f, f1)
-    v, f = gsoup.load_mesh("resource/cube.obj")
-    assert v.shape[0] == 8
-    assert f.shape[0] == 12
+    assert np.allclose(vc, vc1)
+    # more use cases 
+    v1, f1 = gsoup.load_mesh("resource/ico_pc.ply")  # loads a pointcloud as a mesh
+    assert np.allclose(v, v1)
+    assert f1 is None
+    v1 = gsoup.load_pointcloud("resource/ico_pc.ply")
+    assert np.allclose(v, v1)
+    # test binary ply loader
+    v, channels = gsoup.load_pointcloud("tests/tests_resource/splat.ply", return_vert_norms=True)
+    assert channels.shape == (v.shape[0], 59)
 
 
 def test_image():

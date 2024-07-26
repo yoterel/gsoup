@@ -5,7 +5,8 @@ from .core import to_8b, to_np, to_float
 from .image import alpha_compose
 from PIL import Image
 import json
-
+from struct import unpack, calcsize
+from collections import OrderedDict
 
 def write_to_json(data, dst):
     """
@@ -289,7 +290,7 @@ def load_mesh(
             raise ValueError(
                 "current ply parser does not support vertex uvs or normals"
             )
-        return load_ply(
+        return load_ply_mesh(
             path,
             return_vert_color=return_vert_color,
             to_torch=to_torch,
@@ -300,7 +301,7 @@ def load_mesh(
         raise ValueError("Only {} formats are supported for loading".format(supported))
 
 
-def load_ply(
+def load_ply_mesh(
     path: Path, return_vert_color=False, to_torch=False, device=None, verbose=True
 ):
     """
@@ -317,10 +318,26 @@ def load_ply(
         raise ValueError("Path must be a file")
     if path.suffix != ".ply":
         raise ValueError("Only .ply are supported")
-    v, f, vn, vc = parse_ply(path, verbose=verbose)
+    result = parse_ply(path, verbose=verbose)
+    if "vertex" in result:
+        v_full = result["vertex"][0]
+        v = v_full[0]
+        if len(v_full) > 1:
+            vc = v_full[1]
+        else:
+            vc = None
+    else:
+        v = None
+    if "face" in result:
+        f_full = result["face"][0]
+        f = f_full[1]
+    else:
+        f = None
     if to_torch and device is not None:
-        v = torch.tensor(v, dtype=torch.float, device=device)
-        f = torch.tensor(f, dtype=torch.long, device=device)
+        if v is not None:
+            v = torch.tensor(v, dtype=torch.float, device=device)
+        if f is not None:
+            f = torch.tensor(f, dtype=torch.long, device=device)
         if return_vert_color and vc is not None:
             vc = torch.tensor(vc, dtype=torch.float, device=device)
     if return_vert_color:
@@ -383,11 +400,108 @@ def load_obj(
         return v, f
 
 
-def parse_ply(path, verbose=True):
+def get_ply_header(ply_path):
     """
-    A simple (and naive) ply parser
-    currently supports ascii format only.
-    currently supports vertex (and optionally their color) and triangular face elements only
+    reads the header part of a ply file
+    :param ply_path: path to ply file
+    :return: list of strings per line in the header
+    """
+    ply_file = open(ply_path, "rb")
+    header = []
+    line = ply_file.readline().decode('ascii').strip()
+    while line != "end_header":
+        header.append(line)
+        line = ply_file.readline().decode('ascii').strip()
+    ply_file.close()
+    return header + ["end_header"]
+
+def parse_ply_header(raw_header):
+    """
+    parses the header of a ply file
+    :param header: list of strings per line in the header
+    :return: 
+    boolean if data is ascii,
+    list of element types,
+    list of element counts,
+    per element list of property names,
+    per element property type as string
+    """
+    header = [x for x in raw_header if "comment" not in x]
+    line_index = 0
+    if header[line_index] != "ply":
+        raise ValueError(
+            "ply file header corrupted ('ply' keyword not found in first line)"
+        )
+    line_index+=1
+    if header[line_index] == "format ascii 1.0":
+        data_is_ascii = True
+    elif header[line_index] == "format binary_little_endian 1.0":
+        data_is_ascii = False
+    else:
+        raise ValueError(
+            "only ascii and binary_little_endian formats are supported (format not found)"
+        )
+    line_index+=1
+    element_types = []
+    elements_n = []
+    property_names = []
+    property_structs = []
+
+    _, first_element_type, first_element_n = header[line_index].split()
+    element_types.append(first_element_type)
+    elements_n.append(int(first_element_n))
+    line_index+=1
+    line = header[line_index].split()
+    while line[0] != "end_header":
+        property_name = []
+        property_struct = []
+        while line[0] == "property":
+            if line[1] == "float":
+                property_name.append(line[2])
+                property_struct.append("f")
+            elif line[1] == "list":
+                property_name.append(line[4])
+                property_struct.append("1iii")
+            elif line[1] == "uchar":
+                property_name.append(line[2])
+                property_struct.append("1")
+            else:
+                raise ValueError("unsupported property dtype")
+            line_index+=1
+            line = header[line_index].split()
+            if line[0] == "end_header":
+                break
+        property_names.append(property_name)
+        mystr = "".join(property_struct)
+        if "1f" in mystr:  # this case is annoying and probably rare, discard
+            raise ValueError("unsupported property type layout")
+        property_structs.append(mystr)
+        if line[0] == "element":
+            _, element_type, element_n = line
+            element_types.append(element_type)
+            elements_n.append(int(element_n))
+            line_index+=1
+            line = header[line_index].split()
+    return data_is_ascii, element_types, elements_n, property_names, property_structs
+
+def dtype_from_letter(letter):
+    if letter == "i":
+        return np.int32
+    if letter == "f":
+        return np.float32
+    if letter == "1":
+        return np.uint8
+    raise ValueError("unsupported dtype letter")
+
+def parse_ply(ply_path, verbose=False):
+    """
+    A simple ply parser, supporting:
+    ascii format, but only vertex and triangular faces (cannot handle very complex properties of vertices)
+    binary format, but only for vertex and only float properties
+    :param ply_path: path to ply file
+    :param verbose: if True, prints out information during parsing
+    :return: a dictionary of 2-element lists, the first is a numpy array, the second is the property names
+    i.e. {"vertex": [np.array([[1.0, 1.0, 2.0], [2.0, 2.0, 0.5], ...]), ["x", "y", "z"]]}
     """
     verts = []
     faces = []
@@ -396,22 +510,53 @@ def parse_ply(path, verbose=True):
     n_faces = 0
     n_vertices = 0
     has_vert_color = False
-    path = Path(path)
-    with open(path, "r") as ply_file:
-        lines = ply_file.readlines()
-        lines = [x.strip() for x in lines]
-    try:
-        end_header_index = lines.index("end_header")
-    except ValueError:
-        raise ValueError("ply file header corrupted (no 'end_header' found)")
-    header = lines[:end_header_index]
-    data = lines[end_header_index + 1 :]
-    if header[0] != "ply":
-        raise ValueError(
-            "ply file header corrupted ('ply' keyword not found in first line)"
-        )
-    if header[1].split()[1] != "ascii":
-        raise ValueError("only ascii ply files are supported")
+    header = get_ply_header(Path(ply_path))
+    data_is_ascii, element_types, elements_n, property_names, property_structs = parse_ply_header(header)
+    if data_is_ascii:
+        ply_file = open(ply_path, "r")
+        data = [x.strip() for x in ply_file.readlines()]
+        data = data[len(header):]
+        result = {}
+        absolute_element = 0
+        for i, element_type in enumerate(element_types):
+            n_elements = elements_n[i]
+            unique_types = list(OrderedDict.fromkeys(property_structs[i]).keys())
+            if len(unique_types) == 1:
+                single_data_type = True
+                prealloc = [np.empty((n_elements, len(property_structs[i])), dtype=np.float32)]
+            else:
+                single_data_type = False
+                split_key = "".join(unique_types)  # for example f1   
+                split_index = property_structs[i].index(split_key) + 1
+                prealloc = [np.empty((n_elements, split_index), dtype=dtype_from_letter(unique_types[0])),
+                            np.empty((n_elements, len(property_structs[i]) - split_index), dtype=dtype_from_letter(unique_types[1]))]
+            result[element_type] = [prealloc, property_names[i]]
+            for j in range(n_elements):
+                raw_data = data[absolute_element].split()
+                if single_data_type:
+                    unpacked = np.array(raw_data, dtype=np.float32)
+                    result[element_type][0][0][j] = unpacked
+                else:
+                    unpacked1 = np.array(raw_data[:split_index], dtype=dtype_from_letter(unique_types[0]))
+                    unpacked2 = np.array(raw_data[split_index:], dtype=dtype_from_letter(unique_types[1]))
+                    result[element_type][0][0][j] = unpacked1
+                    result[element_type][0][1][j] = unpacked2
+                absolute_element += 1           
+    else:
+        ply_file = open(ply_path, "rb")
+        for i in range(len(header)):
+            ply_file.readline()
+        result = {}
+        for i, element_type in enumerate(element_types):
+            n_elements = elements_n[i]
+            prealloc = [np.empty((n_elements, len(property_names[i])), dtype=np.float32)]
+            result[element_type] = [prealloc, property_names[i]]
+            line_size = calcsize(property_structs[i])
+            for j in range(n_elements):
+                raw_data = ply_file.read(line_size)
+                unpacked = np.array(unpack(property_structs[i], raw_data))
+                result[element_type][0][0][j] = unpacked
+    return result
     vert_properties = []
     found_vertex_element = False
     found_face_element = False
@@ -847,9 +992,24 @@ def load_pointcloud(
         raise ValueError("Path does not exist")
     if not path.is_file():
         raise ValueError("Path must be a file")
-    v, _, vn, vc = parse_ply(path, verbose=verbose)
+    result = parse_ply(path, verbose=verbose)
+    if "vertex" in result:
+        v_full = result["vertex"][0]
+        v = v_full[0]
+        if len(v_full) > 1:
+            vc = v_full[1]
+        else:
+            vc = None
+        if v.shape[1] > 3:
+            vn = v[:, 3:]  # vn will contain all other channels on the vertex after xyz
+            v = v[:, :3]
+        else:
+            vn = None    
+    else:
+        v = None
     if to_torch and device is not None:
-        v = torch.tensor(v, dtype=torch.float, device=device)
+        if v is not None:
+            v = torch.tensor(v, dtype=torch.float, device=device)
         if return_vert_norms and vn is not None:
             vn = torch.tensor(vn, dtype=torch.float, device=device)
         if return_vert_color and vc is not None:
