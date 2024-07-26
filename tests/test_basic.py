@@ -197,7 +197,6 @@ def test_point_to_line_distance():
     assert (dist == np.array([1.0, 1.0])).all()
 
 
-
 def test_structures():
     v, f = gsoup.structures.cube()
     assert v.shape[0] == 8
@@ -235,14 +234,16 @@ def test_parsers():
     assert np.allclose(v, v1)
     assert np.allclose(f, f1)
     assert np.allclose(vc, vc1)
-    # more use cases 
+    # more use cases
     v1, f1 = gsoup.load_mesh("resource/ico_pc.ply")  # loads a pointcloud as a mesh
     assert np.allclose(v, v1)
     assert f1 is None
     v1 = gsoup.load_pointcloud("resource/ico_pc.ply")
     assert np.allclose(v, v1)
     # test binary ply loader
-    v, channels = gsoup.load_pointcloud("tests/tests_resource/splat.ply", return_vert_norms=True)
+    v, channels = gsoup.load_pointcloud(
+        "tests/tests_resource/splat.ply", return_vert_norms=True
+    )
     assert channels.shape == (v.shape[0], 59)
 
 
