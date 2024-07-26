@@ -197,6 +197,7 @@ def test_point_to_line_distance():
     assert (dist == np.array([1.0, 1.0])).all()
 
 
+
 def test_structures():
     v, f = gsoup.structures.cube()
     assert v.shape[0] == 8
