@@ -1,6 +1,15 @@
 import numpy as np
-from .core import to_44, compose_rt, normalize, broadcast_batch, is_np, map_range, to_torch
+from .core import (
+    to_44,
+    compose_rt,
+    normalize,
+    broadcast_batch,
+    is_np,
+    map_range,
+    to_torch,
+)
 import torch
+
 
 def ndc_to_screen(ndc, width, height):
     """
@@ -14,8 +23,11 @@ def ndc_to_screen(ndc, width, height):
     if is_np(ndc):
         screen = (ndc_norm * size).astype(np.int32)
     else:
-        screen = (ndc_norm * to_torch(size, device=ndc_norm.device, dtype=torch.float32)).type(torch.uint32)
+        screen = (
+            ndc_norm * to_torch(size, device=ndc_norm.device, dtype=torch.float32)
+        ).type(torch.uint32)
     return screen
+
 
 def screen_to_ndc(screen, width, height):
     """
@@ -24,11 +36,12 @@ def screen_to_ndc(screen, width, height):
     :param width: the width of the screen in pixels
     :param height: the height of the screen in pixels
     """
-    size = np.array([width-1, height-1], dtype=np.float32)[None, :]
+    size = np.array([width - 1, height - 1], dtype=np.float32)[None, :]
     if not is_np(screen):
         size = to_torch(size, device=screen.device)
     ndc = map_range(screen, 0.0, size, -1.0, 1.0)
     return ndc
+
 
 def sincos(a, degrees=True):
     """
