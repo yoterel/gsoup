@@ -251,28 +251,18 @@ def to_PIL(x: np.array):
         raise ValueError("unsupported array dimensions")
 
 
-def map_range(x, out_min, out_max):
+def map_range(x, in_min, in_max, out_min, out_max):
     """
-    given an input and a range, maps it to a new range
+    given an array, an input and output range, maps the input from the input range to the output range
     :param x: input
-    :param out_min: output minimum
-    :param out_max: output maximum
+    :param in_min: input range minimum
+    :param in_max: input range maximum
+    :param out_min: output range minimum
+    :param out_max: output range maximum
     :return: mapped input
     """
-    if type(x) == np.ndarray:
-        return np.clip(
-            (x - x.min()) * (out_max - out_min) / (x.max() - x.min()) + out_min,
-            out_min,
-            out_max,
-        )
-    elif type(x) == torch.Tensor:
-        return torch.clamp(
-            (x - x.min()) * (out_max - out_min) / (x.max() - x.min()) + out_min,
-            out_min,
-            out_max,
-        )
-    else:
-        raise ValueError("unsupported type")
+    x_01 = (x - in_min) / (in_max - in_min)
+    return x_01 * (out_max - out_min) + out_min
 
 
 def map_to_01(x):
@@ -281,7 +271,7 @@ def map_to_01(x):
     :param x: input
     :return: mapped input
     """
-    return map_range(x, 0, 1)
+    return map_range(x, x.min(), x.max(), 0, 1)
 
 
 def swap_columns(x, col1_index, col2_index):
