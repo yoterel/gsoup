@@ -8,6 +8,7 @@ import json
 from struct import unpack, calcsize
 from collections import OrderedDict
 
+
 def write_to_json(data, dst):
     """
     writes data to json file
@@ -408,18 +409,19 @@ def get_ply_header(ply_path):
     """
     ply_file = open(ply_path, "rb")
     header = []
-    line = ply_file.readline().decode('ascii').strip()
+    line = ply_file.readline().decode("ascii").strip()
     while line != "end_header":
         header.append(line)
-        line = ply_file.readline().decode('ascii').strip()
+        line = ply_file.readline().decode("ascii").strip()
     ply_file.close()
     return header + ["end_header"]
+
 
 def parse_ply_header(raw_header):
     """
     parses the header of a ply file
     :param header: list of strings per line in the header
-    :return: 
+    :return:
     boolean if data is ascii,
     list of element types,
     list of element counts,
@@ -432,7 +434,7 @@ def parse_ply_header(raw_header):
         raise ValueError(
             "ply file header corrupted ('ply' keyword not found in first line)"
         )
-    line_index+=1
+    line_index += 1
     if header[line_index] == "format ascii 1.0":
         data_is_ascii = True
     elif header[line_index] == "format binary_little_endian 1.0":
@@ -441,7 +443,7 @@ def parse_ply_header(raw_header):
         raise ValueError(
             "only ascii and binary_little_endian formats are supported (format not found)"
         )
-    line_index+=1
+    line_index += 1
     element_types = []
     elements_n = []
     property_names = []
@@ -450,7 +452,7 @@ def parse_ply_header(raw_header):
     _, first_element_type, first_element_n = header[line_index].split()
     element_types.append(first_element_type)
     elements_n.append(int(first_element_n))
-    line_index+=1
+    line_index += 1
     line = header[line_index].split()
     while line[0] != "end_header":
         property_name = []
@@ -467,7 +469,7 @@ def parse_ply_header(raw_header):
                 property_struct.append("1")
             else:
                 raise ValueError("unsupported property dtype")
-            line_index+=1
+            line_index += 1
             line = header[line_index].split()
             if line[0] == "end_header":
                 break
@@ -480,9 +482,10 @@ def parse_ply_header(raw_header):
             _, element_type, element_n = line
             element_types.append(element_type)
             elements_n.append(int(element_n))
-            line_index+=1
+            line_index += 1
             line = header[line_index].split()
     return data_is_ascii, element_types, elements_n, property_names, property_structs
+
 
 def dtype_from_letter(letter):
     if letter == "i":
@@ -492,6 +495,7 @@ def dtype_from_letter(letter):
     if letter == "1":
         return np.uint8
     raise ValueError("unsupported dtype letter")
+
 
 def parse_ply(ply_path, verbose=False):
     """
@@ -511,11 +515,13 @@ def parse_ply(ply_path, verbose=False):
     n_vertices = 0
     has_vert_color = False
     header = get_ply_header(Path(ply_path))
-    data_is_ascii, element_types, elements_n, property_names, property_structs = parse_ply_header(header)
+    data_is_ascii, element_types, elements_n, property_names, property_structs = (
+        parse_ply_header(header)
+    )
     if data_is_ascii:
         ply_file = open(ply_path, "r")
         data = [x.strip() for x in ply_file.readlines()]
-        data = data[len(header):]
+        data = data[len(header) :]
         result = {}
         absolute_element = 0
         for i, element_type in enumerate(element_types):
@@ -523,13 +529,23 @@ def parse_ply(ply_path, verbose=False):
             unique_types = list(OrderedDict.fromkeys(property_structs[i]).keys())
             if len(unique_types) == 1:
                 single_data_type = True
-                prealloc = [np.empty((n_elements, len(property_structs[i])), dtype=np.float32)]
+                prealloc = [
+                    np.empty((n_elements, len(property_structs[i])), dtype=np.float32)
+                ]
             else:
                 single_data_type = False
-                split_key = "".join(unique_types)  # for example f1   
+                split_key = "".join(unique_types)  # for example f1
                 split_index = property_structs[i].index(split_key) + 1
-                prealloc = [np.empty((n_elements, split_index), dtype=dtype_from_letter(unique_types[0])),
-                            np.empty((n_elements, len(property_structs[i]) - split_index), dtype=dtype_from_letter(unique_types[1]))]
+                prealloc = [
+                    np.empty(
+                        (n_elements, split_index),
+                        dtype=dtype_from_letter(unique_types[0]),
+                    ),
+                    np.empty(
+                        (n_elements, len(property_structs[i]) - split_index),
+                        dtype=dtype_from_letter(unique_types[1]),
+                    ),
+                ]
             result[element_type] = [prealloc, property_names[i]]
             for j in range(n_elements):
                 raw_data = data[absolute_element].split()
@@ -537,11 +553,15 @@ def parse_ply(ply_path, verbose=False):
                     unpacked = np.array(raw_data, dtype=np.float32)
                     result[element_type][0][0][j] = unpacked
                 else:
-                    unpacked1 = np.array(raw_data[:split_index], dtype=dtype_from_letter(unique_types[0]))
-                    unpacked2 = np.array(raw_data[split_index:], dtype=dtype_from_letter(unique_types[1]))
+                    unpacked1 = np.array(
+                        raw_data[:split_index], dtype=dtype_from_letter(unique_types[0])
+                    )
+                    unpacked2 = np.array(
+                        raw_data[split_index:], dtype=dtype_from_letter(unique_types[1])
+                    )
                     result[element_type][0][0][j] = unpacked1
                     result[element_type][0][1][j] = unpacked2
-                absolute_element += 1           
+                absolute_element += 1
     else:
         ply_file = open(ply_path, "rb")
         for i in range(len(header)):
@@ -549,7 +569,9 @@ def parse_ply(ply_path, verbose=False):
         result = {}
         for i, element_type in enumerate(element_types):
             n_elements = elements_n[i]
-            prealloc = [np.empty((n_elements, len(property_names[i])), dtype=np.float32)]
+            prealloc = [
+                np.empty((n_elements, len(property_names[i])), dtype=np.float32)
+            ]
             result[element_type] = [prealloc, property_names[i]]
             line_size = calcsize(property_structs[i])
             for j in range(n_elements):
@@ -1004,7 +1026,7 @@ def load_pointcloud(
             vn = v[:, 3:]  # vn will contain all other channels on the vertex after xyz
             v = v[:, :3]
         else:
-            vn = None    
+            vn = None
     else:
         v = None
     if to_torch and device is not None:
