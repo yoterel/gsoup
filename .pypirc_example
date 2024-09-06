@@ -1,0 +1,12 @@
+[distutils]
+  index-servers =
+    pypi
+    gsoup
+
+[pypi]
+  username = __token__
+  password = # either a user-scoped token or a project-scoped token you want to set as the default
+[gsoup]
+  repository = https://upload.pypi.org/legacy/
+  username = __token__
+  password = # a user-scoped token
