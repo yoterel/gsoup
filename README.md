@@ -33,3 +33,11 @@ Feel free to submit pull requests (run the tests first).
 `twine check dist/*`
 
 `twine upload dist/*`
+
+or if you defined a ~/.pypirc:
+
+`twine upload --repository gsoup dist/*`
+
+see .pypirc for an example file.
+
+
