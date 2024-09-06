@@ -21,7 +21,7 @@ All the code is used for self-educational purposes and to facilitate faster rese
 
 `cd gsoup`
 
-`pip install -e .[dev]`
+`pip install -e .[dev,build]`
 
 Feel free to submit pull requests (run the tests first).
 
