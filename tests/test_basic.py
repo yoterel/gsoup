@@ -240,11 +240,16 @@ def test_parsers():
     assert f1 is None
     v1 = gsoup.load_pointcloud("resource/ico_pc.ply")
     assert np.allclose(v, v1)
-    # test binary ply loader
+    # test binary ply loader``
     v, channels = gsoup.load_pointcloud(
         "tests/tests_resource/splat.ply", return_vert_norms=True
     )
     assert channels.shape == (v.shape[0], 59)
+
+
+def test_exr():
+    normals = gsoup.read_exr("tests/tests_resource/normal0001.exr")
+    gsoup.write_exr(normals, "resource/normals.exr")
 
 
 def test_image():

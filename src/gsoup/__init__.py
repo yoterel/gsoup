@@ -89,6 +89,8 @@ from .gsoup_io import (
     save_pointcloud,
     save_pointclouds,
     load_pointcloud,
+    read_exr,
+    write_exr,
 )
 
 from .image import (

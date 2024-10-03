@@ -358,13 +358,16 @@ def generate_lollipop_pattern(height, width, background="black", n=15, m=8, dst=
     return np.array(img)
 
 
-def generate_concentric_circles(height, width, background="black", n=15, dst=None):
+def generate_concentric_circles(
+    height, width, background="black", n=5, colors=None, dst=None
+):
     """
     generates an image with colored concentric circles
     :param height: height of the image
     :param width: width of the image
     :param background: background color
     :param n: number of circles to draw
+    :param colors: if not None, list of n colors of the circles where each color is a list of 3 \in [0,255]
     :param dst: if not None, the image is written to this path
     """
     spacing_x = width // (2 * n)
@@ -374,13 +377,19 @@ def generate_concentric_circles(height, width, background="black", n=15, dst=Non
     for i in range(n):
         x0 = spacing_x * i
         y0 = spacing_y * i
-        img1.ellipse(
-            [x0, y0, width - x0, height - y0],
-            fill=tuple(np.random.randint(0, 255, size=(3,))),
-        )
+        if colors is None:
+            img1.ellipse(
+                [x0, y0, width - x0, height - y0],
+                fill=tuple(np.random.randint(0, 255, size=(3,))),
+            )
+        else:
+            img1.ellipse(
+                [x0, y0, width - x0, height - y0],
+                fill=tuple(colors[i]),
+            )
     if dst is not None:
         img.save(str(dst))
-    return np.array(img)
+    return np.array(img) / 255.0
 
 
 def generate_gray_gradient(

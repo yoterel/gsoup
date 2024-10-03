@@ -7,6 +7,7 @@ from PIL import Image
 import json
 from struct import unpack, calcsize
 from collections import OrderedDict
+import OpenEXR
 
 
 def write_to_json(data, dst):
@@ -1110,3 +1111,51 @@ def save_meshes(vertices, faces, path, file_names: list = []):
             save_mesh(v, f, path / "{}.obj".format(file_names[i]))
         else:
             save_mesh(v, f, path / "{:05d}.obj".format(i))
+
+
+def write_exr(image, file_path):
+    """
+    saves a RGB image to disk as exr (without losing precision).
+    :param image: (h, w, 3) numpy array of either uint32, float16 or float32
+    :param file_path: the location to save the file to. if parent folder doesn't exists, creates it.
+    """
+    channels = {"RGB": image}
+    header = {"compression": OpenEXR.ZIP_COMPRESSION, "type": OpenEXR.scanlineimage}
+
+    my_path = Path(file_path)
+    if not my_path.parent.exists():
+        parent_path.mkdir(parents=True, exist_ok=True)
+    with OpenEXR.File(header, channels) as outputFile:
+        outputFile.write(str(my_path))
+
+
+def read_exr(file_path):
+    """
+    read exr into a numpy array (h, w, 3)
+    :param file_path: path to exr file
+    """
+    typemap = {"UINT": np.uint32, "HALF": np.float16, "FLOAT": np.float32}
+    # open the input file
+    exr = OpenEXR.InputFile(str(file_path))
+    # Compute the size
+    dw = exr.header()["dataWindow"]
+    w, h = (dw.max.x - dw.min.x + 1, dw.max.y - dw.min.y + 1)
+    ##### a more principled way of accessing the data
+    arr_maps = []
+    # Read the three color channels as 32-bit floats
+    for ch_name, ch in exr.header()["channels"].items():
+        exr_typename = ch.type.names[ch.type.v]
+        np_type = typemap[exr_typename]
+        bytestring = exr.channel(ch_name, ch.type)
+        arr = np.frombuffer(bytestring, dtype=np_type).reshape(h, w, 1)
+        arr_maps.append(arr)
+    # stack into matrix
+    image = np.concatenate(arr_maps, axis=-1)
+    ####################################################
+    # FLOAT = Imath.PixelType(Imath.PixelType.FLOAT)
+    # R = np.frombuffer(exr.channel("R", FLOAT), dtype=np.float32).reshape((h, w, 1))
+    # G = np.frombuffer(exr.channel("G", FLOAT), dtype=np.float32).reshape((h, w, 1))
+    # B = np.frombuffer(exr.channel("B", FLOAT), dtype=np.float32).reshape((h, w, 1))
+    # stack into matrix
+    # image = np.concatenate((R, G, B), axis=-1)
+    return image
