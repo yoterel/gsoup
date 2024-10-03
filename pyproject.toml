@@ -22,9 +22,9 @@ dependencies = [
     "scipy",
     "ffmpeg-python",
     "opencv-python",
-    "OpenEXR",
+    "OpenEXR >= 3.3.0",
 ]
-requires-python = ">=3.7"
+requires-python = ">=3.8"
 
 [project.optional-dependencies]
 build = ["build", "twine"]
