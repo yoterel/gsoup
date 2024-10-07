@@ -1132,7 +1132,9 @@ def write_exr(image, file_path):
 def read_exr(file_path):
     """
     read exr into a numpy array (h, w, 3)
+    note: assumes channels names in the exr are named "R" "G" and "B".
     :param file_path: path to exr file
+    :return (h, w, 3) float32 numpy array representing the image
     """
     typemap = {"UINT": np.uint32, "HALF": np.float16, "FLOAT": np.float32}
     # open the input file
@@ -1141,16 +1143,16 @@ def read_exr(file_path):
     dw = exr.header()["dataWindow"]
     w, h = (dw.max.x - dw.min.x + 1, dw.max.y - dw.min.y + 1)
     ##### a more principled way of accessing the data
-    arr_maps = []
+    arr_maps = {}
     # Read the three color channels as 32-bit floats
     for ch_name, ch in exr.header()["channels"].items():
         exr_typename = ch.type.names[ch.type.v]
         np_type = typemap[exr_typename]
         bytestring = exr.channel(ch_name, ch.type)
         arr = np.frombuffer(bytestring, dtype=np_type).reshape(h, w, 1)
-        arr_maps.append(arr)
+        arr_maps[ch_name] = arr
     # stack into matrix
-    image = np.concatenate(arr_maps, axis=-1)
+    image = np.concatenate([arr_maps["R"], arr_maps["G"], arr_maps["B"]], axis=-1)
     ####################################################
     # FLOAT = Imath.PixelType(Imath.PixelType.FLOAT)
     # R = np.frombuffer(exr.channel("R", FLOAT), dtype=np.float32).reshape((h, w, 1))
