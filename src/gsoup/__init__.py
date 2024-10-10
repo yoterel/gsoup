@@ -117,6 +117,7 @@ from .image import (
     crop_to_square,
     mask_regions,
     crop_center,
+    compute_color_distance,
 )
 
 from .video import (

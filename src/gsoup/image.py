@@ -2,6 +2,7 @@ import numpy as np
 import torch
 from PIL import Image, ImageDraw, ImageFont
 from scipy import interpolate, spatial
+from scipy.stats import wasserstein_distance
 from .core import (
     to_8b,
     to_float,
@@ -700,3 +701,38 @@ def srgb_to_linear(srgb):
     linear0 = 25 / 323 * srgb
     linear1 = np.maximum(eps, ((200 * srgb + 11) / (211))) ** (12 / 5)
     return np.where(srgb <= 0.04045, linear0, linear1)
+
+
+def compute_color_distance(image1, image2, bin_per_dim=10):
+    """
+    computes a naive "color distance" between two images by binning the colors and computing the wasserstein distance per channel
+    :param image1: numpy image h x w x 3
+    :param image2: numpy image h x w x 3
+    :return: the sum of the wasserstein distances per channel
+    """
+    if image1.shape != image2.shape:
+        raise ValueError("images must have the same shape")
+    if image1.ndim != 3:
+        raise ValueError("images must be 3D arrays")
+    if image1.dtype != np.uint8:
+        raise ValueError("images must be uint8")
+    spatial_size = image1.shape[0] * image1.shape[1]
+    hist1_R, _ = np.histogram(image1[:, :, 0].reshape(-1), bins=bin_per_dim)
+    hist2_R, _ = np.histogram(image2[:, :, 0].reshape(-1), bins=bin_per_dim)
+    hist1_R = hist1_R / spatial_size
+    hist2_R = hist2_R / spatial_size
+    result_R = wasserstein_distance(hist1_R, hist2_R)
+    ###
+    hist1_G, _ = np.histogram(image1[:, :, 1].reshape(-1), bins=bin_per_dim)
+    hist2_G, _ = np.histogram(image2[:, :, 1].reshape(-1), bins=bin_per_dim)
+    hist1_G = hist1_G / spatial_size
+    hist2_G = hist2_G / spatial_size
+    result_G = wasserstein_distance(hist1_G, hist2_G)
+    ###
+    hist1_B, _ = np.histogram(image1[:, :, 2].reshape(-1), bins=bin_per_dim)
+    hist2_B, _ = np.histogram(image2[:, :, 2].reshape(-1), bins=bin_per_dim)
+    hist1_B = hist1_B / spatial_size
+    hist2_B = hist2_B / spatial_size
+    result_B = wasserstein_distance(hist1_B, hist2_B)
+    result = result_R + result_G + result_B
+    return result

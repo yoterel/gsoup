@@ -364,6 +364,16 @@ def test_image():
     assert len(paths) == 4
     assert img.dtype == torch.float32
     assert img.shape == (4, 256, 128)
+    lollipop_path1 = Path("resource/lp_ref.png")
+    lollipop_path2 = Path("resource/lp_01.png")
+    lollipop_path3 = Path("resource/lp_02.png")
+    img_ref = gsoup.generate_lollipop_pattern(512, 512, dst=lollipop_path1)
+    img1 = gsoup.to_8b(gsoup.to_float(img_ref) / 2)
+    gsoup.save_image(img1, lollipop_path2)
+    img2 = gsoup.generate_lollipop_pattern(512, 512, dst=lollipop_path3)
+    dist1 = gsoup.compute_color_distance(img_ref, img1)
+    dist2 = gsoup.compute_color_distance(img_ref, img2)
+    assert dist1 < dist2
 
 
 def test_video():

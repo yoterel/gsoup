@@ -30,7 +30,7 @@ def get_ffmpeg_version(verbose=False):
         parts = ffmpeg_output.split()
         version = parts[parts.index("version") + 1]
         if verbose:
-            if version[0] != "5":
+            if int(version[0]) < 5:
                 print(
                     "gsoup warning: detected ffmpeg version: {}. Video module May fail for versions lower than 5".format(
                         version
