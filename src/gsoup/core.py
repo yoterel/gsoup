@@ -153,7 +153,10 @@ def to_np(arr: torch.Tensor):
         return arr
     elif type(arr) == Image.Image:
         return np.array(arr)
-    return arr.detach().cpu().numpy()
+    elif type(arr) == list:
+        return np.array(arr)
+    else:
+        raise TypeError("cannot convert {} to numpy array".format(str(type(arr))))
 
 
 def to_numpy(arr: torch.Tensor):

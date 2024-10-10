@@ -88,11 +88,12 @@ def save_images(
     saves images as png
     :param images: (b x H x W x C) tensor
     :param dst: path to save images to (will create folder if it does not exist)
-    :param force_grayscale: if True, saves images as grayscale
     :param file_names: if provided, saves images with these names (list of length b)
+    :param force_grayscale: if True, saves images as grayscale
+    :param overwrite: if True, overwrites existing images
+    :param extension: file extension to save images as
     """
-    if type(images) == torch.Tensor:
-        images = to_np(images)
+    images = to_np(images)
     if np.isnan(images).any():
         raise ValueError("Images must be finite")
     if extension != "tiff":

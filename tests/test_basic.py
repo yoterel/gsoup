@@ -255,6 +255,7 @@ def test_exr():
 def test_image():
     checkboard = gsoup.generate_checkerboard(512, 512, 8)  # H, W, 1
     gsoup.save_image(checkboard, "resource/checkboard.png")
+    gsoup.save_images([checkboard], "resource", file_names=["resource/checkboard.png"])
     checkboard_RGB = np.tile(checkboard, (1, 1, 3))  # H, W, 3
     checkboard_RGBA = gsoup.add_alpha(checkboard_RGB, checkboard)
     checkboard_RGBA2 = np.tile(checkboard, (1, 1, 4))  # H, W, 4
