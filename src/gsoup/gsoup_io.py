@@ -22,11 +22,12 @@ def write_to_json(data, dst):
         json.dump(data, f, indent=4, sort_keys=True)
 
 
-def save_animation(images, dst):
+def save_animation(images, dst, ms_per_frame=100):
     """
     saves a gif animation
     :param images: (b x H x W x C) tensor
     :param dst: path to save animation to
+    :param ms_per_frame: the display duration of each frame in ms
     """
     dst = Path(dst)
     if type(images) == torch.Tensor:
@@ -47,7 +48,7 @@ def save_animation(images, dst):
         save_all=True,
         append_images=images[1:],
         optimize=False,
-        duration=100,
+        duration=ms_per_frame,
         loop=0,
     )
 
@@ -86,7 +87,7 @@ def save_images(
 ):
     """
     saves images as png
-    :param images: (b x H x W x C) tensor
+    :param images: (b x H x W x C) np array, or list of (H X W X C)
     :param dst: path to save images to (will create folder if it does not exist)
     :param file_names: if provided, saves images with these names (list of length b)
     :param force_grayscale: if True, saves images as grayscale
