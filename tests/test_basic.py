@@ -375,6 +375,9 @@ def test_image():
     dist1 = gsoup.compute_color_distance(img_ref, img1)
     dist2 = gsoup.compute_color_distance(img_ref, img2)
     assert dist1 < dist2
+    test = np.zeros((1, 512, 512, 3), dtype=np.uint8)
+    test = gsoup.draw_text_on_image(test, np.array(["target"]))
+    assert np.any(test) > 0
 
 
 def test_video():

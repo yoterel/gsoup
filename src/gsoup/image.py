@@ -14,6 +14,7 @@ from .core import (
     to_np,
 )
 from .structures import get_gizmo_coords
+from pathlib import Path
 
 
 def add_alpha(images, alphas):
@@ -87,11 +88,12 @@ def alpha_compose(images, backgrounds=None, bg_color=None):
     return alpha * rgb + (1 - alpha) * bg_color
 
 
-def draw_text_on_image(images, text_per_image, fill_white=True):
+def draw_text_on_image(images, text_per_image, loc=(0, 0), fill_white=True):
     """
     writes text on images given as np array (b x H x W x 3)
     :param images: (b x H x W x 3) numpy array
-    :param text_per_image: b x 1 numpy array of strings
+    :param text_per_image: list or np array of strings
+    :param loc: a tuple xy of anchor coordinates for the text (anchor is left-top of text)
     :param fill_white: if True, text is white, otherwise black
     :return: new (b x H x W x 3) numpy array with text written
     """
@@ -103,14 +105,15 @@ def draw_text_on_image(images, text_per_image, fill_white=True):
     if is_float:
         images = to_8b(images)
     rgbs = [Image.fromarray(x) for x in images]
-    font = ImageFont.truetype("./FreeMono.ttf", 48)
+    resource_path = Path(__file__).parent.resolve()
+    font = ImageFont.truetype(Path(resource_path, "FreeMono.ttf"), 48)
     if fill_white:
         fill = "white"
     else:
         fill = "black"
     for i, rgb in enumerate(rgbs):
         text = text_per_image[i]
-        ImageDraw.Draw(rgb).text((0, 0), text, fill=fill, font=font)
+        ImageDraw.Draw(rgb).text(loc, text, fill=fill, font=font)
     rgbs = np.array([np.asarray(rgb) for rgb in rgbs])
     if is_float:
         rgbs = to_float(rgbs)
@@ -708,7 +711,7 @@ def compute_color_distance(image1, image2, bin_per_dim=10):
     computes a naive "color distance" between two images by binning the colors and computing the wasserstein distance per channel
     :param image1: numpy image h x w x 3
     :param image2: numpy image h x w x 3
-    :return: the sum of the wasserstein distances per channel
+    :return: the sum (over channels) of the wasserstein distances
     """
     if image1.shape != image2.shape:
         raise ValueError("images must have the same shape")
