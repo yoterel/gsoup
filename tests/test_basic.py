@@ -310,26 +310,26 @@ def test_image():
     assert img.shape == (512, 512, 3)
     assert img.dtype == np.uint8
     img = gsoup.load_image(dst, as_grayscale=True)
-    assert img.shape == (512, 512)
+    assert img.shape == (512, 512, 1)
     assert img.dtype == np.uint8
-    img = gsoup.load_image(dst, float=True)
+    img = gsoup.load_image(dst, as_float=True)
     assert img.shape == (512, 512, 3)
     assert img.dtype == np.float32
     assert (img >= 0.0).all()
     assert (img <= 1.0).all()
     img = gsoup.load_image(dst, channels_last=False)
     assert img.shape == (3, 512, 512)
-    img = gsoup.load_image(dst, float=True, as_grayscale=True)
-    assert img.shape == (512, 512)
+    img = gsoup.load_image(dst, as_float=True, as_grayscale=True)
+    assert img.shape == (512, 512, 1)
     assert img.dtype == np.float32
     assert (img >= 0.0).all()
     assert (img <= 1.0).all()
     img = gsoup.load_image(dst, channels_last=False, as_grayscale=True)
-    assert img.shape == (512, 512)
+    assert img.shape == (1, 512, 512)
     img = gsoup.load_images([dst])
     assert img.shape == (1, 512, 512, 3)
     img = gsoup.load_images([dst], as_grayscale=True)
-    assert img.shape == (1, 512, 512)
+    assert img.shape == (1, 512, 512, 1)
     img = gsoup.load_images([dst])
     assert img.shape == (1, 512, 512, 3)
     img = gsoup.load_images([dst, dst, dst, dst])
@@ -346,11 +346,11 @@ def test_image():
     grid = gsoup.image_grid(resized_img, 2, 2)
     assert grid.shape == (512, 512, 3)
     img = gsoup.load_images([dst, dst, dst, dst], as_grayscale=True)
-    assert img.shape == (4, 512, 512)
+    assert img.shape == (4, 512, 512, 1)
     img = gsoup.load_images(
         [dst, dst, dst, dst], as_grayscale=True, channels_last=False
     )
-    assert img.shape == (4, 512, 512)
+    assert img.shape == (4, 1, 512, 512)
     img = gsoup.load_images([dst, dst, dst, dst], resize_wh=(128, 128))
     assert img.shape == (4, 128, 128, 3)
     img, paths = gsoup.load_images(
@@ -359,12 +359,12 @@ def test_image():
         as_grayscale=True,
         channels_last=False,
         return_paths=True,
-        float=True,
+        as_float=True,
         to_torch=True,
     )
     assert len(paths) == 4
     assert img.dtype == torch.float32
-    assert img.shape == (4, 256, 128)
+    assert img.shape == (4, 1, 256, 128)
     lollipop_path1 = Path("resource/lp_ref.png")
     lollipop_path2 = Path("resource/lp_01.png")
     lollipop_path3 = Path("resource/lp_02.png")

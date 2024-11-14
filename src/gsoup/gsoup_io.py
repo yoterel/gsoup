@@ -140,7 +140,7 @@ def save_images(
 
 def load_image(
     path,
-    float=False,
+    as_float=False,
     channels_last=True,
     to_torch=False,
     device=None,
@@ -150,7 +150,7 @@ def load_image(
     """
     loads an image from a single file
     :param path: path to file
-    :param float: if True, converts image to float
+    :param as_float: if True, converts image to float
     :param return_paths: if True, returns a list of file paths
     :param to_torch: if True, returns a torch tensor
     :param device: device to load tensor to
@@ -166,7 +166,7 @@ def load_image(
     elif path.is_file():
         image = load_images(
             [path],
-            float=float,
+            as_float=as_float,
             channels_last=channels_last,
             return_paths=False,
             to_torch=to_torch,
@@ -179,7 +179,7 @@ def load_image(
 
 def load_images(
     source,
-    float=False,
+    as_float=False,
     channels_last=True,
     return_paths=False,
     to_torch=False,
@@ -190,7 +190,7 @@ def load_images(
     """
     loads images from a list of paths, a folder or a single file
     :param source: path to folder with images / path to image file / list of paths
-    :param float: if True, converts images to float (and normalizes to [0, 1])
+    :param as_float: if True, converts images to float (and normalizes to [0, 1])
     :param return_paths: if True, returns a list of file paths
     :param to_torch: if True, returns a torch tensor
     :param device: device to load tensor to
@@ -239,11 +239,11 @@ def load_images(
             images = alpha_compose(images)
         else:
             images = to_float(images)
-        images = images.mean(axis=-1)
+        images = images.mean(axis=-1, keepdims=True)
         images = to_8b(images)
     if not channels_last and images.ndim == 4:
         images = np.moveaxis(images, -1, 1)
-    if float:
+    if as_float:
         images = to_float(images)
     if to_torch:
         if device is None:

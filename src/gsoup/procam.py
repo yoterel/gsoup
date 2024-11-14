@@ -259,7 +259,7 @@ def calibrate_procam(
     ].T.reshape(-1, 2)
     graycode = GrayCode()
     patterns = graycode.encode(proj_wh)
-    cam_shape = load_image(gc_fname_lists[0][0], as_grayscale=True).shape[
+    cam_shape = load_image(gc_fname_lists[0][0], as_grayscale=True)[:, :, 0].shape[
         ::-1
     ]  # width, height
     patch_size_half = int(
@@ -279,7 +279,7 @@ def calibrate_procam(
             print("processing: {}".format(dname))
         if len(gc_filenames) != len(patterns):
             raise ValueError("invalid number of images in " + dname)
-        imgs = load_images(gc_filenames, as_grayscale=True)[..., None]
+        imgs = load_images(gc_filenames, as_grayscale=True)
         forwardmap, fg = graycode.decode(
             imgs,
             proj_wh,
