@@ -212,7 +212,10 @@ def load_images(
                     im = im.convert("RGB")
                 if resize_wh is not None:
                     im = im.resize(resize_wh)
-                images.append(np.array(im))
+                im_array = np.array(im)
+                if im_array.ndim == 2:  # mode was "L"
+                    im_array = im_array[:, :, None]
+                images.append(im_array)
                 file_paths.append(p)
     else:  # path to a folder
         path = Path(source)
@@ -229,10 +232,13 @@ def load_images(
                     im = im.convert("RGB")
                 if resize_wh is not None:
                     im = im.resize(resize_wh)
-                images.append(np.array(im))
+                im_array = np.array(im)
+                if im_array.ndim == 2:  # mode was "L"
+                    im_array = im_array[:, :, None]
+                images.append(im_array)
                 file_paths.append(image)
     images = np.stack(images, axis=0)
-    if as_grayscale and images.ndim == 4:
+    if as_grayscale and images.shape[-1] != 1:
         if (
             images.shape[-1] == 4
         ):  # alpha compose before converting to grayscale as alpha is not affected by averaging
@@ -241,7 +247,7 @@ def load_images(
             images = to_float(images)
         images = images.mean(axis=-1, keepdims=True)
         images = to_8b(images)
-    if not channels_last and images.ndim == 4:
+    if not channels_last:
         images = np.moveaxis(images, -1, 1)
     if as_float:
         images = to_float(images)
