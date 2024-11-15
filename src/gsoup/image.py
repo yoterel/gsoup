@@ -261,10 +261,10 @@ def generate_dot_pattern(
 def generate_random_block_mask(size, block_size, batch_size=1):
     """
     Generates a random binary mask matrix with the specified size and block size.
-    
+
     :param: size (int): Size of the square matrix (must be a power of 2).
     :param: block_size (int): Size of the square blocks (must be a power of 2 and ≤ size).
-    
+
     :return: a binary np array of shape (size, size).
     """
     if not (size & (size - 1) == 0 and block_size & (block_size - 1) == 0):
@@ -277,10 +277,14 @@ def generate_random_block_mask(size, block_size, batch_size=1):
     num_blocks = size // block_size
     if batch_size > 1:
         random_blocks = np.random.randint(2, size=(batch_size, num_blocks, num_blocks))
-        mask = np.kron(random_blocks, np.ones((block_size, block_size), dtype=bool)).astype(bool)
+        mask = np.kron(
+            random_blocks, np.ones((block_size, block_size), dtype=bool)
+        ).astype(bool)
     else:
         random_blocks = np.random.randint(2, size=(num_blocks, num_blocks))
-        mask = np.kron(random_blocks, np.ones((block_size, block_size), dtype=bool)).astype(bool)
+        mask = np.kron(
+            random_blocks, np.ones((block_size, block_size), dtype=bool)
+        ).astype(bool)
     return mask
 
 
