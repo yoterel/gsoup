@@ -253,6 +253,10 @@ def test_exr():
 
 
 def test_image():
+    random_mask = gsoup.generate_random_block_mask(4, 2, 3)
+    assert random_mask.shape == (3, 4, 4)
+    random_mask = gsoup.generate_random_block_mask(4, 2, 1)
+    assert random_mask.shape == (4, 4)
     checkboard = gsoup.generate_checkerboard(512, 512, 8)  # H, W, 1
     gsoup.save_image(checkboard, "resource/checkboard.png")
     gsoup.save_images([checkboard], "resource", file_names=["resource/checkboard.png"])
