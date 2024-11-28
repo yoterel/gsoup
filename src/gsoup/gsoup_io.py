@@ -1121,15 +1121,29 @@ def save_meshes(vertices, faces, path, file_names: list = []):
             save_mesh(v, f, path / "{:05d}.obj".format(i))
 
 
-def write_exr(image, file_path):
+def write_exr(image, file_path, compression="ZIP", compression_level=6):
     """
     saves a RGB image to disk as exr (without losing precision).
     :param image: (h, w, 3) numpy array of either uint32, float16 or float32
     :param file_path: the location to save the file to. if parent folder doesn't exists, creates it.
+    :param compression: which compression type to use (we just expose NONE, ZIPS, ZIP and PIZ)
+    :param compression_level: what level of compression to use if suportted by compression algorithm
+    :note see https://openexr.com/en/latest/ReadingAndWritingImageFiles.html#compression
     """
-    channels = {"RGB": image}
-    header = {"compression": OpenEXR.ZIP_COMPRESSION, "type": OpenEXR.scanlineimage}
-
+    channels = {"RGB": np.ascontiguousarray(image)}
+    header = {}
+    if compression == "NONE":
+        header["compression"] = OpenEXR.NO_COMPRESSION
+    elif compression == "ZIP":
+        header["compression"] = OpenEXR.ZIP_COMPRESSION
+        header["type"] = OpenEXR.scanlineimage
+        header["zipCompressionLevel"] = compression_level
+    elif compression == "ZIPS":
+        header["compression"] = OpenEXR.ZIPS_COMPRESSION
+    elif compression == "PIZ":
+        header["compression"] = OpenEXR.PIZ_COMPRESSION
+    else:
+        raise NotImplementedError
     my_path = Path(file_path)
     if not my_path.parent.exists():
         parent_path.mkdir(parents=True, exist_ok=True)
@@ -1142,7 +1156,7 @@ def read_exr(file_path):
     read exr into a numpy array (h, w, 3)
     note: assumes channels names in the exr are named "R" "G" and "B".
     :param file_path: path to exr file
-    :return (h, w, 3) float32 numpy array representing the image
+    :return (h, w, 3) float16/float32 numpy array representing the image
     """
     typemap = {"UINT": np.uint32, "HALF": np.float16, "FLOAT": np.float32}
     # open the input file
