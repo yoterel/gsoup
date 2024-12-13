@@ -108,6 +108,7 @@ from .image import (
     generate_concentric_circles,
     generate_lollipop_pattern,
     image_grid,
+    resize,
     resize_images_naive,
     adjust_contrast_brightness,
     change_brightness,
@@ -119,6 +120,7 @@ from .image import (
     mask_regions,
     crop_center,
     compute_color_distance,
+    tonemap,
 )
 
 from .video import (

@@ -495,6 +495,29 @@ def image_grid(images, rows, cols):
     return result
 
 
+def resize(images, H, W, mode="bilinear"):
+    """
+    wrapper around torch interpolate (https://pytorch.org/docs/stable/generated/torch.nn.functional.interpolate.html)
+    :param images: batch of np array (b, h, w, c) or torch tensors (b, c, h, w)
+    :param H: output height
+    :param W: output width
+    :param mode: pass through for torch ()
+    :return: same as input, with the new H and W
+    """
+    if images.ndim != 4:
+        raise ValueError("images must be a 4D array")
+    was_numpy = False
+    if is_np(images):
+        imgs_torch = to_torch(images).permute(2, 0, 1)
+        was_numpy = True
+    else:
+        imgs_torch = images
+    interpolated = torch.nn.functional.interpolate(imgs_torch, size=(H, W), scale_factor=None, mode=mode, align_corners=None, recompute_scale_factor=None, antialias=False)
+    if was_numpy:
+        interpolated = to_np(interpolated.permute(1, 2, 0))
+    return interpolated
+
+
 def resize_images_naive(images, H, W, channels_last=True, mode="mean"):
     """
     resize images to output_size, but only if the output size has a common divisor of the input size
@@ -769,3 +792,32 @@ def compute_color_distance(image1, image2, bin_per_dim=10):
     result_B = wasserstein_distance(hist1_B, hist2_B)
     result = result_R + result_G + result_B
     return result
+
+
+def tonemap(hdr_image, exposure=0.0, offset=0.0, gamma=2.2, only_preproc=False, clip=True):
+    """
+    maps an input image [-inf, inf] to [0, 1] using non-linear gamma correction.
+    this slightly naive tonemapping was taken from https://github.com/Tom94/tev
+    :param hdr_image: a numpy array or torch tensor (channels first or last, any float type)
+    :param exposure: the image will be multiplied by 2*exposure prior to gamma correction
+    :param offset: will be added to image (after multiplied by exposure, but prior to gamma correction)
+    :param gamma: gamma to be used for non-linear correction
+    :param only_preproc: if true, will not run gamma correction but only use exposure and offset
+    :param clip: if true will clip result to [0.0, 1.0]
+    :return: the tonemapped image, with same dtype and shape
+    """
+    if type(hdr_image) == np.ndarray:
+        image = np.power(2.0, exposure) * hdr_image + offset
+        if not only_preproc:
+            image = np.sign(image) * np.power(np.abs(image), 1.0 / gamma)
+        if clip:
+            image = np.clip(image, 0.0, 1.0)
+    elif type(hdr_image) == torch.Tensor:
+        image = torch.pow(2.0, exposure) * hdr_image + offset
+        if not only_preproc:
+            image = torch.sign(image) * torch.pow(torch.abs(image), 1.0 / gamma)
+        if clip:
+            image = torch.clamp(image, 0.0, 1.0)
+    else:
+        raise TypeError("hdr_image must be either a numpy array or torch tensor")
+    return image
