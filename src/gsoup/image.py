@@ -512,7 +512,15 @@ def resize(images, H, W, mode="bilinear"):
         was_numpy = True
     else:
         imgs_torch = images
-    interpolated = torch.nn.functional.interpolate(imgs_torch, size=(H, W), scale_factor=None, mode=mode, align_corners=None, recompute_scale_factor=None, antialias=False)
+    interpolated = torch.nn.functional.interpolate(
+        imgs_torch,
+        size=(H, W),
+        scale_factor=None,
+        mode=mode,
+        align_corners=None,
+        recompute_scale_factor=None,
+        antialias=False,
+    )
     if was_numpy:
         interpolated = to_np(interpolated.permute(1, 2, 0))
     return interpolated
@@ -794,7 +802,9 @@ def compute_color_distance(image1, image2, bin_per_dim=10):
     return result
 
 
-def tonemap(hdr_image, exposure=0.0, offset=0.0, gamma=2.2, only_preproc=False, clip=True):
+def tonemap(
+    hdr_image, exposure=0.0, offset=0.0, gamma=2.2, only_preproc=False, clip=True
+):
     """
     maps an input image [-inf, inf] to [0, 1] using non-linear gamma correction.
     this slightly naive tonemapping was taken from https://github.com/Tom94/tev
