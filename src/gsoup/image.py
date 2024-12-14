@@ -813,7 +813,7 @@ def tonemap(hdr_image, exposure=0.0, offset=0.0, gamma=2.2, only_preproc=False, 
         if clip:
             image = np.clip(image, 0.0, 1.0)
     elif type(hdr_image) == torch.Tensor:
-        image = torch.pow(2.0, exposure) * hdr_image + offset
+        image = np.power(2.0, exposure) * hdr_image + offset
         if not only_preproc:
             image = torch.sign(image) * torch.pow(torch.abs(image), 1.0 / gamma)
         if clip:
