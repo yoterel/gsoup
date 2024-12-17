@@ -107,6 +107,7 @@ from .image import (
     generate_stripe_pattern,
     generate_concentric_circles,
     generate_lollipop_pattern,
+    generate_gaussian_image,
     image_grid,
     resize,
     resize_images_naive,
