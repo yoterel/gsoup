@@ -845,13 +845,13 @@ def tonemap(
     :return: the tonemapped image, with same dtype and shape
     """
     if type(hdr_image) == np.ndarray:
-        image = (hdr_image*np.power(2.0, exposure)) + offset
+        image = (hdr_image * np.power(2.0, exposure)) + offset
         if not only_preproc:
             image = np.sign(image) * np.power(np.abs(image), 1.0 / gamma)
         if clip:
             image = np.clip(image, 0.0, 1.0)
     elif type(hdr_image) == torch.Tensor:
-        image = (hdr_image*np.power(2.0, exposure)) + offset
+        image = (hdr_image * np.power(2.0, exposure)) + offset
         if not only_preproc:
             image = torch.sign(image) * torch.pow(torch.abs(image), 1.0 / gamma)
         if clip:
