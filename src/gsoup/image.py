@@ -369,7 +369,7 @@ def generate_gaussian_image(height, width, center=(0, 0), sigma=(10, 10), theta=
     :param: sigma: the sx,sy stdev in the x and y acis before rotation
     :return: the gaussian image
     """
-    theta = 2*np.pi*theta/360
+    theta = 2 * np.pi * theta / 360
     x = np.arange(0, width, 1, np.float32)
     y = np.arange(0, height, 1, np.float32)
     y = y[:, np.newaxis]
@@ -379,12 +379,12 @@ def generate_gaussian_image(height, width, center=(0, 0), sigma=(10, 10), theta=
     y0 = center[1]
 
     # rotation
-    a=np.cos(theta)*x -np.sin(theta)*y
-    b=np.sin(theta)*x +np.cos(theta)*y
-    a0=np.cos(theta)*x0 -np.sin(theta)*y0
-    b0=np.sin(theta)*x0 +np.cos(theta)*y0
+    a = np.cos(theta) * x - np.sin(theta) * y
+    b = np.sin(theta) * x + np.cos(theta) * y
+    a0 = np.cos(theta) * x0 - np.sin(theta) * y0
+    b0 = np.sin(theta) * x0 + np.cos(theta) * y0
 
-    return np.exp(-(((a-a0)**2)/(2*(sx**2)) + ((b-b0)**2) /(2*(sy**2))))
+    return np.exp(-(((a - a0) ** 2) / (2 * (sx**2)) + ((b - b0) ** 2) / (2 * (sy**2))))
 
 
 def generate_lollipop_pattern(height, width, background="black", n=15, m=8, dst=None):
