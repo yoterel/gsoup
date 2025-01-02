@@ -399,7 +399,7 @@ def test_video():
     w = 128
     # images = np.random.randint(0, 255, (frame_number, 512, 512, 3), dtype=np.uint8)
     images = np.array(
-        [gsoup.generate_concentric_circles(h, w, n=5) for i in range(100)]
+        [gsoup.generate_concentric_circles(h, w, n=5) / 255.0 for i in range(100)]
     )
     # im1 = gsoup.generate_voronoi_diagram(512, 512, 1000)
     # im2 = gsoup.generate_voronoi_diagram(512, 512, 1000)
