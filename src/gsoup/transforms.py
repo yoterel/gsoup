@@ -271,9 +271,9 @@ def look_at_torch(
     # todo batch support
     z = (at - eye).type(torch.float32)
     z /= torch.norm(z)
-    x = torch.cross(z, up).type(torch.float32)
+    x = torch.linalg.cross(z, up).type(torch.float32)
     x /= torch.norm(x)
-    y = torch.cross(z, x).type(torch.float32)
+    y = torch.linalg.cross(z, x).type(torch.float32)
     y /= torch.norm(y)
     c2w = torch.eye(4, device=z.device)
     c2w[:3, :3] = torch.stack([x, y, z], dim=1)

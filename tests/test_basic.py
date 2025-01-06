@@ -382,6 +382,13 @@ def test_image():
     test = np.zeros((1, 512, 512, 3), dtype=np.uint8)
     test = gsoup.draw_text_on_image(test, np.array(["target"]))
     assert np.any(test) > 0
+    color_image = np.random.uniform(size=(512, 512, 3))
+    gray_image = gsoup.color_to_gray(color_image)
+    assert gray_image.shape == (512, 512, 1)
+    gray_image = gsoup.color_to_gray(color_image, keep_channels=True)
+    assert gray_image.shape == (512, 512, 3)
+    assert np.all(gray_image[:, :, 0] == gray_image[:, :, 1])
+    assert np.all(gray_image[:, :, 1] == gray_image[:, :, 2])
 
 
 def test_video():

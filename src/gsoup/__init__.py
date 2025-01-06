@@ -12,6 +12,7 @@ from .core import (
     to_torch,
     to_8b,
     to_float,
+    color_to_gray,
     broadcast_batch,
     map_range,
     map_to_01,
