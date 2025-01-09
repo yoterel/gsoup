@@ -514,7 +514,9 @@ def image_grid(images, rows, cols, pad=0, pad_color=None):
     if len(images) != rows * cols:
         raise ValueError("number of images must be equal to rows * cols")
     if pad > 0:
-        images = pad_to_res(images, images.shape[1]+pad*2, images.shape[2]+pad*2, pad_color)
+        images = pad_to_res(
+            images, images.shape[1] + pad * 2, images.shape[2] + pad * 2, pad_color
+        )
     tmp = images.reshape(rows, cols, images.shape[1], images.shape[2], -1)
     if type(tmp) == torch.Tensor:
         result = tmp.permute(0, 2, 1, 3, 4).reshape(
