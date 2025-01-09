@@ -351,7 +351,7 @@ def test_image():
     assert grid.shape == (512, 512, 3)
     white_images = gsoup.to_8b(np.ones((4, 256, 256, 3), dtype=np.float32))
     pad = 5
-    grid2 = gsoup.image_grid(white_images, 2, 2, pad=5, bg_color=(255, 255, 0))
+    grid2 = gsoup.image_grid(white_images, 2, 2, pad=5, pad_color=(255, 255, 0))
     assert grid2.shape == (512+pad*4, 512+pad*4, 3)
     img = gsoup.load_images([dst, dst, dst, dst], as_grayscale=True)
     assert img.shape == (4, 512, 512, 1)
