@@ -506,7 +506,7 @@ def image_grid(images, rows, cols, pad=0, pad_color=None):
     :param rows: number of rows
     :param cols: number of cols
     :param pad: will pad images by this number of pixels with pad_color
-    :param pad_color: a (3,) np array repreesnting the pad color. if not provided pad will be black.
+    :param pad_color: a (3,) np array representing the pad color. if not provided pad will be black. must be same dtype as images.
     :return: grid image
     """
     if images.ndim != 4:
