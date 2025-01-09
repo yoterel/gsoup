@@ -500,17 +500,21 @@ def generate_gray_gradient(
     return img
 
 
-def image_grid(images, rows, cols):
+def image_grid(images, rows, cols, pad=0, pad_color=None):
     """
     :param images: list of images
     :param rows: number of rows
     :param cols: number of cols
+    :param pad: will pad images by this number of pixels with pad_color
+    :param pad_color: a (3,) np array repreesnting the pad color. if not provided pad will be black.
     :return: grid image
     """
     if images.ndim != 4:
         raise ValueError("images must be a 4D array")
     if len(images) != rows * cols:
         raise ValueError("number of images must be equal to rows * cols")
+    if pad > 0:
+        images = pad_to_res(images, images.shape[1]+pad*2, images.shape[2]+pad*2, pad_color)
     tmp = images.reshape(rows, cols, images.shape[1], images.shape[2], -1)
     if type(tmp) == torch.Tensor:
         result = tmp.permute(0, 2, 1, 3, 4).reshape(
@@ -653,7 +657,7 @@ def pad_to_res(images, res_h, res_w, bg_color=None):
     :param image: numpy image b x h x w x c
     :param res_h: height of the output image
     :param res_w: width of the output image
-    :param bg_color: background color c (defaults to black)
+    :param bg_color: background color sized (c,) (defaults to black)
     :return: padded image b x res_h x res_w x c
     """
     if bg_color is None:
