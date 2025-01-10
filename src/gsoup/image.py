@@ -369,7 +369,7 @@ def generate_concentric_circles(
     generates an image with colored concentric circles
     :param height: height of the image
     :param width: width of the image
-    :param background: background color
+    :param background: background color (as int, tuple of ints or name accepted by PIL)
     :param n: number of circles to draw
     :param colors: if not None, list of n colors of the circles where each color is a list of 3 \in [0,255]
     :param dst: if not None, the image is written to this path
@@ -393,7 +393,7 @@ def generate_concentric_circles(
             )
     if dst is not None:
         img.save(str(dst))
-    return np.array(img) / 255.0
+    return np.array(img)
 
 
 def generate_gray_gradient(
@@ -407,7 +407,7 @@ def generate_gray_gradient(
     :param vertical: if True, the gradient is vertical
     :param flip: if True, the gradient is flipped
     :param bins: number of bins
-    :return: (H x W x 3) numpy array
+    :return: (H x W x 3) uint8 numpy array
     """
     bins = np.clip(bins, 1, 256)
     colors = np.linspace(0, 255, num=bins).astype(np.uint8)
