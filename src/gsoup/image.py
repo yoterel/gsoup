@@ -258,6 +258,36 @@ def generate_dot_pattern(
     return np.array(img)
 
 
+def generate_random_block_mask(size, block_size, batch_size=1):
+    """
+    Generates a random binary mask matrix with the specified size and block size.
+
+    :param: size (int): Size of the square matrix (must be a power of 2).
+    :param: block_size (int): Size of the square blocks (must be a power of 2 and ≤ size).
+
+    :return: a binary np array of shape (size, size).
+    """
+    if not (size & (size - 1) == 0 and block_size & (block_size - 1) == 0):
+        raise ValueError("Size and block_size must be powers of 2.")
+    if block_size < 1:
+        raise ValueError("Block size must be larger or equal to 1.")
+    if block_size > size:
+        raise ValueError("Block size must be less than or equal to the size.")
+
+    num_blocks = size // block_size
+    if batch_size > 1:
+        random_blocks = np.random.randint(2, size=(batch_size, num_blocks, num_blocks))
+        mask = np.kron(
+            random_blocks, np.ones((block_size, block_size), dtype=bool)
+        ).astype(bool)
+    else:
+        random_blocks = np.random.randint(2, size=(num_blocks, num_blocks))
+        mask = np.kron(
+            random_blocks, np.ones((block_size, block_size), dtype=bool)
+        ).astype(bool)
+    return mask
+
+
 def generate_checkerboard(h, w, blocksize):
     """
     generates a checkerboard pattern
@@ -327,6 +357,34 @@ def generate_stripe_pattern(
     if dst is not None:
         img.save(str(dst))
     return np.array(img)
+
+
+def generate_gaussian_image(height, width, center=(0, 0), sigma=(10, 10), theta=0):
+    """
+    generate an image of a gaussian
+    :param: height: the height of the image
+    :param: width: the width of the image
+    :param: center: the x,y center of the gaussian (default is upper left corner)
+    :param: theta: rotation of the gaussian
+    :param: sigma: the sx,sy stdev in the x and y acis before rotation
+    :return: the gaussian image
+    """
+    theta = 2 * np.pi * theta / 360
+    x = np.arange(0, width, 1, np.float32)
+    y = np.arange(0, height, 1, np.float32)
+    y = y[:, np.newaxis]
+    sx = sigma[0]
+    sy = sigma[1]
+    x0 = center[0]
+    y0 = center[1]
+
+    # rotation
+    a = np.cos(theta) * x - np.sin(theta) * y
+    b = np.sin(theta) * x + np.cos(theta) * y
+    a0 = np.cos(theta) * x0 - np.sin(theta) * y0
+    b0 = np.sin(theta) * x0 + np.cos(theta) * y0
+
+    return np.exp(-(((a - a0) ** 2) / (2 * (sx**2)) + ((b - b0) ** 2) / (2 * (sy**2))))
 
 
 def generate_lollipop_pattern(height, width, background="black", n=15, m=8, dst=None):
@@ -442,17 +500,23 @@ def generate_gray_gradient(
     return img
 
 
-def image_grid(images, rows, cols):
+def image_grid(images, rows, cols, pad=0, pad_color=None):
     """
     :param images: list of images
     :param rows: number of rows
     :param cols: number of cols
+    :param pad: will pad images by this number of pixels with pad_color
+    :param pad_color: a (3,) np array representing the pad color. if not provided pad will be black. must be same dtype as images.
     :return: grid image
     """
     if images.ndim != 4:
         raise ValueError("images must be a 4D array")
     if len(images) != rows * cols:
         raise ValueError("number of images must be equal to rows * cols")
+    if pad > 0:
+        images = pad_to_res(
+            images, images.shape[1] + pad * 2, images.shape[2] + pad * 2, pad_color
+        )
     tmp = images.reshape(rows, cols, images.shape[1], images.shape[2], -1)
     if type(tmp) == torch.Tensor:
         result = tmp.permute(0, 2, 1, 3, 4).reshape(
@@ -463,6 +527,37 @@ def image_grid(images, rows, cols):
             rows * images.shape[1], cols * images.shape[2], -1
         )
     return result
+
+
+def resize(images, H, W, mode="bilinear"):
+    """
+    wrapper around torch interpolate (https://pytorch.org/docs/stable/generated/torch.nn.functional.interpolate.html)
+    :param images: batch of np array (b, h, w, c) or torch tensors (b, c, h, w)
+    :param H: output height
+    :param W: output width
+    :param mode: pass through for torch ()
+    :return: same as input, with the new H and W
+    """
+    if images.ndim != 4:
+        raise ValueError("images must be a 4D array")
+    was_numpy = False
+    if is_np(images):
+        imgs_torch = to_torch(images).permute(2, 0, 1)
+        was_numpy = True
+    else:
+        imgs_torch = images
+    interpolated = torch.nn.functional.interpolate(
+        imgs_torch,
+        size=(H, W),
+        scale_factor=None,
+        mode=mode,
+        align_corners=None,
+        recompute_scale_factor=None,
+        antialias=False,
+    )
+    if was_numpy:
+        interpolated = to_np(interpolated.permute(1, 2, 0))
+    return interpolated
 
 
 def resize_images_naive(images, H, W, channels_last=True, mode="mean"):
@@ -564,7 +659,7 @@ def pad_to_res(images, res_h, res_w, bg_color=None):
     :param image: numpy image b x h x w x c
     :param res_h: height of the output image
     :param res_w: width of the output image
-    :param bg_color: background color c (defaults to black)
+    :param bg_color: background color sized (c,) (defaults to black)
     :return: padded image b x res_h x res_w x c
     """
     if bg_color is None:
@@ -739,3 +834,34 @@ def compute_color_distance(image1, image2, bin_per_dim=10):
     result_B = wasserstein_distance(hist1_B, hist2_B)
     result = result_R + result_G + result_B
     return result
+
+
+def tonemap(
+    hdr_image, exposure=0.0, offset=0.0, gamma=2.2, only_preproc=False, clip=True
+):
+    """
+    maps an input image [-inf, inf] to [0, 1] using non-linear gamma correction.
+    this slightly naive tonemapping was taken from https://github.com/Tom94/tev
+    :param hdr_image: a numpy array or torch tensor (channels first or last, any float type)
+    :param exposure: the image will be multiplied by 2*exposure prior to gamma correction
+    :param offset: will be added to image (after multiplied by exposure, but prior to gamma correction)
+    :param gamma: gamma to be used for non-linear correction
+    :param only_preproc: if true, will not run gamma correction but only use exposure and offset
+    :param clip: if true will clip result to [0.0, 1.0]
+    :return: the tonemapped image, with same dtype and shape
+    """
+    if type(hdr_image) == np.ndarray:
+        image = (hdr_image * np.power(2.0, exposure)) + offset
+        if not only_preproc:
+            image = np.sign(image) * np.power(np.abs(image), 1.0 / gamma)
+        if clip:
+            image = np.clip(image, 0.0, 1.0)
+    elif type(hdr_image) == torch.Tensor:
+        image = (hdr_image * np.power(2.0, exposure)) + offset
+        if not only_preproc:
+            image = torch.sign(image) * torch.pow(torch.abs(image), 1.0 / gamma)
+        if clip:
+            image = torch.clamp(image, 0.0, 1.0)
+    else:
+        raise TypeError("hdr_image must be either a numpy array or torch tensor")
+    return image

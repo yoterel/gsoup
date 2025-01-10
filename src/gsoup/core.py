@@ -287,3 +287,40 @@ def swap_columns(x, col1_index, col2_index):
     """
     x[:, [col2_index, col1_index]] = x[:, [col1_index, col2_index]]
     return x
+
+
+def color_to_gray(x, keep_channels=False):
+    """
+    convert image to gray scale by averaging over channels
+    :param x: numpy array or torch tensor (n, h, w, c) or (h, w, c) where c >= 1
+    :keep_channels: if True, will perserve c by repeating the array after average
+    :return: the gray scale version of x
+    """
+    orig_ndim = x.ndim
+    if (orig_ndim != 3) and (orig_ndim != 4):
+        raise ValueError("ndim of x must be 3 (h, w, c) or 4 (n, h, w, c)")
+    c = x.shape[-1]
+    orig_dtype = x.dtype
+    if is_np(x):
+        if x.dtype == np.float32 or x.dtype == np.float64:
+            x = x.mean(axis=-1, keepdims=True)
+        else:
+            x = x.astype(np.float32).mean(axis=-1, keepdims=True)
+            x = x.round().astype(orig_dtype)
+        if keep_channels:
+            if orig_ndim == 3:
+                x = np.tile(x, (1, 1, c))
+            else:
+                x = np.tile(x, (1, 1, 1, c))
+    else:
+        if x.dtype == torch.float32 or x.dtype == torch.float64:
+            x = x.mean(dim=-1, keepdim=True)
+        else:
+            x = x.to(torch.float32).mean(dim=-1, keepdim=True)
+            x = x.round().to(orig_dtype)
+        if keep_channels:
+            if orig_ndim == 3:
+                x = x.repeat(1, 1, c)
+            else:
+                x = x.repeat(1, 1, 1, c)
+    return x

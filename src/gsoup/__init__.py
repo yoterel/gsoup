@@ -12,6 +12,7 @@ from .core import (
     to_torch,
     to_8b,
     to_float,
+    color_to_gray,
     broadcast_batch,
     map_range,
     map_to_01,
@@ -99,6 +100,7 @@ from .image import (
     draw_text_on_image,
     draw_gizmo_on_image,
     merge_figures_with_line,
+    generate_random_block_mask,
     generate_checkerboard,
     generate_voronoi_diagram,
     generate_gray_gradient,
@@ -106,7 +108,9 @@ from .image import (
     generate_stripe_pattern,
     generate_concentric_circles,
     generate_lollipop_pattern,
+    generate_gaussian_image,
     image_grid,
+    resize,
     resize_images_naive,
     adjust_contrast_brightness,
     change_brightness,
@@ -118,6 +122,7 @@ from .image import (
     mask_regions,
     crop_center,
     compute_color_distance,
+    tonemap,
 )
 
 from .video import (

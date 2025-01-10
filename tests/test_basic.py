@@ -253,6 +253,10 @@ def test_exr():
 
 
 def test_image():
+    random_mask = gsoup.generate_random_block_mask(4, 2, 3)
+    assert random_mask.shape == (3, 4, 4)
+    random_mask = gsoup.generate_random_block_mask(4, 2, 1)
+    assert random_mask.shape == (4, 4)
     checkboard = gsoup.generate_checkerboard(512, 512, 8)  # H, W, 1
     gsoup.save_image(checkboard, "resource/checkboard.png")
     gsoup.save_images([checkboard], "resource", file_names=["resource/checkboard.png"])
@@ -345,6 +349,12 @@ def test_image():
     assert resized_img_gray.shape == (4, 256, 256, 1)
     grid = gsoup.image_grid(resized_img, 2, 2)
     assert grid.shape == (512, 512, 3)
+    white_images = gsoup.to_8b(np.ones((4, 256, 256, 3), dtype=np.float32))
+    pad = 5
+    grid2 = gsoup.image_grid(
+        white_images, 2, 2, pad=5, pad_color=np.array([255, 255, 0])
+    )
+    assert grid2.shape == (512 + pad * 4, 512 + pad * 4, 3)
     img = gsoup.load_images([dst, dst, dst, dst], as_grayscale=True)
     assert img.shape == (4, 512, 512, 1)
     img = gsoup.load_images(
@@ -378,6 +388,13 @@ def test_image():
     test = np.zeros((1, 512, 512, 3), dtype=np.uint8)
     test = gsoup.draw_text_on_image(test, np.array(["target"]))
     assert np.any(test) > 0
+    color_image = np.random.uniform(size=(512, 512, 3))
+    gray_image = gsoup.color_to_gray(color_image)
+    assert gray_image.shape == (512, 512, 1)
+    gray_image = gsoup.color_to_gray(color_image, keep_channels=True)
+    assert gray_image.shape == (512, 512, 3)
+    assert np.all(gray_image[:, :, 0] == gray_image[:, :, 1])
+    assert np.all(gray_image[:, :, 1] == gray_image[:, :, 2])
 
 
 def test_video():
