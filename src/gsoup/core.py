@@ -285,7 +285,7 @@ def swap_columns(x, col1_index, col2_index):
     :param col2_index: index of the second column
     :return: array with swapped columns
     """
-    x[:, [col2_index, col1_index]] = x[:, [col1_index, col2_index]]
+    x[..., [col2_index, col1_index]] = x[..., [col1_index, col2_index]]
     return x
 
 
