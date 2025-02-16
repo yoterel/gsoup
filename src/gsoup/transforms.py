@@ -230,6 +230,24 @@ def decompose_affine(A44):
     return T, Rmat, np.array([sx, sy, sz]), np.array([sxy, sxz, syz])
 
 
+def invert_rigid(rt, square=False):
+    """
+    inverts a rigid transformation (n, 4, 4) efficiently
+    rt: (n, 4, 4) batch of rigid transformations
+    square: if false, will return a (n, 3, 4) by removing the last row
+    """
+    if rt.ndim != 3:
+        return ValueError("rt must have 3 dimensions")
+    if rt.shape[1] != 4 or rt.shape[2] != 4:
+        return ValueError("rt must have shape (n, 4, 4)")
+    if is_np(rt):
+        R = np.transpose(rt[:, :3, :3], axes=(0, 2, 1))
+        t = (-R @ rt[:, :-1, -1].T)[:, :, 0]
+        return compose_rt(R, t, square)
+    else:
+        return NotImplementedError
+
+
 def look_at_np(eye, at, up, opengl=False):
     """
     returns a batch of look_at transforms 4x4 (camera->world, the inverse of a ModelView matrix)
@@ -623,26 +641,15 @@ def mat2rotvec(r: torch.Tensor):
     return rotvec * angle2
 
 
-def qvec2mat(qvec):
-    """
-    Converts a quaternion to a rotation matrix
-    :param qvec: tensor of size 4 where real part is first (a + bi + cj + dk) => (a, b, c, d)
-    :return: rotation matrix 3x3
-    """
-    return batch_qvec2mat(qvec[None, :])[0]
-
-
-def batch_qvec2mat(qvecs):
+def qvec2mat(qvecs):
     """
     Converts a batch of quaternions to a batch of rotation matrices
-    :param qvec: tensor of size nx4 where real part is first (a + bi + cj + dk) => (a, b, c, d)
-    :return: rotation matrix nx3x3
+    :param qvec: tensor of shape (n, 4) where real part is first [a + bi + cj + dk] => [a, b, c, d]
+    :return: rotation matrix (n, 3, 3)
     """
+    if qvecs.ndim != 2:
+        raise ValueError("qvec should have ndim == 2")
     if qvecs.shape[-1] != 4:
-        raise ValueError("quaternions must be of shape (..., 4)")
-    if qvecs.ndim == 1:
-        qvecs = qvecs[None, :]
-    if qvecs.ndim > 2:
         raise ValueError("quaternions must be of shape (..., 4)")
     if is_np(qvecs):
         r, i, j, k = [x[0] for x in np.split(qvecs, 4, -1)]
@@ -710,10 +717,6 @@ def mat2qvec_numpy(R: np.array):
 
 
 def mat2qvec(matrix):
-    return batch_mat2qvec(matrix[None, :])[0]
-
-
-def batch_mat2qvec(matrix):
     """
     Converts a batch of rotation matrices to a batch of quaternions
     :param matrix: tensor of size nx3x3

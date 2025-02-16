@@ -120,19 +120,19 @@ def test_transforms():
 def test_rotations():
     qvecs = gsoup.random_qvec(10)
     torch_qvecs = torch.tensor(qvecs)
-    rotmats = gsoup.batch_qvec2mat(qvecs)
+    rotmats = gsoup.qvec2mat(qvecs)
     assert rotmats.shape == (10, 3, 3)
-    rotmats = gsoup.batch_qvec2mat(torch_qvecs)
+    rotmats = gsoup.qvec2mat(torch_qvecs)
     assert rotmats.shape == (10, 3, 3)
-    new_qvecs = gsoup.batch_mat2qvec(rotmats)
+    new_qvecs = gsoup.mat2qvec(rotmats)
     mask1 = torch.abs(new_qvecs - torch_qvecs) < 1e-6
     mask2 = torch.abs(new_qvecs + torch_qvecs) < 1e-6
     assert torch.all(mask1 | mask2)
-    rotmat = gsoup.qvec2mat(torch_qvecs[0])
-    assert rotmat.shape == (3, 3)
+    rotmat = gsoup.qvec2mat(torch_qvecs[0:1])
+    assert rotmat.shape == (1, 3, 3)
     new_qvec = gsoup.mat2qvec(rotmat)
-    mask1 = torch.abs(new_qvec - torch_qvecs[0]) < 1e-6
-    mask2 = torch.abs(new_qvec + torch_qvecs[0]) < 1e-6
+    mask1 = torch.abs(new_qvec[0] - torch_qvecs[0]) < 1e-6
+    mask2 = torch.abs(new_qvec[0] + torch_qvecs[0]) < 1e-6
     assert torch.all(mask1 | mask2)
     normal = torch.tensor([0, 0, 1.0])
     random_vectors = gsoup.random_vectors_on_sphere(10, normal=normal)
@@ -599,7 +599,7 @@ def test_sphere_tracer():
     sdf = gsoup.structures.sphere_sdf(0.25)
     images = []
     for o, d in zip(ray_origins, ray_directions):
-        result = gsoup.render(sdf, o.view(-1, 3), d.view(-1, 3))
+        result = gsoup.render_sdf(sdf, o.view(-1, 3), d.view(-1, 3))
         images.append(result.view(image_size, image_size, 4))
     images = gsoup.to_np(torch.stack(images))
     images = gsoup.alpha_compose(images)
@@ -607,6 +607,43 @@ def test_sphere_tracer():
         images, gsoup.to_np(v2c @ w2v), opengl=True
     )
     gsoup.save_images(gizmo_images, Path("resource/sphere_trace"))
+
+
+def test_rasterizer():
+    width, height = 400, 400
+    f = 800
+    image = np.zeros((height, width, 3), dtype=np.uint8)
+    depth_buffer = np.full((height, width), np.inf).astype(
+        np.float32
+    )  # Initialize depth buffer
+    V, F = gsoup.load_mesh("tests/tests_resource/cube.obj")  # (n, 3)
+    # Some random transformation
+    V = V / 8
+    rand_qvec = gsoup.random_qvec(1)
+    rand_rot_mat = gsoup.qvec2mat(rand_qvec)
+    rand_rot_trans = np.random.uniform(-0.1, 0.1, size=3)
+    random_rigid = gsoup.compose_rt(
+        rand_rot_mat, rand_rot_trans[None, ...], square=False
+    )
+    V = (random_rigid[0] @ gsoup.to_hom(V).T).T
+    # V = V + np.array([0.0, -0.3, 0.0])
+    # Camera intrinsics matrix
+    K = np.array([[f, 0, width / 2], [0, f, height / 2], [0, 0, 1]])
+    K = K.astype(np.float32)
+    # Camera extrinsics
+    # Rt = np.eye(4)[:3, :]  # (identity for now)
+    cam_loc = np.array([1.0, 0.0, 0.0])
+    cam_at = np.array([0.0, 0.0, 0.0])
+    cam_up = np.array([0.0, 0.0, 1.0])
+    Rt = gsoup.look_at_np(cam_loc, cam_at, cam_up)  # cam -> world
+    Rt = gsoup.invert_rigid(Rt)[0]  # world -> cam
+    Rt = Rt.astype(np.float32)
+    # Define colors per face
+    colors = np.random.randint(0, 256, size=len(F) * 3).reshape(len(F), 3)
+    # colors = (np.ones(len(F) * 3, dtype=np.int32) * 255).reshape(len(F), 3)
+    # colors = [(255, 0, 0), (0, 255, 0)]  # Red, Green
+    gsoup.render_mesh(image, depth_buffer, V, F, K, Rt, colors)
+    gsoup.save_image(image, "resource/rasterize_cube.png")
 
 
 def test_qem():

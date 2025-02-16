@@ -26,6 +26,7 @@ from .transforms import (
     translate,
     scale,
     rotate,
+    invert_rigid,
     look_at_torch,
     look_at_np,
     create_random_cameras_on_unit_sphere,
@@ -47,9 +48,7 @@ from .transforms import (
     rotvec2mat,
     batch_rotvec2mat,
     qvec2mat,
-    batch_qvec2mat,
     mat2qvec,
-    batch_mat2qvec,
 )
 from .geometry_basic import (
     point_line_distance,
@@ -150,6 +149,13 @@ from .procam import (
     GrayCode,
 )
 
-from .sphere_trace import generate_rays, render
+from .sphere_trace import (
+    generate_rays,
+    render_sdf,
+)
+
+from .rasterize import (
+    render_mesh,
+)
 
 from . import structures

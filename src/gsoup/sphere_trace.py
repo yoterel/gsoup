@@ -190,7 +190,7 @@ def generate_rays(w2v, v2c, resx=512, resy=512, device="cuda:0"):
     return torch.stack(rays_o), torch.stack(rays_d)
 
 
-def render(
+def render_sdf(
     p_sdf,
     ray_positions,
     ray_directions,
