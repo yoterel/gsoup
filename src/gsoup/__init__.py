@@ -51,6 +51,8 @@ from .transforms import (
     mat2qvec,
 )
 from .geometry_basic import (
+    project_point_to_line,
+    project_point_to_segment,
     point_line_distance,
     is_inside_triangle,
     ray_ray_intersection,
@@ -156,6 +158,7 @@ from .sphere_trace import (
 
 from .rasterize import (
     render_mesh,
+    project_points,
 )
 
 from . import structures

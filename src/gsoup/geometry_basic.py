@@ -3,42 +3,86 @@ import numpy as np
 from .core import is_np, broadcast_batch
 
 
-def point_line_distance(p, v0, v1):
+def scalar_projection(a, b):
     """
-    returns the distance between a point p and a line defined by the points v0 and v1
+    computes a scalar projection of vector a onto b
+    note: this is the size of the componenet of a tangent to b
+    :param a, b: np arrays of size 2 or 3
+    """
+    return np.dot(a, b) / np.dot(b, b)
+
+
+def project_point_to_line(p, a, b):
+    """
+    Returns the closest point on line ab to point p.
+    p, a, b: numpy arrays of shape (2,).
+    """
+    if np.all(a == b):
+        return a
+    # direction vector of the line
+    ab = b - a
+    # direction of vector from a to p
+    ap = p - a
+    # compute the scalar projection of p-a onto b-a
+    t = scalar_projection(ap, ab)
+    # compute the projection point
+    return a + t * ab
+
+
+def project_point_to_segment(p, a, b):
+    """
+    Returns the closest point on a finite segment ab to point p.
+    p, a, b: numpy arrays of shape (2,).
+    """
+    if np.all(a == b):
+        return a
+    # direction vector of the line
+    ab = b - a
+    # direction of vector from a to p
+    ap = p - a
+    # compute the scalar projection of p-a onto b-a
+    t = scalar_projection(ap, ab)
+    # clip result to either a or b
+    t = np.clip(t, 0, 1)
+    return a + t * ab
+
+
+def point_line_distance(p, a, b):
+    """
+    returns the distance between a point p and a line defined by the points a and b
     :param p: point to check (3,) or batch of points to check (B, 3)
-    :param v0: first vertex of the line (3,)
-    :param v1: second vertex of the line (3,)
+    :param a: first vertex of the line (3,)
+    :param b: second vertex of the line (3,)
     :return the distance between the point and the line
     """
-    return np.linalg.norm(np.cross(v1 - v0, p - v0), axis=-1) / np.linalg.norm(
-        v1 - v0, axis=-1
-    )
+    nom = np.linalg.norm(np.cross(b - a, p - a), axis=-1)
+    denom = np.linalg.norm(b - a, axis=-1)
+    return nom / denom
 
 
-def edge_function(v0, v1, p):
+def edge_function(a, b, p):
     """
-    returns the "edge function" which equals half the area of the traingle formed by v0, v1 and p
-    if the result is positive, p is to the right of the line v0v1
-    :param v0: first vertex of the triangle (3,)
-    :param v1: second vertex of the triangle (3,)
+    returns the "edge function" which equals half the area of the traingle formed by a, b and p
+    if the result is positive, p is to the right of the line ab
+    :param a: first vertex of the triangle (3,)
+    :param b: second vertex of the triangle (3,)
     :param p: point to check (3,) or batch of points to check (B, 3)
     """
-    return np.cross(v1 - v0, p - v0)
+    return np.cross(b - a, p - a)
 
 
-def is_inside_triangle(p, v0, v1, v2):
+def is_inside_triangle(p, a, b, c):
     """
     checks if a point is inside a triangle
     :param p: point or batch of points to check (3,)
-    :param v0: first vertex of the triangle (3,)
-    :param v1: second vertex of the triangle (3,)
-    :param v2: third vertex of the triangle (3,)
+    :param a: first vertex of the triangle (3,)
+    :param b: second vertex of the triangle (3,)
+    :param c: third vertex of the triangle (3,)
     """
-    a = np.all(edge_function(v0, v1, p) >= 0, axis=-1)
-    b = np.all(edge_function(v1, v2, p) >= 0, axis=-1)
-    c = np.all(edge_function(v2, v0, p) >= 0, axis=-1)
-    return a & b & c
+    check1 = np.all(edge_function(a, b, p) >= 0, axis=-1)
+    check2 = np.all(edge_function(b, c, p) >= 0, axis=-1)
+    check3 = np.all(edge_function(c, a, p) >= 0, axis=-1)
+    return check1 & check2 & check3
 
 
 def duplicate_faces(f):

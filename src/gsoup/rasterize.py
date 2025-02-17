@@ -29,7 +29,7 @@ def is_inside_triangle(p, a, b, c):
     return u >= 0 and v >= 0 and w >= 0, u, v, w
 
 
-def project(points, K, Rt):
+def project_points(points, K, Rt):
     """
     projects 3D points to camera screen space
     :param points: (n, 3) np.float32 points to be projected
@@ -83,7 +83,7 @@ def render_mesh(image, depth_buffer, V, F, K, Rt, colors):
     :param Rt: a (3, 4) np.float32 extrinsics matrix (opencv convention, world -> cam)
     :param colors: (m, 3) np.uint8 color per face.
     """
-    projected_vertices = project(V, K, Rt)  # project vertices to screen space
+    projected_vertices = project_points(V, K, Rt)  # project vertices to screen space
     # extract camera pose by inverting Rt and taking last column
     camera_pos = invert_rigid(to_44(Rt)[None, :])[0, :3, -1]
     for i, f in enumerate(F):
