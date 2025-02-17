@@ -114,7 +114,9 @@ def to_44(mat):
     if mat.shape[-2:] != (3, 4):
         raise ValueError("mat must be 3x4")
     if is_np(mat):
-        to_cat = np.broadcast_to(np.array([0, 0, 0, 1]), (*mat.shape[:-2], 1, 4))
+        to_cat = np.broadcast_to(
+            np.array([0, 0, 0, 1]).astype(mat.dtype), (*mat.shape[:-2], 1, 4)
+        )
         new_mat = np.concatenate((mat, to_cat), axis=-2)
     else:
         to_cat = torch.zeros(
