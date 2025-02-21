@@ -2,7 +2,7 @@
 
 import numpy as np
 import matplotlib.pyplot as plt
-from gsoup.dynamic import KalmanFilter
+from gsoup.track import KalmanFilter
 from scipy import signal
 
 # discretization step of simulation
