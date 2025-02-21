@@ -813,7 +813,7 @@ def parse_obj(path, verbose=True):
 def save_obj(vertices, faces, path):
     """ "
     :param vertices: (n x 3) tensor of vertices
-    :param faces: (m x 3) tensor of vertex indices
+    :param faces: (m x 3) or (m x 4) tensor of vertex indices
     :param path: path to save obj file to
     :param vertex_normals: optional (n x 3) tensor of vertex normals
     """
@@ -840,9 +840,11 @@ def save_obj(vertices, faces, path):
         for v in vertices:
             file.write("v {} {} {}\n".format(v[0], v[1], v[2]))  # write vertices
         for f in faces:
-            file.write(
-                "f {} {} {}\n".format(f[0] + 1, f[1] + 1, f[2] + 1)
-            )  # obj indices start at 1
+            row = "f "
+            for index in f:
+                row += " {}".format(index + 1)  # obj indices start at 1
+            row += "\n"
+            file.write(row)
 
 
 def save_ply(
@@ -855,12 +857,12 @@ def save_ply(
 ):
     """
     saves a ply file in a human readable format
-    :param vertices: (n x 3) np array or torch tensor of vertices float32/float64
+    :param vertices: (n, 3) np array or torch tensor of vertices float32/float64
     :param path: path to save ply file to
-    :param faces: optional (m x 3) np array or torch tensor of vertex indices np.int32/np.int64
-    :param vertex_colors: optional (n x 3) np array or torch tensor of vertex colors np.uint8
-    :param face_colors: optional (m x 3) np array or torch tensor of face colors np.uint8
-    :param vertex_normals: optional (n x 3) np array or torch tensor of vertex normals np.float32/np.float64
+    :param faces: optional (m, x) np array or torch tensor of vertex indices np.int32/np.int64
+    :param vertex_colors: optional (n, 3) np array or torch tensor of vertex colors np.uint8
+    :param face_colors: optional (m, 3) np array or torch tensor of face colors np.uint8
+    :param vertex_normals: optional (n, 3) np array or torch tensor of vertex normals np.float32/np.float64
     """
     path = Path(path)
     if path.suffix != ".ply":
@@ -944,7 +946,9 @@ def save_ply(
             file.write("\n")
         if faces is not None:
             for i, f in enumerate(faces):
-                file.write("3 {} {} {}".format(f[0], f[1], f[2]))
+                file.write("{}".format(len(f)))
+                for index in f:
+                    file.write(" {}".format(index))
                 if face_colors is not None:
                     c = face_colors[i]
                     file.write(" {} {} {}".format(c[0], c[1], c[2]))

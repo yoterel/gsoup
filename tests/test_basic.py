@@ -208,6 +208,9 @@ def test_structures():
 
 def test_parsers():
     # obj save and load
+    v, f = gsoup.structures.quad_cube()
+    gsoup.save_mesh(v, f, "resource/quad_cube.obj")
+    gsoup.save_mesh(v, f, "resource/quad_cube.ply")
     v, f = gsoup.structures.cube()
     gsoup.save_mesh(v, f, "resource/cube.obj")
     v1, f1 = gsoup.load_mesh("resource/cube.obj")
@@ -610,23 +613,22 @@ def test_sphere_tracer():
 
 
 def test_rasterizer():
-    width, height = 400, 400
+    # prep "canvas"
+    width, height = 256, 256
     f = 800
-    image = np.zeros((height, width, 3), dtype=np.uint8)
-    depth_buffer = np.full((height, width), np.inf).astype(
-        np.float32
-    )  # Initialize depth buffer
-    V, F = gsoup.load_mesh("tests/tests_resource/cube.obj")  # (n, 3)
+    V3, F3 = gsoup.load_mesh("tests/tests_resource/cube.obj")  # (n, 3)
+    V4, F4 = gsoup.structures.quad_cube()  # (n, 4)
     # Some random transformation
-    V = V / 8
+    V3 = V3 / 8
+    V4 = V4 / 8
     rand_qvec = gsoup.random_qvec(1)
     rand_rot_mat = gsoup.qvec2mat(rand_qvec)
     rand_rot_trans = np.random.uniform(-0.1, 0.1, size=3)
     random_rigid = gsoup.compose_rt(
         rand_rot_mat, rand_rot_trans[None, ...], square=False
     )
-    V = (random_rigid[0] @ gsoup.to_hom(V).T).T
-    # V = V + np.array([0.0, -0.3, 0.0])
+    V3 = (random_rigid[0] @ gsoup.to_hom(V3).T).T
+    V4 = (random_rigid[0] @ gsoup.to_hom(V4).T).T
     # Camera intrinsics matrix
     K = np.array([[f, 0, width / 2], [0, f, height / 2], [0, 0, 1]])
     K = K.astype(np.float32)
@@ -639,11 +641,62 @@ def test_rasterizer():
     Rt = gsoup.invert_rigid(Rt)[0]  # world -> cam
     Rt = Rt.astype(np.float32)
     # Define colors per face
-    colors = np.random.randint(0, 256, size=len(F) * 3).reshape(len(F), 3)
-    # colors = (np.ones(len(F) * 3, dtype=np.int32) * 255).reshape(len(F), 3)
-    # colors = [(255, 0, 0), (0, 255, 0)]  # Red, Green
-    gsoup.render_mesh(image, depth_buffer, V, F, K, Rt, colors)
-    gsoup.save_image(image, "resource/rasterize_cube.png")
+    colors3 = np.random.randint(0, 256, size=len(F3) * 3).reshape(len(F3), 3)
+    colors4 = np.random.randint(0, 256, size=len(F4) * 3).reshape(len(F4), 3)
+    colors1 = np.array([255, 255, 255])
+
+    image = gsoup.render_mesh(V3, F3, K, Rt, colors3, wh=(width, height))
+    gsoup.save_image(image, "resource/rast_tricube.png")
+
+    image = gsoup.render_mesh(V4, F4, K, Rt, colors4, wh=(width, height))
+    gsoup.save_image(image, "resource/rast_quadcube.png")
+
+    image = gsoup.render_mesh(
+        V4,
+        F4,
+        K,
+        Rt,
+        colors1,
+        wireframe=True,
+        wh=(width, height),
+    )
+    gsoup.save_image(image, "resource/rast_wireframe.png")
+
+    image = gsoup.render_mesh(
+        V4,
+        F4,
+        K,
+        Rt,
+        colors1,
+        wireframe=True,
+        wireframe_occlude=True,
+        wh=(width, height),
+    )
+    gsoup.save_image(image, "resource/rast_wireframe_occlude.png")
+
+    image = gsoup.render_mesh(
+        V4,
+        F4,
+        K,
+        Rt,
+        colors4,
+        wireframe=True,
+        wh=(width, height),
+    )
+    gsoup.save_image(image, "resource/rast_wireframe_color.png")
+    # test with providing image and depth_buffer
+    image = np.zeros((height, width, 3), dtype=np.uint8)
+    depth_buffer = np.full((height, width), np.inf, dtype=np.float32)
+    gsoup.render_mesh(
+        V4,
+        F4,
+        K,
+        Rt,
+        colors4,
+        image=image,
+        depth_buffer=depth_buffer,
+    )
+    gsoup.save_image(image, "resource/rast_provide_image.png")
 
 
 def test_qem():

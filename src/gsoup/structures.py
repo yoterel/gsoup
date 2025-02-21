@@ -51,6 +51,37 @@ def icosehedron(scale=1.0, centered=True):
     return vertices, faces
 
 
+def quad_cube(scale=1.0, centered=True):
+    vertices = np.array(
+        [
+            [0, 0, 0],
+            [1, 0, 0],
+            [1, 1, 0],
+            [0, 1, 0],
+            [0, 1, 1],
+            [0, 0, 1],
+            [1, 0, 1],
+            [1, 1, 1],
+        ],
+        dtype=np.float32,
+    )
+    if centered:
+        vertices -= np.array([0.5, 0.5, 0.5])
+    vertices *= scale
+    faces = np.array(
+        [
+            [0, 3, 2, 1],  # Bottom face (when "up" is +Z)
+            [1, 6, 5, 0],  # Left face (when looking towards -X)
+            [2, 7, 6, 1],  # Front face (when looking towards -X)
+            [6, 7, 4, 5],  # Top face (when looking towards -X)
+            [0, 5, 4, 3],  # Back face (when looking towards -X)
+            [3, 4, 7, 2],  # Right face (when looking towards -X)
+        ],
+        dtype=np.int32,
+    )
+    return vertices, faces
+
+
 def cube(scale=1.0, centered=True):
     vertices = np.array(
         [

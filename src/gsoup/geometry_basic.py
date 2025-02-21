@@ -85,6 +85,29 @@ def is_inside_triangle(p, a, b, c):
     return check1 & check2 & check3
 
 
+def triangulate_quad_mesh(F, S=None):
+    """
+    Triangulates a quad mesh.
+    Each quad face (v0, v1, v2, v3) is split into two triangles:
+      - Triangle 1: (v0, v1, v2)
+      - Triangle 2: (v0, v2, v3)
+    :param F: (m,4) np.ndarray of quad face indices.
+    :param S: (m, x) some signal per face that needs change according to F
+    :return: F_tri (m*2, 3) and S_tri (m*2, x) if S is not None
+    """
+    m = F.shape[0]
+    F_tri = np.empty((m * 2, 3), dtype=F.dtype)
+    F_tri[0::2] = F[:, [0, 1, 2]]
+    F_tri[1::2] = F[:, [0, 2, 3]]
+    if S is None:
+        return F_tri
+    else:
+        S_tri = np.empty((m * 2, S.shape[-1]), dtype=S.dtype)
+        S_tri[0::2] = S
+        S_tri[1::2] = S
+        return F_tri, S_tri
+
+
 def duplicate_faces(f):
     """
     duplicates *every* face in the mesh, with flipped orientation (and appends it to the end of the tensor)

@@ -1,6 +1,7 @@
 import numpy as np
 from .core import to_hom, to_44
 from .transforms import invert_rigid
+from .geometry_basic import triangulate_quad_mesh
 
 
 def barycentric(p, a, b, c):
@@ -43,13 +44,44 @@ def project_points(points, K, Rt):
     return projected  # second dim is (x, y, depth)
 
 
-def should_cull_face(v0, v1, v2, camera_pos):
+def should_cull_tri(v0, v1, v2, camera_pos):
     """
     a slightly naive cull procedure (should use camera view direction)
     """
     normal = np.cross(v1 - v0, v2 - v0)
     view_dir = v0 - camera_pos
-    return np.dot(normal, view_dir) >= 0  # Cull back-facing triangles
+    return np.dot(normal, view_dir) >= 0  # Cull back-facing
+
+
+def draw_line(image, p0, p1, color):
+    """
+    Draws a line between p0 and p1 on the image using Bresenham's algorithm.
+
+    :param image: (height, width, 3) np.uint8 image.
+    :param p0: Starting point (x, y).
+    :param p1: Ending point (x, y).
+    :param color: (3,) np.uint8 color.
+    """
+    x0, y0 = int(round(p0[0])), int(round(p0[1]))
+    x1, y1 = int(round(p1[0])), int(round(p1[1]))
+    dx = abs(x1 - x0)
+    dy = abs(y1 - y0)
+    sx = 1 if x0 < x1 else -1
+    sy = 1 if y0 < y1 else -1
+    err = dx - dy
+
+    while True:
+        if 0 <= x0 < image.shape[1] and 0 <= y0 < image.shape[0]:
+            image[y0, x0] = color
+        if x0 == x1 and y0 == y1:
+            break
+        e2 = 2 * err
+        if e2 > -dy:
+            err -= dy
+            x0 += sx
+        if e2 < dx:
+            err += dx
+            y0 += sy
 
 
 def draw_triangle(image, depth_buffer, a, b, c, color):
@@ -72,28 +104,85 @@ def draw_triangle(image, depth_buffer, a, b, c, color):
                         image[y, x] = color
 
 
-def render_mesh(image, depth_buffer, V, F, K, Rt, colors):
+def render_wireframe(image, V, F, K, Rt, color, wireframe_occlude):
     """
-    renders a mesh using basic rasterization
-    :param image: a (height, width 3) np.uint8 to be rendered into
-    :param depth_buffer: a (height, width) np.float32 to store depth and perform z-testing
+    Renders the wireframe of a mesh. Supports both triangle and quad faces.
+
+    :param image: (height, width, 3) np.uint8 image to draw on.
+    :param V: (n, 3) np.float32 vertices in world coordinates.
+    :param F: list or array of face indices (each face can be a triangle [3] or a quad [4]).
+    :param K: (3, 3) np.float32 camera intrinsics.
+    :param Rt: (3, 4) np.float32 camera extrinsics (world -> cam).
+    :param color: (m, 3) np.uint8 line color per face.
+    :param wireframe_occlude: if true, will not render wireframe on backfaces
+    """
+    # Project the vertices to screen space.
+    projected_vertices = project_points(V, K, Rt)
+    for f in F:
+        if wireframe_occlude:
+            v0, v1, v2 = V[f[0]], V[f[1]], V[f[2]]
+            camera_pos = invert_rigid(to_44(Rt)[None, :])[0, :3, -1]  # get cam pose
+            if should_cull_tri(v0, v1, v2, camera_pos):
+                continue
+        # Draw an edge from each vertex to the next, wrapping around.
+        n = len(f)
+        for i in range(n):
+            p0 = projected_vertices[f[i]]
+            p1 = projected_vertices[f[(i + 1) % n]]
+            draw_line(image, p0, p1, color[i])
+
+
+def render_mesh(
+    V,
+    F,
+    K,
+    Rt,
+    color,
+    wireframe=False,
+    wireframe_occlude=False,
+    image=None,
+    depth_buffer=None,
+    wh=(512, 512),
+):
+    """
+    renders a mesh onto an image
     :param V: a (n, 3) np.float32 of vertices of a mesh in world coordinates
-    :param F: a (m, 3) np.int32 indices into V, defining the faces of the mesh
+    :param F: a (m, 3) or (m, 4) np.int32 indices into V, defining the faces of the mesh (assumes CCW order)
     :param K: a (3, 3) np.float32 intrinsics matrix (opencv convention)
     :param Rt: a (3, 4) np.float32 extrinsics matrix (opencv convention, world -> cam)
-    :param colors: (m, 3) np.uint8 color per face.
+    :param color: (m, 3) np.uint8 color per face, or (3,) for single color.
+    :param wireframe: if True, will render the wireframe version of the mesh
+    :param wireframe_occlude: if True, will not render wireframe on backfaces
+    :param image: if not None, a (height, width 3) np.uint8 to be rendered into
+    :param depth_buffer: if not None, a (height, width) np.float32 to store depth and perform z-testing
+    :param wh: (2-tuple) width height to use if image/depthbuffer aren't provided
     """
     projected_vertices = project_points(V, K, Rt)  # project vertices to screen space
-    # extract camera pose by inverting Rt and taking last column
-    camera_pos = invert_rigid(to_44(Rt)[None, :])[0, :3, -1]
-    for i, f in enumerate(F):
-        v0, v1, v2 = V[f[0]], V[f[1]], V[f[2]]
-        if not should_cull_face(v0, v1, v2, camera_pos):
-            draw_triangle(
-                image,
-                depth_buffer,
-                projected_vertices[f[0]],
-                projected_vertices[f[1]],
-                projected_vertices[f[2]],
-                colors[i],
-            )
+    if image is None:
+        image = np.zeros((wh[1], wh[0], 3), dtype=np.uint8)
+    if depth_buffer is None and not wireframe:
+        depth_buffer = np.full((wh[1], wh[0]), np.inf, dtype=np.float32)
+    if image.shape[0:2] != image.shape[0:2]:
+        raise ValueError("image and depth buffer must have same spatial dimensions")
+    if wireframe:
+        if color.ndim == 1:  # handle single color
+            color = np.tile(color[None, :], (len(F), 1))
+        render_wireframe(image, V, F, K, Rt, color, wireframe_occlude=wireframe_occlude)
+    else:
+        if F.shape[-1] == 4:  # triangulate for rendering
+            F, color = triangulate_quad_mesh(F, color)
+        if color.ndim == 1:  # handle single color
+            color = np.tile(color[None, :], len(F))
+        for i, f in enumerate(F):
+            v0, v1, v2 = V[f[0]], V[f[1]], V[f[2]]
+            camera_pos = invert_rigid(to_44(Rt)[None, :])[0, :3, -1]  # get cam pose
+            if not should_cull_tri(v0, v1, v2, camera_pos):
+                draw_triangle(
+                    image,
+                    depth_buffer,
+                    projected_vertices[f[0]],
+                    projected_vertices[f[1]],
+                    projected_vertices[f[2]],
+                    color[i],
+                )
+    return image

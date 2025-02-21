@@ -55,6 +55,7 @@ from .geometry_basic import (
     project_point_to_segment,
     point_line_distance,
     is_inside_triangle,
+    triangulate_quad_mesh,
     ray_ray_intersection,
     duplicate_faces,
     remove_duplicate_faces,
