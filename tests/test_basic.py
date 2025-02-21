@@ -612,6 +612,18 @@ def test_sphere_tracer():
     gsoup.save_images(gizmo_images, Path("resource/sphere_trace"))
 
 
+def test_geometry():
+    faces_tri = np.array([[0, 1, 2], [2, 3, 0]])  # Triangle example
+    faces_quad = np.array([[0, 1, 2, 3], [4, 5, 6, 7]])  # Quad example
+    _, faces_quadcube = gsoup.structures.quad_cube()
+    _, faces_tricube = gsoup.structures.cube()
+
+    e, f2e = gsoup.faces2edges_naive(faces_tri)
+    e, f2e = gsoup.faces2edges_naive(faces_tricube)
+    e, f2e = gsoup.faces2edges_naive(faces_quad)
+    e, f2e = gsoup.faces2edges_naive(faces_quadcube)
+
+
 def test_rasterizer():
     # prep "canvas"
     width, height = 256, 256

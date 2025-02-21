@@ -14,6 +14,7 @@ from .core import (
     to_float,
     color_to_gray,
     broadcast_batch,
+    repeat,
     map_range,
     map_to_01,
     swap_columns,
@@ -62,6 +63,7 @@ from .geometry_basic import (
     get_aspect_ratio,
     normalize_vertices,
     clean_infinite_vertices,
+    faces2edges_naive,
     calc_edges,
     calc_face_normals,
     calc_vertex_normals,
@@ -160,6 +162,7 @@ from .sphere_trace import (
 from .rasterize import (
     render_mesh,
     project_points,
+    should_cull_tri,
 )
 
 from . import structures

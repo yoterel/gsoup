@@ -88,12 +88,13 @@ def alpha_compose(images, backgrounds=None, bg_color=None):
     return alpha * rgb + (1 - alpha) * bg_color
 
 
-def draw_text_on_image(images, text_per_image, loc=(0, 0), fill_white=True):
+def draw_text_on_image(images, text_per_image, loc=(0, 0), size=48, fill_white=True):
     """
     writes text on images given as np array (b x H x W x 3)
     :param images: (b x H x W x 3) numpy array
     :param text_per_image: list or np array of strings
     :param loc: a tuple xy of anchor coordinates for the text (anchor is left-top of text)
+    :param size: size of font
     :param fill_white: if True, text is white, otherwise black
     :return: new (b x H x W x 3) numpy array with text written
     """
@@ -106,7 +107,7 @@ def draw_text_on_image(images, text_per_image, loc=(0, 0), fill_white=True):
         images = to_8b(images)
     rgbs = [Image.fromarray(x) for x in images]
     resource_path = Path(__file__).parent.resolve()
-    font = ImageFont.truetype(Path(resource_path, "FreeMono.ttf"), 48)
+    font = ImageFont.truetype(Path(resource_path, "FreeMono.ttf"), size)
     if fill_white:
         fill = "white"
     else:

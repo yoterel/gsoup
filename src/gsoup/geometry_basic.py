@@ -249,6 +249,45 @@ def get_face_centroids(v, f):
     return torch.mean(v[f], dim=-2)
 
 
+def faces2edges_naive(faces: np.array):
+    """
+    a naive implementation in numpy to extract edges from a triangular / quad mesh.
+    note: assumes manifold mesh with no borders
+    :param faces: (n, 3) or (n, 4) np.uint32 of face indices
+    :return edges (m, 2), f2e (n, 3 or 4) and e2f(m, 2)
+    """
+    edge_list = []
+    faces_to_edges = []
+
+    for face in faces:
+        face_edges = []
+        num_vertices = len(face)
+        for i in range(num_vertices):
+            v0, v1 = sorted((face[i], face[(i + 1) % num_vertices]))
+            edge = (v0, v1)
+            edge_list.append(edge)
+            face_edges.append(edge)
+        faces_to_edges.append(face_edges)
+
+    # Convert to numpy array and find unique edges
+    edge_array = np.array(edge_list, dtype=np.int32)
+    unique_edges, edge_indices = np.unique(edge_array, axis=0, return_inverse=True)
+
+    # Map faces to their corresponding unique edges
+    faces_to_edges = np.array(edge_indices).reshape(faces.shape)
+
+    # initialize the edges_to_faces array with a default value and fill it in:
+    num_unique_edges = unique_edges.shape[0]
+    edges_to_faces = -np.ones((num_unique_edges, 2), dtype=np.int32)
+    for face_idx, face_edge_indices in enumerate(faces_to_edges):
+        for edge_idx in face_edge_indices:
+            if edges_to_faces[edge_idx, 0] == -1:
+                edges_to_faces[edge_idx, 0] = face_idx
+            else:
+                edges_to_faces[edge_idx, 1] = face_idx
+    return unique_edges, faces_to_edges, edges_to_faces
+
+
 def calc_edges(faces: torch.Tensor, with_edge_to_face: bool = False, with_dummies=True):
     """
     # F,3 long - first face may be dummy with all zeros

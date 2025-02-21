@@ -87,6 +87,20 @@ def broadcast_batch(*args):
     return new_args
 
 
+def repeat(x, n):
+    """
+    repeats a numpy array or torch tensor
+    :param x: the input
+    :param n: a tuple describing the repeat per dimension of x
+    return the repeated input
+    """
+    if is_np(x):
+        y = np.tile(x, n)
+    else:
+        y = torch, repeat(x, *n)
+    return y
+
+
 def compose_rt(R: np.array, t: np.array, square=False):
     """
     composes a n x 3 x 4 numpy array from rotation and translation.
@@ -105,9 +119,9 @@ def compose_rt(R: np.array, t: np.array, square=False):
 
 def to_44(mat):
     """
-    converts a 3x4 to a 4x4 matrix by concatenating 0 0 0 1
-    :param mat: dimsx3x4 numpy array (dims can be any number of dims including 0)
-    :return: dimsx4x4 numpy array
+    converts a (3,4) to a (4,4) matrix by concatenating [0, 0, 0, 1]
+    :param mat: (n, 3, 4) numpy array (n can be any number of including 0)
+    :return: (n, 4, 4) numpy array
     """
     if mat.shape[-2:] == (4, 4):
         return mat
@@ -129,9 +143,9 @@ def to_44(mat):
 
 def to_34(mat: np.array):
     """
-    converts a 4x4 to a 3x4 matrix by removeing the last row
-    :param mat: 4x4 numpy array
-    :return: 3x4 numpy array
+    converts a (n, 4, 4) to a (n, 3, 4) matrix by removeing the last row
+    :param mat: (n, 4, 4) numpy array
+    :return: (n, 3, 4) numpy array
     """
     if mat.ndim == 3:
         if mat.shape[1:] != (4, 4):

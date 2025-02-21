@@ -30,15 +30,15 @@ def is_inside_triangle(p, a, b, c):
     return u >= 0 and v >= 0 and w >= 0, u, v, w
 
 
-def project_points(points, K, Rt):
+def project_points(points, K, w2c):
     """
     projects 3D points to camera screen space
     :param points: (n, 3) np.float32 points to be projected
     :param K: (3, 3) np.float32 intrinsics of camera
-    :param Rt: (3, 4) np.float32 extrinsics of camera
+    :param w2c: (3, 4) np.float32 extrinsics of camera
     """
     points_h = to_hom(points)
-    projected = K @ Rt @ points_h.T  # Apply camera projection
+    projected = K @ w2c @ points_h.T  # Apply camera projection
     projected = projected.T
     projected /= projected[:, 2:]  # Normalize by depth
     return projected  # second dim is (x, y, depth)
@@ -62,8 +62,8 @@ def draw_line(image, p0, p1, color):
     :param p1: Ending point (x, y).
     :param color: (3,) np.uint8 color.
     """
-    x0, y0 = int(round(p0[0])), int(round(p0[1]))
-    x1, y1 = int(round(p1[0])), int(round(p1[1]))
+    x0, y0 = np.round(p0).astype(np.int32)
+    x1, y1 = np.round(p1).astype(np.int32)
     dx = abs(x1 - x0)
     dy = abs(y1 - y0)
     sx = 1 if x0 < x1 else -1
@@ -104,7 +104,7 @@ def draw_triangle(image, depth_buffer, a, b, c, color):
                         image[y, x] = color
 
 
-def render_wireframe(image, V, F, K, Rt, color, wireframe_occlude):
+def render_wireframe(image, V, F, K, w2c, color, wireframe_occlude):
     """
     Renders the wireframe of a mesh. Supports both triangle and quad faces.
 
@@ -112,16 +112,16 @@ def render_wireframe(image, V, F, K, Rt, color, wireframe_occlude):
     :param V: (n, 3) np.float32 vertices in world coordinates.
     :param F: list or array of face indices (each face can be a triangle [3] or a quad [4]).
     :param K: (3, 3) np.float32 camera intrinsics.
-    :param Rt: (3, 4) np.float32 camera extrinsics (world -> cam).
+    :param w2c: (3, 4) np.float32 camera extrinsics (world -> cam).
     :param color: (m, 3) np.uint8 line color per face.
     :param wireframe_occlude: if true, will not render wireframe on backfaces
     """
     # Project the vertices to screen space.
-    projected_vertices = project_points(V, K, Rt)
+    projected_vertices = project_points(V, K, w2c)[:, :2]
     for f in F:
         if wireframe_occlude:
             v0, v1, v2 = V[f[0]], V[f[1]], V[f[2]]
-            camera_pos = invert_rigid(to_44(Rt)[None, :])[0, :3, -1]  # get cam pose
+            camera_pos = invert_rigid(to_44(w2c)[None, :])[0, :3, -1]  # get cam pose
             if should_cull_tri(v0, v1, v2, camera_pos):
                 continue
         # Draw an edge from each vertex to the next, wrapping around.
@@ -136,7 +136,7 @@ def render_mesh(
     V,
     F,
     K,
-    Rt,
+    w2c,
     color,
     wireframe=False,
     wireframe_occlude=False,
@@ -149,17 +149,20 @@ def render_mesh(
     :param V: a (n, 3) np.float32 of vertices of a mesh in world coordinates
     :param F: a (m, 3) or (m, 4) np.int32 indices into V, defining the faces of the mesh (assumes CCW order)
     :param K: a (3, 3) np.float32 intrinsics matrix (opencv convention)
-    :param Rt: a (3, 4) np.float32 extrinsics matrix (opencv convention, world -> cam)
+    :param w2c: a (3, 4) np.float32 extrinsics matrix (opencv convention, world -> cam)
     :param color: (m, 3) np.uint8 color per face, or (3,) for single color.
     :param wireframe: if True, will render the wireframe version of the mesh
     :param wireframe_occlude: if True, will not render wireframe on backfaces
     :param image: if not None, a (height, width 3) np.uint8 to be rendered into
     :param depth_buffer: if not None, a (height, width) np.float32 to store depth and perform z-testing
     :param wh: (2-tuple) width height to use if image/depthbuffer aren't provided
+    :return (w, h, 3) np.uint8 rendered image
     """
-    projected_vertices = project_points(V, K, Rt)  # project vertices to screen space
+    projected_vertices = project_points(V, K, w2c)  # project vertices to screen space
     if image is None:
         image = np.zeros((wh[1], wh[0], 3), dtype=np.uint8)
+    else:
+        image = image.copy()
     if depth_buffer is None and not wireframe:
         depth_buffer = np.full((wh[1], wh[0]), np.inf, dtype=np.float32)
     if image.shape[0:2] != image.shape[0:2]:
@@ -167,7 +170,15 @@ def render_mesh(
     if wireframe:
         if color.ndim == 1:  # handle single color
             color = np.tile(color[None, :], (len(F), 1))
-        render_wireframe(image, V, F, K, Rt, color, wireframe_occlude=wireframe_occlude)
+        render_wireframe(
+            image,
+            V,
+            F,
+            K,
+            w2c,
+            color,
+            wireframe_occlude=wireframe_occlude,
+        )
     else:
         if F.shape[-1] == 4:  # triangulate for rendering
             F, color = triangulate_quad_mesh(F, color)
@@ -175,7 +186,7 @@ def render_mesh(
             color = np.tile(color[None, :], len(F))
         for i, f in enumerate(F):
             v0, v1, v2 = V[f[0]], V[f[1]], V[f[2]]
-            camera_pos = invert_rigid(to_44(Rt)[None, :])[0, :3, -1]  # get cam pose
+            camera_pos = invert_rigid(to_44(w2c)[None, :])[0, :3, -1]  # get cam pose
             if not should_cull_tri(v0, v1, v2, camera_pos):
                 draw_triangle(
                     image,
