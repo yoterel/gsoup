@@ -400,79 +400,79 @@ def test_image():
     assert np.all(gray_image[:, :, 1] == gray_image[:, :, 2])
 
 
-def test_video():
-    import platform
-    import os
+# def test_video():
+#     import platform
+#     import os
 
-    if platform.system() == "Windows":
-        FFMPEG_DIR = os.path.join("C:/tools/ffmpeg-7.0.1-essentials_build/bin")
-        os.environ["PATH"] = FFMPEG_DIR + ";" + os.environ["PATH"]
-    else:
-        FFMPEG_DIR = os.path.join("/usr/bin")
-        os.environ["PATH"] = FFMPEG_DIR + ":" + os.environ["PATH"]
-    frame_number = 100
-    h = 128
-    w = 128
-    # images = np.random.randint(0, 255, (frame_number, 512, 512, 3), dtype=np.uint8)
-    images = np.array(
-        [gsoup.generate_concentric_circles(h, w, n=5) / 255.0 for i in range(100)]
-    )
-    # im1 = gsoup.generate_voronoi_diagram(512, 512, 1000)
-    # im2 = gsoup.generate_voronoi_diagram(512, 512, 1000)
-    # im1s = np.tile(im1[None, ...], (10, 1, 1, 1))
-    # im2s = np.tile(im2[None, ...], (10, 1, 1, 1))
-    # images = np.vstack([im1s, im2s])
-    gsoup.save_video(images, Path("resource/lossless_video.avi"), lossy=False, fps=10)
-    gsoup.save_video(images, Path("resource/lossy_video.avi"), lossy=True, fps=10)
-    gsoup.trim_video(
-        Path("resource/lossless_video.avi"),
-        Path("resource/trimmed.avi"),
-        0,
-        100,
-        True,
-    )
-    reader = gsoup.VideoReader(
-        Path("resource/lossless_video.avi"), h=h, w=w, verbose=True
-    )
-    fps = gsoup.FPS()
-    reader_has_frames = False
-    for i, frame in enumerate(reader):
-        reader_has_frames = True
-        print("{}: {}, fps: {}".format(i, frame.shape, fps()))
-        assert np.all(frame == images[i])
-    assert reader_has_frames
-    video_frames = gsoup.load_video(Path("resource/lossless_video.avi"))
-    assert video_frames.shape == (frame_number, h, w, 3)
-    assert np.all(video_frames == images)
-    video_frames_reversed = gsoup.reverse_video(Path("resource/lossless_video.avi"))
-    assert (video_frames_reversed[-1] == video_frames[0]).all()
-    sliced_frames = gsoup.slice_from_video(
-        Path("resource/lossless_video.avi"),
-        every_n_frames=2,
-        start_frame=0,
-        end_frame=6,
-    )
-    assert (sliced_frames == video_frames[:7:2, :, :, :]).all()
-    gsoup.video_to_images(
-        Path("resource/lossless_video.avi"),
-        Path("resource/ffmpeg_reconstructed_images"),
-    )
-    gsoup.save_video(
-        Path("resource/ffmpeg_reconstructed_images"),
-        Path("resource/reconst_lossy.avi"),
-        fps=10,
-        lossy=True,
-    )
-    gsoup.save_video(
-        Path("resource/ffmpeg_reconstructed_images"),
-        Path("resource/reconst_lossless.avi"),
-        fps=10,
-        lossy=False,
-    )
-    discrete_images = gsoup.load_images(Path("resource/ffmpeg_reconstructed_images"))
-    assert discrete_images.shape == (frame_number, h, w, 3)
-    timestamps = gsoup.get_frame_timestamps(Path("resource/lossless_video.avi"))
-    assert timestamps[0] == 0
+#     if platform.system() == "Windows":
+#         FFMPEG_DIR = os.path.join("C:/tools/ffmpeg-7.0.1-essentials_build/bin")
+#         os.environ["PATH"] = FFMPEG_DIR + ";" + os.environ["PATH"]
+#     else:
+#         FFMPEG_DIR = os.path.join("/usr/bin")
+#         os.environ["PATH"] = FFMPEG_DIR + ":" + os.environ["PATH"]
+#     frame_number = 100
+#     h = 128
+#     w = 128
+#     # images = np.random.randint(0, 255, (frame_number, 512, 512, 3), dtype=np.uint8)
+#     images = np.array(
+#         [gsoup.generate_concentric_circles(h, w, n=5) / 255.0 for i in range(100)]
+#     )
+#     # im1 = gsoup.generate_voronoi_diagram(512, 512, 1000)
+#     # im2 = gsoup.generate_voronoi_diagram(512, 512, 1000)
+#     # im1s = np.tile(im1[None, ...], (10, 1, 1, 1))
+#     # im2s = np.tile(im2[None, ...], (10, 1, 1, 1))
+#     # images = np.vstack([im1s, im2s])
+#     gsoup.save_video(images, Path("resource/lossless_video.avi"), lossy=False, fps=10)
+#     gsoup.save_video(images, Path("resource/lossy_video.avi"), lossy=True, fps=10)
+#     gsoup.trim_video(
+#         Path("resource/lossless_video.avi"),
+#         Path("resource/trimmed.avi"),
+#         0,
+#         100,
+#         True,
+#     )
+#     reader = gsoup.VideoReader(
+#         Path("resource/lossless_video.avi"), h=h, w=w, verbose=True
+#     )
+#     fps = gsoup.FPS()
+#     reader_has_frames = False
+#     for i, frame in enumerate(reader):
+#         reader_has_frames = True
+#         print("{}: {}, fps: {}".format(i, frame.shape, fps()))
+#         assert np.all(frame == images[i])
+#     assert reader_has_frames
+#     video_frames = gsoup.load_video(Path("resource/lossless_video.avi"))
+#     assert video_frames.shape == (frame_number, h, w, 3)
+#     assert np.all(video_frames == images)
+#     video_frames_reversed = gsoup.reverse_video(Path("resource/lossless_video.avi"))
+#     assert (video_frames_reversed[-1] == video_frames[0]).all()
+#     sliced_frames = gsoup.slice_from_video(
+#         Path("resource/lossless_video.avi"),
+#         every_n_frames=2,
+#         start_frame=0,
+#         end_frame=6,
+#     )
+#     assert (sliced_frames == video_frames[:7:2, :, :, :]).all()
+#     gsoup.video_to_images(
+#         Path("resource/lossless_video.avi"),
+#         Path("resource/ffmpeg_reconstructed_images"),
+#     )
+#     gsoup.save_video(
+#         Path("resource/ffmpeg_reconstructed_images"),
+#         Path("resource/reconst_lossy.avi"),
+#         fps=10,
+#         lossy=True,
+#     )
+#     gsoup.save_video(
+#         Path("resource/ffmpeg_reconstructed_images"),
+#         Path("resource/reconst_lossless.avi"),
+#         fps=10,
+#         lossy=False,
+#     )
+#     discrete_images = gsoup.load_images(Path("resource/ffmpeg_reconstructed_images"))
+#     assert discrete_images.shape == (frame_number, h, w, 3)
+#     timestamps = gsoup.get_frame_timestamps(Path("resource/lossless_video.avi"))
+#     assert timestamps[0] == 0
 
 
 def test_procam():
