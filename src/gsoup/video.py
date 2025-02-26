@@ -119,7 +119,7 @@ def get_frame_timestamps(video_path):
         "-select_streams",
         "v:0",
         "-show_entries",
-        "frame=pkt_pts_time",
+        "frame=best_effort_timestamp_time",
         "-of",
         "csv=p=0",
         str(video_path),
@@ -130,6 +130,7 @@ def get_frame_timestamps(video_path):
     lines = result.stdout.strip().splitlines()
     timestamps = []
     for line in lines:
+        line = line.strip(",")
         try:
             timestamps.append(float(line))
         except ValueError:
