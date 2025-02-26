@@ -85,7 +85,8 @@ def main():
     tracker = HullTracker(gt_o2ws[0], params)
     for i in range(len(video)):
         frame = video[i, :, :, 0]
-        tracker.track(frame)
+        gt_v = (gt_o2ws[i] @ gsoup.to_hom(params["v"]).T).T
+        tracker.track(frame, cur_v=gt_v)
     # get results
     object_poses, correspondences = tracker.get_results()
     # render results

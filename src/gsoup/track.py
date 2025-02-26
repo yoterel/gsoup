@@ -194,8 +194,11 @@ class HullTracker:
                 best_tangent = tangent / norm_t if norm_t > 0 else np.array([0, 0])
         return best_point, best_tangent
 
-    def track(self, frame):
-        observed_silhouette = self.get_convex_hull(frame)
+    def track(self, frame, cur_v, **kwargs):
+        observed_silhouette = self.get_convex_hull_ideal(
+            cur_v, params["K"], params["w2c"]
+        )
+        # observed_silhouette = self.get_convex_hull(frame)
         for iter in range(self.params["iters_per_frame"]):
             # convert current o2c to o2w
             rvec = self.cur_pose[0:3]
