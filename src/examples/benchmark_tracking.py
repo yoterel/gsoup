@@ -2,6 +2,7 @@ import numpy as np
 import gsoup
 from pathlib import Path
 from gsoup.track import NaiveEdgeTracker, HullTracker
+import cv2
 
 
 def get_default_cam():
@@ -27,7 +28,7 @@ def create_video(V, F, n_frames):
     height, width, K, w2c = get_default_cam()
     rand_qvec = gsoup.random_qvec(2).astype(np.float32)
     rand_trans = np.random.uniform(-0.1, 0.1, size=6).astype(np.float32).reshape(2, 3)
-    t = np.linspace(0, 1, n_frames)
+    t = np.linspace(0, 1, n_frames, dtype=np.float32)
     for i in range(n_frames):
         cur_qvec = gsoup.qslerp(rand_qvec[0], rand_qvec[1], t[i])
         cur_t = rand_trans[0] * (t[i] - 1) + rand_trans[1] * t[i]
@@ -49,16 +50,26 @@ def create_video(V, F, n_frames):
     return np.array(frames), np.array(o2ws)
 
 
+def draw_correspondences(image, corr):
+    for c in corr:
+        source = c[0].round().astype(np.uint32)
+        target = c[1][0].round().astype(np.uint32)
+        image = cv2.arrowedLine(image, source, target, (127, 127, 127), 1)
+    return image
+
+
 def main():
     params = {}
     params["dst_path"] = "track_results"
+    # general settings for tracker
+    params["iters_per_frame"] = 1
     # set up camera (example values)
     height, width, K, w2c = get_default_cam()
     params["height"] = height
     params["width"] = width
     params["K"] = K
     params["w2c"] = w2c
-    params["ms_per_frame"] = 100
+    params["ms_per_frame"] = max(100 // params["iters_per_frame"], 30)
     params["dist_coeffs"] = np.zeros(
         (5, 1), dtype=np.float32
     )  # assuming no lens distortion
@@ -70,13 +81,12 @@ def main():
     params["e"] = edges
     params["e2f"] = e2f
     params["f"] = faces
-    # general settings for tracker
-    params["iters_per_frame"] = 1
     # video settings
     params["n_frames"] = 100
     params["tmp_frames"] = 100
 
     # create video
+    np.random.seed(43)
     video, gt_o2ws = create_video(params["v"], params["f"], params["tmp_frames"])
     video = video[: params["n_frames"]]
     gt_o2ws = gt_o2ws[: params["n_frames"]]
@@ -84,6 +94,7 @@ def main():
     # tracker = NaiveEdgeTracker(gt_o2ws[0], params)
     tracker = HullTracker(gt_o2ws[0], params)
     for i in range(len(video)):
+        print("frame: {:03d}".format(i))
         frame = video[i, :, :, 0]
         gt_v = (gt_o2ws[i] @ gsoup.to_hom(params["v"]).T).T
         tracker.track(frame, cur_v=gt_v)
@@ -109,6 +120,8 @@ def main():
             image=bg,
             wh=(params["width"], params["height"]),
         )
+        if correspondences is not None:
+            draw_correspondences(image, correspondences[i])
         animation.append(image)
     # save resulting video
     captions = [

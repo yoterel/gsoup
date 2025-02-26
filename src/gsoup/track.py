@@ -144,12 +144,10 @@ class HullTracker:
         self.corres = []
         self.cur_pose = np.concatenate((initial_rvec[:, 0], initial_tvec), axis=-1)
 
-    def get_convex_hull_ideal(self, V, K, w2c):
-        projected = project_points(
-            self.params["v"], self.params["K"], self.params["w2c"]
-        )[:, :2]
+    def get_convex_hull_ideal(self, V):
+        projected = project_points(V, self.params["K"], self.params["w2c"])[:, :2]
         hull = cv2.convexHull(projected)
-        return hull
+        return hull[:, 0, :]
 
     def get_convex_hull(self, frame):
         # todo
@@ -195,16 +193,15 @@ class HullTracker:
         return best_point, best_tangent
 
     def track(self, frame, cur_v, **kwargs):
-        observed_silhouette = self.get_convex_hull_ideal(
-            cur_v, params["K"], params["w2c"]
-        )
+        observed_silhouette = self.get_convex_hull_ideal(cur_v)
+        # breakpoint()
         # observed_silhouette = self.get_convex_hull(frame)
-        for iter in range(self.params["iters_per_frame"]):
+        for i in range(self.params["iters_per_frame"]):
             # convert current o2c to o2w
             rvec = self.cur_pose[0:3]
             tvec = self.cur_pose[3:6]
             rmat, _ = cv2.Rodrigues(rvec)
-            o2c = compose_rt(rmat[None, ...], tvec[None, :, 0], square=True)[0]
+            o2c = compose_rt(rmat[None, ...], tvec[None, :], square=True)[0]
             c2w = invert_rigid(to_44(self.params["w2c"])[None, ...], square=True)[0]
             o2w = to_34(c2w @ o2c)
             # apply o2w to object
@@ -223,9 +220,11 @@ class HullTracker:
             mean_error = np.mean(
                 np.linalg.norm(proj_silhouette - target_points, axis=1)
             )
-            print(mean_error)
+            # print(mean_error)
             success, rvec, tvec = cv2.solvePnP(
-                V[silhouette_indices],  # should be filtered to only use correspondences
+                self.params["v"][
+                    silhouette_indices
+                ],  # should be filtered to only use correspondences
                 target_points,
                 self.params["K"],
                 self.dist_coeff,
@@ -237,17 +236,17 @@ class HullTracker:
             # breakpoint()
             if not success:
                 raise RuntimeError("solvePnP failed during refinement.")
-            self.cur_pose = np.concatenate((rvec[:, 0], tvec), axis=-1)
+            self.cur_pose = np.concatenate((rvec, tvec), axis=-1)
             self.poses.append(self.cur_pose)
             self.corres.append(correspondences)
 
-    def get_results():
+    def get_results(self):
         o2ws = []
         for pose in self.poses:
             rvec = pose[0:3]
             tvec = pose[3:6]
             rmat, _ = cv2.Rodrigues(rvec)
-            o2c = compose_rt(rmat[None, ...], tvec[None, :, 0], square=True)[0]
+            o2c = compose_rt(rmat[None, ...], tvec[None, :], square=True)[0]
             c2w = invert_rigid(to_44(self.params["w2c"])[None, ...], square=True)[0]
             o2w = to_34(c2w @ o2c)
             o2ws.append(o2w)
@@ -324,7 +323,7 @@ class NaiveEdgeTracker:
                 cost.append(dist_transform[y, x])
         return np.array(cost).squeeze()
 
-    def track(self, frame):
+    def track(self, frame, **kwargs):
         # Preprocess the frame: grayscale and edge detection
         # gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         # edges_img = cv2.Canny(gray, 50, 150)
