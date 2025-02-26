@@ -18,13 +18,13 @@ def get_ffmpeg_version(verbose=False):
         ).stdout
         parts = ffmpeg_output.split()
         version = parts[parts.index("version") + 1]
+        return version
     except ValueError:
         if verbose:
             print("gsoup warning: could not detect a valid ffmpeg version.")
     except FileNotFoundError:
         if verbose:
             print("gsoup warning: ffmpeg not found.")
-    return version
 
 
 get_ffmpeg_version(True)
