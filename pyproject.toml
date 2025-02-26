@@ -21,7 +21,7 @@ dependencies = [
     "Pillow", 
     "scipy",
     "ffmpeg-python",
-    "opencv-python",
+    "opencv-python-headless",
     "OpenEXR >= 3.3.0",
 ]
 requires-python = ">=3.8"
