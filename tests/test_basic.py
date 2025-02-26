@@ -618,10 +618,10 @@ def test_geometry():
     _, faces_quadcube = gsoup.structures.quad_cube()
     _, faces_tricube = gsoup.structures.cube()
 
-    e, f2e = gsoup.faces2edges_naive(faces_tri)
-    e, f2e = gsoup.faces2edges_naive(faces_tricube)
-    e, f2e = gsoup.faces2edges_naive(faces_quad)
-    e, f2e = gsoup.faces2edges_naive(faces_quadcube)
+    e, f2e, _ = gsoup.faces2edges_naive(faces_tri)
+    e, f2e, _ = gsoup.faces2edges_naive(faces_tricube)
+    e, f2e, _ = gsoup.faces2edges_naive(faces_quad)
+    e, f2e, _ = gsoup.faces2edges_naive(faces_quadcube)
 
 
 def test_rasterizer():
