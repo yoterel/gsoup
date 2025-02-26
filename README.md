@@ -1,7 +1,7 @@
 # gsoup
 
 ## In a nutshell
-A python library implementing various geometry / graphics algorithms, with focus on clarity rather than performance.
+A python library implementing various geometry / graphics / vision / projection-mapping algorithms, with focus on clarity and correctness rather than performance.
 
 ## Long version
 This library is the result of me getting tired of replicating pieces of utility code to do similar work across different projects. I decided to push any fundamental piece of code into this repository. The focus is on clarity and concisness for all implementations, but here and there some immediate/easy performance gains are used.
