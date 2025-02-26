@@ -20,7 +20,6 @@ dependencies = [
     "numpy",
     "Pillow", 
     "scipy",
-    "ffmpeg-python",
     "opencv-python-headless",
     "OpenEXR >= 3.3.0",
 ]
