@@ -114,6 +114,7 @@ from .image import (
     generate_lollipop_pattern,
     generate_gaussian_image,
     image_grid,
+    grid_image,
     resize,
     resize_images_naive,
     adjust_contrast_brightness,

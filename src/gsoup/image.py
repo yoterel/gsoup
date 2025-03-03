@@ -501,6 +501,10 @@ def generate_gray_gradient(
     return img
 
 
+def grid_image(images, rows, cols, pad=0, pad_color=None):
+    return image_grid(images, rows, cols, pad=0, pad_color=None)
+
+
 def image_grid(images, rows, cols, pad=0, pad_color=None):
     """
     :param images: list of images
