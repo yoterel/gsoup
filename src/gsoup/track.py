@@ -1,6 +1,6 @@
 import numpy as np
 from .transforms import compose_rt, invert_rigid
-from .rasterize import project_points, should_cull_tri
+from .rasterize import project_points, should_cull_tri, get_silhouette_edges
 from .core import to_34, to_44, to_hom
 from .geometry_basic import project_point_to_segment
 import cv2
@@ -254,48 +254,88 @@ class HullTracker:
 
 
 class NaiveEdgeTracker:
-    def __init__(self, init_pose, params):
+    def __init__(self, init_o2w, params):
+        # Assumes an initial object pose is given in world coordinates.
+        # Also assumes camera is known.
         self.params = params
-        # define the initial camera pose (using the gt object pose).
-        # o2c = w2c @ o2w
-        o2c = to_44(params["w2c"]) @ to_44(init_pose)
-        # initial_rmat = np.eye(3).astype(np.float32)  # rand_rot_mat[0]
-        initial_rmat = o2c[:3, :3]
-        initial_rvec, _ = cv2.Rodrigues(initial_rmat)
-        # initial_tvec = np.zeros(3).astype(np.float32)  # rand_rot_trans[0]
-        initial_tvec = o2c[:, -1]
-        # Get our 3D model and sample points along its edges
-        self.sampled_points = self.sample_edge_points(n_samples=10)
-        # breakpoint()
-        # Assume an initial pose is given [rvec_x, rvec_y, rvec_z, tvec_x, tvec_y, tvec_z]
+        # define a virtual camera pose (using the gt object pose) which will be optimized
+        # in reality, it is o2c, but for this optimization, it plays the role of w2c
+        init_o2c = self.o2w_to_o2c(self.params["w2c"], init_o2w)
+        self.cur_cam_pose = self.SE3_to_se3(init_o2c)
+        # sample points along edges of model in the init pose
+        self.sampled_points = self.sample_edge_points(init_o2w, n_samples=10)
         self.poses = []
-        self.cur_pose = np.concatenate((initial_rvec[:, 0], initial_tvec), axis=-1)
 
-    def sample_edge_points(self, n_samples=10):
-        """
-        Sample points uniformly along each edge of the model.
-        """
-        points = []
-        cam_pose = invert_rigid(to_44(self.params["w2c"])[None, :])[
-            0, :3, -1
-        ]  # get cam pose
-        for i, (a, b) in enumerate(self.params["e"]):
-            v0, v1, v2, _ = self.params["v"][self.params["f"][self.params["e2f"][i][0]]]
-            cond1 = should_cull_tri(v0, v1, v2, cam_pose)
-            v0, v1, v2, _ = self.params["v"][self.params["f"][self.params["e2f"][i][1]]]
-            cond2 = should_cull_tri(v0, v1, v2, cam_pose)
-            if cond1 and cond2:
-                continue
-            p0, p1 = self.params["v"][a], self.params["v"][b]
-            # Sample n_samples points (including endpoints)
-            for t in np.linspace(0, 1, n_samples):
-                pt = (1 - t) * p0 + t * p1
-                points.append(pt)
-        return np.array(points, dtype=np.float32)
-
-    def track_project_points(self, points, rvec, tvec, K):
+    def se3_to_SE3(self, pose):
+        rvec = pose[0:3]
+        tvec = pose[3:6]
         rmat, _ = cv2.Rodrigues(rvec)
-        w2c = compose_rt(rmat[None, ...], tvec[None, ...])
+        o2c = compose_rt(rmat[None, ...], tvec[None, ...], square=True)[0]
+        return o2c
+
+    def SE3_to_se3(self, o2c):
+        # initial_rmat = np.eye(3).astype(np.float32)  # rand_rot_mat[0]
+        # initial_tvec = np.zeros(3).astype(np.float32)  # rand_rot_trans[0]
+        rmat = o2c[:3, :3]
+        rvec, _ = cv2.Rodrigues(rmat)
+        tvec = o2c[:, -1]
+        return np.concatenate((rvec[:, 0], tvec), axis=-1)
+
+    def o2w_to_o2c(self, w2c, o2w):
+        # o2c = w2c @ o2w
+        o2c = to_44(w2c) @ to_44(o2w)
+        return o2c
+
+    def o2c_to_o2w(self, o2c):
+        # o2w = c2w @ o2c
+        c2w = invert_rigid(to_44(self.params["w2c"])[None, ...], square=True)[0]
+        o2w = to_34(c2w @ o2c)
+        return o2w
+
+    def sample_edge_points(self, o2w, n_samples=10):
+        """
+        Sample points uniformly along silhouette edges of the model.
+        """
+        cur_v = (o2w @ to_hom(self.params["v"]).T).T
+        sil_edge_mask = get_silhouette_edges(
+            cur_v,
+            self.params["f"],
+            self.params["e2f"],
+            self.params["K"],
+            self.params["w2c"],
+        )
+        points = self.params["v"][self.params["e"][sil_edge_mask]].transpose(
+            1, 0, 2
+        )  # (2, n_edges, 3)
+        p0, p1 = points[0], points[1]
+        # now interpolate between every pair of points n_samples
+        t = np.linspace(0, 1, n_samples)[:, None]
+        points = (p0[:, None, :] * (1 - t[None, :, :])) + (
+            p1[:, None, :] * t[None, :, :]
+        )
+        points = points.reshape(-1, 3)
+        return points
+        # cam_pose = invert_rigid(to_44(self.params["w2c"])[None, :])[
+        #     0, :3, -1
+        # ]  # get cam pose
+        # for i, (a, b) in enumerate(self.params["e"]):
+        #     v0, v1, v2, _ = self.params["v"][self.params["f"][self.params["e2f"][i][0]]]
+        #     cond1 = should_cull_tri(v0, v1, v2, cam_pose)
+        #     v0, v1, v2, _ = self.params["v"][self.params["f"][self.params["e2f"][i][1]]]
+        #     cond2 = should_cull_tri(v0, v1, v2, cam_pose)
+        #     if cond1 and cond2:
+        #         continue
+        #     p0, p1 = self.params["v"][a], self.params["v"][b]
+        #     # Sample n_samples points (including endpoints)
+        #     for t in np.linspace(0, 1, n_samples):
+        #         pt = (1 - t) * p0 + t * p1
+        #         points.append(pt)
+        # return np.array(points, dtype=np.float32)
+
+    def track_project_points(self, points, params, K):
+        w2c = to_34(self.se3_to_SE3(params))
+        # rmat, _ = cv2.Rodrigues(rvec)
+        # w2c = compose_rt(rmat[None, ...], tvec[None, ...])
         projected_points = project_points(points, K, w2c)[:, :2]
         return projected_points
 
@@ -305,9 +345,9 @@ class NaiveEdgeTracker:
         to the nearest image edge (via the distance transform).
         params: 6-vector (3 for rotation [Rodrigues], 3 for translation)
         """
-        rvec = params[0:3]
-        tvec = params[3:6]
-        projected_pts = self.track_project_points(sampled_points, rvec, tvec, K)[:, :2]
+        # rvec = params[0:3]
+        # tvec = params[3:6]
+        projected_pts = self.track_project_points(sampled_points, params, K)[:, :2]
         cost = []
         for pt in projected_pts:
             x, y = np.round(pt).astype(np.uint32)
@@ -318,7 +358,7 @@ class NaiveEdgeTracker:
                 or y < 0
                 or y >= dist_transform.shape[0]
             ):
-                cost.append(np.array([100.0]))
+                cost.append(np.array(100.0))
             else:
                 cost.append(dist_transform[y, x])
         return np.array(cost).squeeze()
@@ -336,23 +376,438 @@ class NaiveEdgeTracker:
         for ii in range(self.params["iters_per_frame"]):
             res = least_squares(
                 self.cost_function,
-                self.cur_pose,
+                self.cur_cam_pose,
                 args=(self.sampled_points, dist_transform, self.params["K"]),
                 verbose=0,
             )
-            self.cur_pose = res.x  # update pose for next iteration
-            self.poses.append(self.cur_pose)
+            self.cur_cam_pose = res.x  # update pose for next iteration
+            # and update sampled points
+            o2c = self.se3_to_SE3(self.cur_cam_pose)
+            o2w = self.o2c_to_o2w(o2c)
+            self.sampled_points = self.sample_edge_points(o2w, n_samples=10)
+            # save for display / analysis
+            self.poses.append(self.cur_cam_pose)
 
     def get_results(self):
+        # convert optimzed camera poses to object poses
         object_poses = []
         for i in range(len(self.poses)):
-            rvec = self.poses[i][0:3]
-            rmat, _ = cv2.Rodrigues(rvec)
-            tvec = self.poses[i][3:6]
-            # breakpoint()
-            o2c = compose_rt(rmat[None, ...], tvec[None, ...], square=True)[0]
-            # c2o = gsoup.invert_rigid(o2c) # c2o = w2c @ o2w
-            c2w = invert_rigid(to_44(self.params["w2c"])[None, ...], square=True)[0]
-            o2w = to_34(c2w @ o2c)
+            o2c = self.se3_to_SE3(self.poses[i])
+            o2w = self.o2c_to_o2w(o2c)
             object_poses.append(o2w)
         return np.array(object_poses), None
+
+
+class RobustEdgeTracker:
+
+    def __init__(self, init_pose, params):
+        self.params = params
+        # define the initial camera pose (using the gt object pose).
+        # o2c = w2c @ o2w
+        o2c = to_44(params["w2c"]) @ to_44(init_pose)
+        # initial_rmat = np.eye(3).astype(np.float32)  # rand_rot_mat[0]
+        initial_rmat = o2c[:3, :3]
+        initial_rvec, _ = cv2.Rodrigues(initial_rmat)
+        # initial_tvec = np.zeros(3).astype(np.float32)  # rand_rot_trans[0]
+        initial_tvec = o2c[:, -1]
+        # Get our 3D model and sample points along its edges
+        self.sampled_points = self.sample_edge_points(n_samples=10)
+        self.poses = []
+        self.cur_pose = np.concatenate((initial_rvec[:, 0], initial_tvec), axis=-1)
+
+    def skew(self, v):
+        """Return the skew-symmetric matrix of a 3-vector."""
+        return np.array([[0, -v[2], v[1]], [v[2], 0, -v[0]], [-v[1], v[0], 0]])
+
+    def exp_se3(self, xi):
+        """
+        Exponential map from se(3) (6-d twist) to SE(3) (4x4 homogeneous transform).
+        xi: a 6-element vector (first 3: translation, last 3: rotation)
+        """
+        v = xi[:3]
+        omega = xi[3:]
+        theta = np.linalg.norm(omega)
+        T = np.eye(4)
+        if theta < 1e-8:
+            T[:3, 3] = v
+            return T
+        omega_hat = omega / theta
+        K = skew(omega_hat)
+        R = np.eye(3) + np.sin(theta) * K + (1 - np.cos(theta)) * (K @ K)
+        V = (
+            np.eye(3)
+            + (1 - np.cos(theta)) / theta * K
+            + (theta - np.sin(theta)) / (theta**2) * (K @ K)
+        )
+        t = V @ v
+        T[:3, :3] = R
+        T[:3, 3] = t
+        return T
+
+    def project_point(self, P, X):
+        """
+        Projects a 3D point X (in homogeneous coordinates) using projection matrix P.
+        Returns the 2D image coordinates.
+        """
+        x = P @ X
+        return x[:2] / x[2]
+
+    def compute_cube_edge_samples_and_normals(
+        self, pose, cube_vertices, cube_edges, camera_matrix
+    ):
+        """
+        Given a cube model (vertices and edges) and the current pose,
+        compute sample 3D points (midpoints of each edge) and their
+        corresponding 2D edge normals.
+
+        pose: 4x4 pose matrix.
+        cube_vertices: (8,3) numpy array.
+        cube_edges: list of tuples (i, j) representing edges.
+        camera_matrix: 3x3 intrinsic matrix.
+
+        Returns:
+        points_3d: (n,3) array of sampled 3D points.
+        normals_2d: (n,2) array of corresponding 2D normals.
+        """
+        R = pose[:3, :3]
+        t = pose[:3, 3:4]
+        extrinsic = np.hstack((R, t))
+        P = camera_matrix @ extrinsic
+        points_3d = []
+        normals_2d = []
+        for edge in cube_edges:
+            i, j = edge
+            v1 = cube_vertices[i]
+            v2 = cube_vertices[j]
+            midpoint = (v1 + v2) / 2.0
+            # Project the endpoints into the image:
+            proj1 = project_point(P, np.hstack((v1, 1)))
+            proj2 = project_point(P, np.hstack((v2, 1)))
+            tangent = proj2 - proj1
+            if np.linalg.norm(tangent) < 1e-6:
+                continue
+            # Compute 2D normal: perpendicular to the tangent.
+            normal = np.array([-tangent[1], tangent[0]])
+            normal = normal / np.linalg.norm(normal)
+            points_3d.append(midpoint)
+            normals_2d.append(normal)
+        return np.array(points_3d), np.array(normals_2d)
+
+    # ------------------------------------
+    # Helper function for bilinear interpolation
+    # ------------------------------------
+    def get_pixel(self, image, pt):
+        """
+        Returns the interpolated pixel intensity at a given (x, y) position.
+        Performs bilinear interpolation.
+
+        image: 2D numpy array (grayscale)
+        pt: 2-element array (x, y)
+        """
+        x, y = pt
+        # Calculate floor and ceil coordinates:
+        x0 = int(np.floor(x))
+        x1 = x0 + 1
+        y0 = int(np.floor(y))
+        y1 = y0 + 1
+
+        # Clip to image boundaries:
+        x0 = np.clip(x0, 0, image.shape[1] - 1)
+        x1 = np.clip(x1, 0, image.shape[1] - 1)
+        y0 = np.clip(y0, 0, image.shape[0] - 1)
+        y1 = np.clip(y1, 0, image.shape[0] - 1)
+
+        # Fractional parts:
+        dx = x - x0
+        dy = y - y0
+
+        I00 = image[y0, x0]
+        I01 = image[y0, x1]
+        I10 = image[y1, x0]
+        I11 = image[y1, x1]
+
+        # Bilinear interpolation:
+        I0 = I00 * (1 - dx) + I01 * dx
+        I1 = I10 * (1 - dx) + I11 * dx
+        I = I0 * (1 - dy) + I1 * dy
+        return I
+
+    def search_edge(
+        self,
+        image,
+        initial_pt,
+        normal,
+        method="method1",
+        threshold=50,
+        search_range=range(-5, 6),
+    ):
+        """
+        Performs a 1D search along the edge normal starting at initial_pt.
+
+        For method1, returns the first candidate with intensity difference above threshold.
+        For method2, returns the candidate with the maximum intensity difference.
+
+        image: 2D numpy array (grayscale)
+        initial_pt: starting 2D point (x, y)
+        normal: 2D unit vector (edge normal)
+        threshold: intensity difference threshold (for method1)
+        search_range: iterable of offsets along the normal.
+        """
+        best_pt = np.array(initial_pt)
+        if method == "method1":
+            for j in search_range:
+                candidate_pt = np.array(initial_pt) + j * np.array(normal)
+                if (
+                    abs(get_pixel(image, candidate_pt) - get_pixel(image, initial_pt))
+                    > threshold
+                ):
+                    best_pt = candidate_pt
+                    break
+            return best_pt
+        elif method == "method2":
+            best_score = -np.inf
+            for j in search_range:
+                candidate_pt = np.array(initial_pt) + j * np.array(normal)
+                score = abs(
+                    get_pixel(image, candidate_pt) - get_pixel(image, initial_pt)
+                )
+                if score > best_score:
+                    best_score = score
+                    best_pt = candidate_pt
+            return best_pt
+        else:
+            return best_pt
+
+    # -------------------------------
+    # Method 1: Lie Algebra Based Tracking
+    # -------------------------------
+    def method1_update(
+        self,
+        pose,
+        points_3d,
+        normals_2d,
+        image,
+        camera_matrix,
+        weight_func,
+        search_method="method1",
+    ):
+        """
+        One-shot pose update using a Lie Algebra-based approach.
+
+        pose: current 4x4 pose matrix.
+        points_3d: (n,3) array of 3D model sample points.
+        normals_2d: (n,2) array of corresponding 2D edge normals.
+        image: current grayscale image.
+        camera_matrix: 3x3 intrinsic parameters.
+        weight_func: robust weighting function.
+        search_method: determines the 1D search strategy ("method1" uses threshold search).
+
+        Returns: updated 4x4 pose matrix.
+        """
+        n = points_3d.shape[0]
+        R = pose[:3, :3]
+        t = pose[:3, 3:4]
+        extrinsic = np.hstack((R, t))
+        P = camera_matrix @ extrinsic  # 3x4 projection matrix
+
+        errors = []
+        L_rows = []
+
+        for i in range(n):
+            X = np.hstack((points_3d[i], 1))
+            proj = project_point(P, X)
+            # Use the computed 2D normal to search along:
+            correspondence = search_edge(
+                image,
+                proj,
+                normals_2d[i],
+                method=search_method,
+                threshold=50,
+                search_range=range(-5, 6),
+            )
+            error = np.dot(correspondence - proj, normals_2d[i])
+            errors.append(error)
+
+            # Compute a simplified interaction vector:
+            X_cam = R @ points_3d[i].reshape(3, 1) + t  # 3D point in camera frame
+            Z = X_cam[2, 0]
+            x, y = proj
+            # Using the normal's components directly in the simplified model:
+            cos_theta, sin_theta = normals_2d[i]
+            L_dp = np.array(
+                [
+                    -cos_theta / Z,
+                    -sin_theta / Z,
+                    (x * cos_theta + y * sin_theta) / Z,
+                    x * y * cos_theta + (1 + y**2) * sin_theta,
+                    -(1 + x**2) * cos_theta - x * y * sin_theta,
+                    y * cos_theta - x * sin_theta,
+                ]
+            )
+            L_rows.append(L_dp)
+
+        errors = np.array(errors)
+        L = np.array(L_rows)
+        weights = weight_func(errors)
+        W = np.diag(weights)
+
+        A = L.T @ W @ L
+        b = -L.T @ W @ errors
+        try:
+            alpha = np.linalg.solve(A, b)
+        except np.linalg.LinAlgError:
+            alpha = np.linalg.pinv(A) @ b
+
+        delta_pose = exp_se3(alpha)
+        new_pose = delta_pose @ pose  # left multiplication update
+        return new_pose
+
+    # -------------------------------
+    # Method 2: Virtual Visual Servoing (VVS)
+    # -------------------------------
+    def method2_update(
+        self,
+        pose,
+        points_3d,
+        normals_2d,
+        image,
+        camera_matrix,
+        weight_func,
+        lambda_gain=0.7,
+        num_iterations=5,
+        search_method="method2",
+    ):
+        """
+        Iterative pose update using virtual visual servoing.
+
+        pose: current 4x4 pose matrix.
+        points_3d: (n,3) array of 3D model sample points.
+        normals_2d: (n,2) array of corresponding 2D edge normals.
+        image: current grayscale image.
+        camera_matrix: 3x3 intrinsic parameters.
+        weight_func: robust weighting function.
+        lambda_gain: control gain.
+        num_iterations: iterations per frame.
+        search_method: "method2" uses maximum likelihood search.
+
+        Returns: updated 4x4 pose matrix.
+        """
+        current_pose = pose.copy()
+        for _ in range(num_iterations):
+            n = points_3d.shape[0]
+            R = current_pose[:3, :3]
+            t = current_pose[:3, 3:4]
+            extrinsic = np.hstack((R, t))
+            P = camera_matrix @ extrinsic
+
+            errors = []
+            L_rows = []
+            for i in range(n):
+                X = np.hstack((points_3d[i], 1))
+                proj = project_point(P, X)
+                correspondence = search_edge(
+                    image,
+                    proj,
+                    normals_2d[i],
+                    method=search_method,
+                    threshold=50,
+                    search_range=range(-5, 6),
+                )
+                error = np.dot(correspondence - proj, normals_2d[i])
+                errors.append(error)
+                X_cam = R @ points_3d[i].reshape(3, 1) + t
+                Z = X_cam[2, 0]
+                x, y = proj
+                cos_theta, sin_theta = normals_2d[i]
+                L_dp = np.array(
+                    [
+                        -cos_theta / Z,
+                        -sin_theta / Z,
+                        (x * cos_theta + y * sin_theta) / Z,
+                        x * y * cos_theta + (1 + y**2) * sin_theta,
+                        -(1 + x**2) * cos_theta - x * y * sin_theta,
+                        y * cos_theta - x * sin_theta,
+                    ]
+                )
+                L_rows.append(L_dp)
+
+            errors = np.array(errors)
+            L = np.array(L_rows)
+            weights = weight_func(errors)
+            W = np.diag(weights)
+            A = L.T @ W @ L
+            b = -L.T @ W @ errors
+            try:
+                v = np.linalg.solve(A, b)
+            except np.linalg.LinAlgError:
+                v = np.linalg.pinv(A) @ b
+            v = lambda_gain * v
+            delta_pose = exp_se3(v)
+            current_pose = delta_pose @ current_pose
+        return current_pose
+
+    # -------------------------------
+    # Robust weight function (Tukey-like)
+    # -------------------------------
+    def tukey_weight(self, errors, c=1.0):
+        """
+        Compute robust weights using a Tukey biweight function.
+        """
+        weights = np.ones_like(errors)
+        for i, e in enumerate(errors):
+            if np.abs(e) < c:
+                weights[i] = (1 - (e / c) ** 2) ** 2
+            else:
+                weights[i] = 0
+        return weights
+
+
+# # -------------------------------
+# # Example usage with synthetic data
+# # -------------------------------
+# if __name__ == "__main__":
+#     # Initial pose (identity)
+#     pose = np.eye(4)
+
+#     # Camera intrinsics (example values)
+#     camera_matrix = np.array([[800, 0, 320], [0, 800, 240], [0, 0, 1]])
+
+#     # Create a synthetic grayscale image.
+#     # Here we generate a simple gradient image with an artificial edge.
+#     image = np.tile(np.linspace(0, 255, 640), (480, 1)).astype(np.float32)
+#     image[240:, :] = image[240:, :] + 50
+#     image = np.clip(image, 0, 255)
+
+#     # Compute sample points and 2D normals from the cube model using the current pose.
+#     points_3d, normals_2d = compute_cube_edge_samples_and_normals(
+#         pose, cube_vertices, cube_edges, camera_matrix
+#     )
+
+#     # Run one update using Method 1:
+#     pose1 = method1_update(
+#         pose,
+#         points_3d,
+#         normals_2d,
+#         image,
+#         camera_matrix,
+#         tukey_weight,
+#         search_method="method1",
+#     )
+
+#     # Run iterative update using Method 2:
+#     pose2 = method2_update(
+#         pose,
+#         points_3d,
+#         normals_2d,
+#         image,
+#         camera_matrix,
+#         tukey_weight,
+#         lambda_gain=0.7,
+#         num_iterations=5,
+#         search_method="method2",
+#     )
+
+#     print("Method 1 updated pose:")
+#     print(pose1)
+#     print("\nMethod 2 updated pose:")
+#     print(pose2)

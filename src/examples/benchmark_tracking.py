@@ -88,11 +88,20 @@ def main():
     # create video
     np.random.seed(43)
     video, gt_o2ws = create_video(params["v"], params["f"], params["tmp_frames"])
+    sil_edges = []
     video = video[: params["n_frames"]]
     gt_o2ws = gt_o2ws[: params["n_frames"]]
+    # also get gt silhouette edges for fun
+    for o2w in gt_o2ws:
+        cur_v = (o2w @ gsoup.to_hom(params["v"]).T).T
+        sil_edge = gsoup.get_silhouette_edges(
+            cur_v, params["f"], params["e2f"], params["K"], params["w2c"]
+        )
+        sil_edges.append(sil_edge)
+    sil_edges = np.array(sil_edges)  # (n_frames, E)
     # initialize tracker
-    # tracker = NaiveEdgeTracker(gt_o2ws[0], params)
-    tracker = HullTracker(gt_o2ws[0], params)
+    tracker = NaiveEdgeTracker(gt_o2ws[0], params)
+    # tracker = HullTracker(gt_o2ws[0], params)
     for i in range(len(video)):
         print("frame: {:03d}".format(i))
         frame = video[i, :, :, 0]

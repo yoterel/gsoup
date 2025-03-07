@@ -162,6 +162,7 @@ from .rasterize import (
     render_mesh,
     project_points,
     should_cull_tri,
+    get_silhouette_edges,
 )
 
 from . import structures
