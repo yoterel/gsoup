@@ -15,6 +15,8 @@ def barycentric(p, a, b, c):
     d00, d01, d11 = np.dot(v0, v0), np.dot(v0, v1), np.dot(v1, v1)
     d20, d21 = np.dot(v2, v0), np.dot(v2, v1)
     denom = d00 * d11 - d01 * d01
+    if abs(denom) < 1e-6:
+        return np.nan, np.nan, np.nan
     v = (d11 * d20 - d01 * d21) / denom
     w = (d00 * d21 - d01 * d20) / denom
     u = 1.0 - v - w
@@ -123,6 +125,29 @@ def get_silhouette_edges(V, F, e2f, K, w2c):
         f0_cull = should_cull_tri(v00, v01, v02, camera_pos)
         f1_cull = should_cull_tri(v10, v11, v12, camera_pos)
         if (f0_cull and not f1_cull) or (not f0_cull and f1_cull):
+            mask[i] = True
+    return mask
+
+
+def get_visible_edges(V, F, e2f, K, w2c):
+    """
+    returns a mask (E,) of edges that are visible (front facing) to camera, given a borderless mesh
+    :param V: (n, 3) np.float32 vertices of the mesh
+    :param F: (m, 3) np.int32 faces of the mesh
+    :param e2f: dict mapping edge index to face indices
+    :param K: (3, 3) np.float32 camera intrinsics
+    :param w2c: (3, 4) np.float32 camera extrinsics
+    :return: (E,) np.bool mask of silhouette edges
+    """
+    mask = np.zeros(len(e2f), dtype=np.bool)
+    camera_pos = invert_rigid(to_44(w2c)[None, :])[0, :3, -1]  # get cam pose
+    for i in range(len(e2f)):
+        verts = V[F[e2f[i]]][:, :3, :]
+        v00, v01, v02 = verts[0]
+        v10, v11, v12 = verts[1]
+        f0_cull = should_cull_tri(v00, v01, v02, camera_pos)
+        f1_cull = should_cull_tri(v10, v11, v12, camera_pos)
+        if (not f0_cull) or (not f1_cull):
             mask[i] = True
     return mask
 

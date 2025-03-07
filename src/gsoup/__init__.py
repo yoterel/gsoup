@@ -163,6 +163,7 @@ from .rasterize import (
     project_points,
     should_cull_tri,
     get_silhouette_edges,
+    get_visible_edges,
 )
 
 from . import structures
