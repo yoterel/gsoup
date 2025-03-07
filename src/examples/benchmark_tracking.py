@@ -64,7 +64,7 @@ def main():
     params = {}
     params["dst_path"] = "track_results"
     # general settings for tracker
-    params["iters_per_frame"] = 2
+    params["iters_per_frame"] = 1
     params["seed"] = 43
     # set up camera (example values)
     height, width, K, w2c = get_default_cam()
