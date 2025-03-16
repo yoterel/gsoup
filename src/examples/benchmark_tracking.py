@@ -7,8 +7,8 @@ import cv2
 
 def get_default_cam():
     # Define camera intrinsics.
-    height, width = 512, 512
-    f = 1024
+    height, width = 256, 256
+    f = height * 2
     K = np.array([[f, 0, width / 2], [0, f, height / 2], [0, 0, 1]])
     K = K.astype(np.float32)
 
@@ -29,6 +29,10 @@ def create_video(V, F, n_frames, wireframe=False):
     rand_qvec = gsoup.random_qvec(2).astype(np.float32)
     rand_trans = np.random.uniform(-0.1, 0.1, size=6).astype(np.float32).reshape(2, 3)
     t = np.linspace(0, 1, n_frames, dtype=np.float32)
+    if wireframe:
+        colors = np.array([255, 255, 255])
+    else:
+        colors = np.random.randint(0, 256, size=(len(F), 3))
     for i in range(n_frames):
         print("frame: {:04d}".format(i))
         cur_qvec = gsoup.qslerp(rand_qvec[0], rand_qvec[1], t[i])
@@ -41,7 +45,7 @@ def create_video(V, F, n_frames, wireframe=False):
             F,
             K,
             w2c,
-            np.array([255, 255, 255]),
+            colors,
             wireframe=wireframe,
             wireframe_occlude=True,
             wh=(width, height),
@@ -59,11 +63,24 @@ def draw_correspondences(image, corr):
     return image
 
 
+def render_video(video, params, name):
+    captions = ["frame: {:03d}".format(i) for i in range(len(video))]
+    animation = gsoup.draw_text_on_image(video, captions, size=16)
+    dst = Path(params["dst_path"])
+    dst.mkdir(parents=True, exist_ok=True)
+    gsoup.save_animation(
+        animation,
+        Path(dst, "{}.gif".format(name)),
+        params["ms_per_frame"],
+    )
+
+
 def main():
     print("building scene...")
     params = {}
-    params["dst_path"] = "track_results"
+    params["dst_path"] = "track_results_spot"
     # general settings for tracker
+    params["sample_per_edge"] = 1
     params["iters_per_frame"] = 1
     params["seed"] = 43
     # set up camera (example values)
@@ -77,21 +94,21 @@ def main():
         (5, 1), dtype=np.float32
     )  # assuming no lens distortion
     # set up geometry of scene
-    vertices, faces = gsoup.structures.quad_cube()  # .icosehedron()
+    vertices, faces = gsoup.load_mesh("tests/tests_resource/gt_mesh.obj")
+    # vertices, faces = gsoup.structures.quad_cube()  # quad_cube(), icosehedron()
     # vertices[:, 2] *= 2
-    vertices = vertices / 15
+    vertices = gsoup.normalize_vertices(vertices) / 10
     edges, _, e2f = gsoup.faces2edges_naive(faces)
     params["v"] = vertices
     params["e"] = edges
     params["e2f"] = e2f
     params["f"] = faces
     # video settings
-    params["tmp_frames"] = (
-        300  # n frames used to simulate motion, the more, the "easier" the tracking is
-    )
+    params["tmp_frames"] = 500  # n frames used to simulate motion
     params["n_frames"] = 100  # actual number of frames used for tracking
-    params["force_recreate_video"] = False
+    params["force_recreate_video"] = True
     # create video
+    Path(params["dst_path"]).mkdir(exist_ok=True, parents=True)
     video_path = Path(params["dst_path"], "video.npy")
     video_wireframe_path = Path(params["dst_path"], "video_wireframe.npy")
     gt_o2ws_path = Path(params["dst_path"], "gt_o2ws.npy")
@@ -125,14 +142,16 @@ def main():
         np.save(video_path, video)
         np.save(video_wireframe_path, video_wireframe)
         np.save(gt_o2ws_path, gt_o2ws)
+        render_video(video, params, "orig_video")
+        render_video(video_wireframe, params, "orig_video_wireframe")
     sil_edges = []
-    video = video[: params["n_frames"]]
-    video_wireframe = video_wireframe[: params["n_frames"]]
-    gt_o2ws = gt_o2ws[: params["n_frames"]]
+    video = video[: params["n_frames"] + 1]
+    video_wireframe = video_wireframe[: params["n_frames"] + 1]
+    gt_o2ws = gt_o2ws[: params["n_frames"] + 1]
     # initialize tracker
     print("init tracker...")
-    # tracker = NaiveEdgeTracker(gt_o2ws[0], params)
-    tracker = HullTracker(gt_o2ws[0], params)
+    # tracker = NaiveEdgeTracker(gt_o2ws[0], params, "NaiveEdgeTracker")
+    tracker = HullTracker(gt_o2ws[0], params, "HullTracker")
     print("starting tracking...")
     for i in range(len(video)):
         print("frame: {:04d}".format(i))
@@ -142,19 +161,37 @@ def main():
     print("finished tracking...")
     # get results
     object_poses, correspondences = tracker.get_results()
-    # render results
     print("rendering results...")
+    # render error video
+    render_results(
+        object_poses[1:],
+        None,
+        tracker.get_name(),
+        "track_error",
+        video_wireframe,
+        params,
+    )
+    # render debug video
+    render_results(
+        object_poses[:-1],
+        correspondences,
+        tracker.get_name(),
+        "track_debug",
+        video_wireframe,
+        params,
+    )
+
+
+def render_results(object_poses, correspondences, tracker_name, name, gt_video, params):
     animation = []
-    for i in range(len(object_poses) - 1):
+    for i in range(len(object_poses)):
         print("frame: {:04d}".format(i))
         iter_index = i % params["iters_per_frame"]
         frame_index = i // params["iters_per_frame"]
         # print("frame: {:03d}, iter: {:03d}".format(frame_index, iter_index))
         o2w = object_poses[i]
         # Draw the model: project each vertex and then draw each edge
-        bg = video_wireframe[frame_index] * np.array([0, 1, 0])[None, None, :].astype(
-            np.uint8
-        )
+        bg = gt_video[frame_index] * np.array([0, 1, 0])[None, None, :].astype(np.uint8)
         image = gsoup.render_mesh(
             (o2w @ gsoup.to_hom(params["v"]).T).T,
             params["f"],
@@ -167,7 +204,8 @@ def main():
             wh=(params["width"], params["height"]),
         )
         if correspondences is not None:
-            draw_correspondences(image, correspondences[i])
+            if i < len(correspondences):
+                draw_correspondences(image, correspondences[i])
         animation.append(image)
     # save resulting video
     captions = [
@@ -179,7 +217,11 @@ def main():
     animation = gsoup.draw_text_on_image(np.array(animation), captions, size=16)
     dst = Path(params["dst_path"])
     dst.mkdir(parents=True, exist_ok=True)
-    gsoup.save_animation(animation, Path(dst, "result.gif"), params["ms_per_frame"])
+    gsoup.save_animation(
+        animation,
+        Path(dst, "{}_{}.gif".format(tracker_name, name)),
+        params["ms_per_frame"],
+    )
 
 
 if __name__ == "__main__":

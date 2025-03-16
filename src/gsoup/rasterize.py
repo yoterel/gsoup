@@ -7,29 +7,34 @@ from .geometry_basic import triangulate_quad_mesh
 def barycentric(p, a, b, c):
     """
     get 2D barycentric coordinates of 2D point p for triangle defined by endpoints a,b,c
-    :param p: (2,) np.float32 coordinates of point in same coordinate system as a,b,c
+    :param p: (..., 2) np.float32 coordinates of point in same coordinate system as a,b,c
     :param a,b,c: (3,) np.float32 end points of triangle
-    :return: barycentric coordinates u,v,w of p
+    :return: barycentric coordinates (..., 3) u,v,w of p
     """
     v0, v1, v2 = b - a, c - a, p - a
     d00, d01, d11 = np.dot(v0, v0), np.dot(v0, v1), np.dot(v1, v1)
     d20, d21 = np.dot(v2, v0), np.dot(v2, v1)
     denom = d00 * d11 - d01 * d01
     if abs(denom) < 1e-6:
-        return np.nan, np.nan, np.nan
+        tmp = np.empty((*p.shape[:-1], 3))
+        tmp.fill(np.nan)
+        return tmp
     v = (d11 * d20 - d01 * d21) / denom
     w = (d00 * d21 - d01 * d20) / denom
     u = 1.0 - v - w
-    return u, v, w
+    return np.concatenate((u[..., None], v[..., None], w[..., None]), axis=-1)
 
 
 def is_inside_triangle(p, a, b, c):
     """
-    tests if p is inside triangle defined by endpoints a,b,c
-    :return: True if p is inside, and the barycentric coordinates of p
+    tests if p is inside triangle defined by vertices a,b,c
+    :param p: (..., 2) points xy to test for
+    :param a,b,c: (2,) triangle vertices
+    :return: mask of size (...,) where true if p is inside, and the barycentric coordinates of p (..., 3)
     """
-    u, v, w = barycentric(p, a, b, c)
-    return u >= 0 and v >= 0 and w >= 0, u, v, w
+    uvw = barycentric(p, a, b, c)
+    # u >= 0 and v >= 0 and w >= 0
+    return (uvw >= 0).all(axis=-1), uvw
 
 
 def project_points(points, K, w2c):
@@ -42,17 +47,21 @@ def project_points(points, K, w2c):
     points_h = to_hom(points)
     projected = K @ w2c @ points_h.T  # Apply camera projection
     projected = projected.T
-    projected /= projected[:, 2:]  # Normalize by depth
+    projected[:, :2] /= projected[:, 2:]  # Normalize by depth
     return projected  # second dim is (x, y, depth)
 
 
-def should_cull_tri(v0, v1, v2, camera_pos):
+def should_cull_tri(v_in_f, camera_pos):
     """
-    a slightly naive cull procedure (should use camera view direction)
+    a slightly naive triangle cull procedure (should use camera view direction)
+    :param v_in_f: (n, 3, 3) coordinates of the vertices of the triangle
+    :param camera_pos: (1, 3) camera position
+    :return: (n,) mask of triangles to cull
     """
-    normal = np.cross(v1 - v0, v2 - v0)
-    view_dir = v0 - camera_pos
-    return np.dot(normal, view_dir) >= 0  # Cull back-facing
+    normal = np.cross(v_in_f[:, 1] - v_in_f[:, 0], v_in_f[:, 2] - v_in_f[:, 0], axis=-1)
+    view_dir = v_in_f[:, 0] - camera_pos
+    dot_prod = normal[:, None, :] @ view_dir[:, :, None]
+    return dot_prod.squeeze() >= 0  # Cull back-facing
 
 
 def draw_line(image, p0, p1, color):
@@ -93,17 +102,32 @@ def draw_triangle(image, depth_buffer, a, b, c, color):
     height, width = image.shape[:2]
     min_x, max_x = max(0, min(a[0], b[0], c[0])), min(width - 1, max(a[0], b[0], c[0]))
     min_y, max_y = max(0, min(a[1], b[1], c[1])), min(height - 1, max(a[1], b[1], c[1]))
-    for y in range(int(min_y), int(max_y + 1)):
-        for x in range(int(min_x), int(max_x + 1)):
-            if 0 <= x < width and 0 <= y < height:
-                inside, u, v, w = is_inside_triangle(
-                    np.array([x, y]), a[:2], b[:2], c[:2]
-                )
-                if inside:
-                    depth = u * a[2] + v * b[2] + w * c[2]
-                    if depth < depth_buffer[y, x]:
-                        depth_buffer[y, x] = depth
-                        image[y, x] = color
+    ###
+    xx, yy = np.meshgrid(
+        np.arange(int(min_x), int(max_x + 1)),
+        np.arange(int(min_y), int(max_y + 1)),
+        indexing="ij",
+    )
+    grid = np.concatenate((xx[..., None], yy[..., None]), axis=-1)
+    clip = (xx >= 0) & (xx < width) & (yy >= 0) & (yy < height)
+    inside, uvw = is_inside_triangle(grid, a[:2], b[:2], c[:2])
+    depth = uvw[..., 0] * a[2] + uvw[..., 1] * b[2] + uvw[..., 2] * c[2]
+    depth_mask = depth < depth_buffer[grid[..., 1], grid[..., 0]]
+    draw_mask = clip & inside & depth_mask
+    depth_buffer[grid[..., 1][draw_mask], grid[..., 0][draw_mask]] = depth[draw_mask]
+    image[grid[..., 1][draw_mask], grid[..., 0][draw_mask]] = color
+    ### old serial implementation
+    # for y in range(int(min_y), int(max_y + 1)):
+    #     for x in range(int(min_x), int(max_x + 1)):
+    #         if 0 <= x < width and 0 <= y < height:
+    #             inside, u, v, w = is_inside_triangle(
+    #                 np.array([x, y]), a[:2], b[:2], c[:2]
+    #             )
+    #             if inside:
+    #                 depth = u * a[2] + v * b[2] + w * c[2]
+    #                 if depth < depth_buffer[y, x]:
+    #                     depth_buffer[y, x] = depth
+    #                     image[y, x] = color
 
 
 def get_silhouette_edges(V, F, e2f, K, w2c):
@@ -116,16 +140,24 @@ def get_silhouette_edges(V, F, e2f, K, w2c):
     :param w2c: (3, 4) np.float32 camera extrinsics
     :return: (E,) np.bool mask of silhouette edges
     """
-    mask = np.zeros(len(e2f), dtype=np.bool)
-    camera_pos = invert_rigid(to_44(w2c)[None, :])[0, :3, -1]  # get cam pose
-    for i in range(len(e2f)):
-        verts = V[F[e2f[i]]][:, :3, :]
-        v00, v01, v02 = verts[0]
-        v10, v11, v12 = verts[1]
-        f0_cull = should_cull_tri(v00, v01, v02, camera_pos)
-        f1_cull = should_cull_tri(v10, v11, v12, camera_pos)
-        if (f0_cull and not f1_cull) or (not f0_cull and f1_cull):
-            mask[i] = True
+    camera_pos = invert_rigid(to_44(w2c)[None, :])[:, :3, -1]  # get cam pose (1, 3)
+    ##
+    verts = V[F[e2f]][
+        :, :, :3, :
+    ]  # (e, incident_faces (2), verts (3), coordinates (3))
+    cull_mask = should_cull_tri(verts.reshape(-1, 3, 3), camera_pos)
+    cull_mask = cull_mask.reshape(len(e2f), 2)
+    mask = np.logical_xor(cull_mask[:, 0], cull_mask[:, 1])
+    # ## old serial implementation
+    # mask = np.zeros(len(e2f), dtype=np.bool)
+    # for i in range(len(e2f)):
+    #     verts = V[F[e2f[i]]][:, :3, :]
+    #     v00, v01, v02 = verts[0]
+    #     v10, v11, v12 = verts[1]
+    #     f0_cull = should_cull_tri(v00, v01, v02, camera_pos)
+    #     f1_cull = should_cull_tri(v10, v11, v12, camera_pos)
+    #     if (f0_cull and not f1_cull) or (not f0_cull and f1_cull):
+    #         mask[i] = True
     return mask
 
 
@@ -139,16 +171,23 @@ def get_visible_edges(V, F, e2f, K, w2c):
     :param w2c: (3, 4) np.float32 camera extrinsics
     :return: (E,) np.bool mask of silhouette edges
     """
-    mask = np.zeros(len(e2f), dtype=np.bool)
     camera_pos = invert_rigid(to_44(w2c)[None, :])[0, :3, -1]  # get cam pose
-    for i in range(len(e2f)):
-        verts = V[F[e2f[i]]][:, :3, :]
-        v00, v01, v02 = verts[0]
-        v10, v11, v12 = verts[1]
-        f0_cull = should_cull_tri(v00, v01, v02, camera_pos)
-        f1_cull = should_cull_tri(v10, v11, v12, camera_pos)
-        if (not f0_cull) or (not f1_cull):
-            mask[i] = True
+    verts = V[F[e2f]][
+        :, :, :3, :
+    ]  # (e, incident_faces (2), verts (3), coordinates (3))
+    cull_mask = should_cull_tri(verts.reshape(-1, 3, 3), camera_pos)
+    cull_mask = cull_mask.reshape(len(e2f), 2)
+    mask = cull_mask.any(axis=-1)
+    # old serial implementation
+    # mask = np.zeros(len(e2f), dtype=np.bool)
+    # for i in range(len(e2f)):
+    #     verts = V[F[e2f[i]]][:, :3, :]
+    #     v00, v01, v02 = verts[0]
+    #     v10, v11, v12 = verts[1]
+    #     f0_cull = should_cull_tri(v00, v01, v02, camera_pos)
+    #     f1_cull = should_cull_tri(v10, v11, v12, camera_pos)
+    #     if (not f0_cull) or (not f1_cull):
+    #         mask[i] = True
     return mask
 
 
@@ -166,18 +205,20 @@ def render_wireframe(image, V, F, K, w2c, color, wireframe_occlude):
     """
     # Project the vertices to screen space.
     projected_vertices = project_points(V, K, w2c)[:, :2]
-    for f in F:
-        if wireframe_occlude:
-            v0, v1, v2 = V[f[0]], V[f[1]], V[f[2]]
-            camera_pos = invert_rigid(to_44(w2c)[None, :])[0, :3, -1]  # get cam pose
-            if should_cull_tri(v0, v1, v2, camera_pos):
-                continue
+    camera_pos = invert_rigid(to_44(w2c)[None, :])[0, :3, -1]  # get cam pose
+    if wireframe_occlude:
+        mask = should_cull_tri(V[F], camera_pos[None, ...])
+    else:
+        mask = np.ones(len(F), dtype=bool)
+    for i, f in enumerate(F):
+        if mask[i]:
+            continue
         # Draw an edge from each vertex to the next, wrapping around.
         n = len(f)
-        for i in range(n):
-            p0 = projected_vertices[f[i]]
-            p1 = projected_vertices[f[(i + 1) % n]]
-            draw_line(image, p0, p1, color[i])
+        for ii in range(n):
+            p0 = projected_vertices[f[ii]]
+            p1 = projected_vertices[f[(ii + 1) % n]]
+            draw_line(image, p0, p1, color[ii])
 
 
 def render_mesh(
@@ -231,11 +272,11 @@ def render_mesh(
         if F.shape[-1] == 4:  # triangulate for rendering
             F, color = triangulate_quad_mesh(F, color)
         if color.ndim == 1:  # handle single color
-            color = np.tile(color[None, :], len(F))
+            color = np.tile(color[None, :], (len(F), 1))
+        camera_pos = invert_rigid(to_44(w2c)[None, :])[0, :3, -1]  # get cam pose
+        mask = should_cull_tri(V[F], camera_pos[None, ...])
         for i, f in enumerate(F):
-            v0, v1, v2 = V[f[0]], V[f[1]], V[f[2]]
-            camera_pos = invert_rigid(to_44(w2c)[None, :])[0, :3, -1]  # get cam pose
-            if not should_cull_tri(v0, v1, v2, camera_pos):
+            if not mask[i]:
                 draw_triangle(
                     image,
                     depth_buffer,

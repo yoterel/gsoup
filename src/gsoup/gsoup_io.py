@@ -724,18 +724,18 @@ def parse_obj(path, verbose=True):
                         )
                     )
             elif split[0] == "f":
-                if len(split[1:]) != 3:
-                    raise ValueError("only triangular faces are supported")
+                if (len(split[1:]) != 3) and (len(split[1:]) != 4):
+                    raise ValueError("only triangular and quad faces are supported")
                 else:
                     face = np.array([x.split("/") for x in split[1:]])
-                    if face.shape == (3, 1):  # v
+                    if face.shape[-1] == 1:  # v
                         int_face = face.squeeze().astype(np.int32) - 1
                         face_list.append(int_face)
-                    elif face.shape == (3, 2):  # v/vt
+                    elif face.shape[-1] == 2:  # v/vt
                         int_face = face.astype(np.int32) - 1
                         face_list.append(int_face[:, 0])
                         face_texture_list.append(int_face[:, 1])
-                    elif face.shape == (3, 3):  # v/vt/vn or v/vn
+                    elif face.shape[-1] == 3:  # v/vt/vn or v/vn
                         if np.all([len(x) == 0 for x in face[:, 1]]):  # v//vn
                             face = face[:, 0::2]
                             int_face = face.astype(np.int32) - 1
@@ -767,11 +767,13 @@ def parse_obj(path, verbose=True):
                 if 2 <= len(split[1:]) <= 3:  # u [v, w]
                     float_vertex_tex = np.array([np.float64(x) for x in split[1:]])
                     if (float_vertex_tex < 0).any():
-                        raise ValueError(
-                            "negative texture coordinates are not supported"
-                        )
+                        pass
+                        # print("warning: some texture coordinates are smaller than 0")
+                        # raise ValueError("negative texture coordinates are not supported")
                     if (float_vertex_tex > 1).any():
-                        raise ValueError("texture coordinates must be between 0 and 1")
+                        pass
+                        # print("warning: some texture coordinates are larger than 1")
+                        # raise ValueError("texture coordinates must be between 0 and 1")
                     vertex_texture_list.append(float_vertex_tex)
                 else:
                     raise ValueError(

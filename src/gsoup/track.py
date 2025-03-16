@@ -132,13 +132,23 @@ class KalmanFilter(object):
 
 
 class EdgeTracker:
-    def __init__(self, params):
+    def __init__(self, params, name):
         self.params = params
+        self.name = name
+
+    def get_name(self):
+        return self.name
 
     def track(self, frame, **kwargs):
         pass
 
     def get_results(self):
+        # should return a tuple o2w, correspondences
+        # n = number of frames
+        # o2w is a (n, 3, 4) object to world transforms as computed by the tracker per frame
+        # correspondences is a list of (m, 2, 2) pixel-to-pixel correspondences where m is not necessarily the same for each entry
+        # length of list must be n-1 (the last frame doesn't need any correspondences)
+        # if no such info exists, should return None
         pass
 
     def se3_to_SE3(self, pose):
@@ -153,7 +163,7 @@ class EdgeTracker:
         # initial_tvec = np.zeros(3).astype(np.float32)  # rand_rot_trans[0]
         rmat = o2c[:3, :3]
         rvec, _ = cv2.Rodrigues(rmat)
-        tvec = o2c[:, -1]
+        tvec = o2c[:3, -1]
         return np.concatenate((rvec[:, 0], tvec), axis=-1)
 
     def o2w_to_o2c(self, w2c, o2w):
@@ -202,8 +212,8 @@ class EdgeTracker:
 
 
 class HullTracker(EdgeTracker):
-    def __init__(self, init_o2w, params):
-        super().__init__(params)
+    def __init__(self, init_o2w, params, name):
+        super().__init__(params, name)
         self.dist_coeff = np.zeros((5, 1)).astype(np.float32)
 
         # Assumes an initial object pose is given in world coordinates.
@@ -213,7 +223,7 @@ class HullTracker(EdgeTracker):
         init_o2c = self.o2w_to_o2c(self.params["w2c"], init_o2w)
         self.cur_cam_pose = self.SE3_to_se3(init_o2c)
         # sample points along edges of model in the init pose
-        self.sampled_points = self.sample_edge_points(init_o2w, n_samples=10)
+        # self.sampled_points = self.sample_edge_points(init_o2w, n_samples=10)
         self.poses = []
         self.corres = []
 
@@ -223,12 +233,9 @@ class HullTracker(EdgeTracker):
         return hull[:, 0, :]
 
     def get_points_on_hull(self, frame):
-        # todo
         contours, _ = cv2.findContours(
             frame, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
         )
-        # x = cv2.findContours(frame)
-        # hull = cv2.convexHull(x)
         return contours[0][:, 0, :]
 
     def extract_silhouette(self, projected_points):
@@ -274,15 +281,9 @@ class HullTracker(EdgeTracker):
             # convert current o2c to o2w
             o2c = self.se3_to_SE3(self.cur_cam_pose)
             o2w = self.o2c_to_o2w(o2c)
-            # apply o2w to object
-            # V_test = (o2w @ to_hom(self.params["v"]).T).T
-            # projected_points = project_points(
-            #     V_test, self.params["K"], self.params["w2c"]
-            # )[:, :2]
-            # proj_silhouette, silhouette_indices = self.extract_silhouette(
-            #     projected_points
-            # )
-            sample_edge_points = self.sample_edge_points(o2w, n_samples=10)
+            sample_edge_points = self.sample_edge_points(
+                o2w, n_samples=self.params["sample_per_edge"]
+            )
             projected_edge_points = project_points(
                 sample_edge_points,
                 self.params["K"],
@@ -292,12 +293,10 @@ class HullTracker(EdgeTracker):
             for p in projected_edge_points:
                 q, tangent = self.find_closest_point(p, observed_silhouette)
                 correspondences.append((p, (q, tangent)))
-            self.poses.append(self.cur_cam_pose)
-            self.corres.append([(c[0], c[1][0]) for c in correspondences])
+            self.poses.append(self.cur_cam_pose.copy())
+            self.corres.append(np.array([(c[0], c[1][0]) for c in correspondences]))
             target_points = np.array([c[1][0] for c in correspondences])
-            mean_error = np.mean(
-                np.linalg.norm(projected_edge_points - target_points, axis=1)
-            )
+            # mean_error = np.mean(np.linalg.norm(projected_edge_points - target_points, axis=1))
             # print(mean_error)
             success, rvec, tvec = cv2.solvePnP(
                 sample_edge_points,
@@ -309,22 +308,19 @@ class HullTracker(EdgeTracker):
                 useExtrinsicGuess=True,
                 flags=cv2.SOLVEPNP_ITERATIVE,
             )  # finds best fitting w2c
-            # breakpoint()
             if not success:
                 raise RuntimeError("solvePnP failed during refinement.")
-            ###
-            self.cur_cam_pose = np.concatenate(
-                (rvec, tvec), axis=-1
-            )  # update pose for next iteration
+            # update pose for next iteration
+            self.cur_cam_pose = np.concatenate((rvec, tvec), axis=-1)
             # and update sampled points
-            o2c = self.se3_to_SE3(self.cur_cam_pose)
-            o2w = self.o2c_to_o2w(o2c)
-            self.sampled_points = self.sample_edge_points(o2w, n_samples=10)
+            # o2c = self.se3_to_SE3(self.cur_cam_pose)
+            # o2w = self.o2c_to_o2w(o2c)
+            # self.sampled_points = self.sample_edge_points(o2w, n_samples=10)
             ###
 
     def get_results(self):
         # push last pose into poses
-        self.poses.append(self.cur_cam_pose)
+        self.poses.append(self.cur_cam_pose.copy())
         # convert optimzed camera poses to object poses
         object_poses = []
         for i in range(len(self.poses)):
@@ -335,8 +331,8 @@ class HullTracker(EdgeTracker):
 
 
 class NaiveEdgeTracker(EdgeTracker):
-    def __init__(self, init_o2w, params):
-        super().__init__(params)
+    def __init__(self, init_o2w, params, name):
+        super().__init__(params, name)
         # Assumes an initial object pose is given in world coordinates.
         # Also assumes camera is known.
         # define a virtual camera pose (using the gt object pose) which will be optimized
@@ -370,7 +366,7 @@ class NaiveEdgeTracker(EdgeTracker):
                 or y >= dist_transform.shape[0]
             ):
                 corres.append((pt, labels[y, x]))
-        return corres
+        return np.array(corres)
 
     def cost_function(self, params, sampled_points, dist_transform, labels, K):
         """
