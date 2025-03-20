@@ -10,6 +10,7 @@ from .core import to_34, to_44, to_hom, swap_columns
 from .geometry_basic import project_point_to_segment
 import cv2
 from scipy.optimize import least_squares
+import time
 
 
 class KalmanFilter(object):
@@ -132,6 +133,10 @@ class KalmanFilter(object):
 
 
 class EdgeTracker:
+    """
+    a base class for model-based edge tracking using a 3D model and a camera.
+    """
+
     def __init__(self, params, name):
         self.params = params
         self.name = name
@@ -140,10 +145,11 @@ class EdgeTracker:
         return self.name
 
     def track(self, frame, **kwargs):
+        # should track the object in the frame by estimating the object pose
         pass
 
     def get_results(self):
-        # should return a tuple o2w, correspondences
+        # should return a tuple (o2w, correspondences)
         # n = number of frames
         # o2w is a (n, 3, 4) object to world transforms as computed by the tracker per frame
         # correspondences is a list of (m, 2, 2) pixel-to-pixel correspondences where m is not necessarily the same for each entry
@@ -152,6 +158,9 @@ class EdgeTracker:
         pass
 
     def se3_to_SE3(self, pose):
+        """
+        Convert 6-vector to 4x4 pose matrix.
+        """
         rvec = pose[0:3]
         tvec = pose[3:6]
         rmat, _ = cv2.Rodrigues(rvec)
@@ -159,6 +168,9 @@ class EdgeTracker:
         return o2c
 
     def SE3_to_se3(self, o2c):
+        """
+        Convert 4x4 pose matrix to 6-vector.
+        """
         # initial_rmat = np.eye(3).astype(np.float32)  # rand_rot_mat[0]
         # initial_tvec = np.zeros(3).astype(np.float32)  # rand_rot_trans[0]
         rmat = o2c[:3, :3]
@@ -167,11 +179,17 @@ class EdgeTracker:
         return np.concatenate((rvec[:, 0], tvec), axis=-1)
 
     def o2w_to_o2c(self, w2c, o2w):
+        """
+        Convert object-to-world pose to object-to-camera pose.
+        """
         # o2c = w2c @ o2w
         o2c = to_44(w2c) @ to_44(o2w)
         return o2c
 
     def o2c_to_o2w(self, o2c):
+        """
+        Convert object-to-camera pose to object-to-world pose.
+        """
         # o2w = c2w @ o2c
         c2w = invert_rigid(to_44(self.params["w2c"])[None, ...], square=True)[0]
         o2w = to_34(c2w @ o2c)
@@ -180,6 +198,9 @@ class EdgeTracker:
     def sample_edge_points(self, o2w, n_samples=10, silhouette=True):
         """
         Sample points uniformly along edges of the model.
+        o2w: 4x4 object-to-world pose matrix.
+        n_samples: number of points to sample along each edge.
+        silhouette: if True, sample points on silhouette edges. Otherwise, sample visible edges.
         """
         cur_v = (o2w @ to_hom(self.params["v"]).T).T
         if silhouette:
@@ -211,11 +232,10 @@ class EdgeTracker:
         return points
 
 
-class HullTracker(EdgeTracker):
+class NaiveEdgeTracker1(EdgeTracker):
     def __init__(self, init_o2w, params, name):
         super().__init__(params, name)
         self.dist_coeff = np.zeros((5, 1)).astype(np.float32)
-
         # Assumes an initial object pose is given in world coordinates.
         # Also assumes camera is known.
         # define a virtual camera pose (using the gt object pose) which will be optimized
@@ -227,29 +247,12 @@ class HullTracker(EdgeTracker):
         self.poses = []
         self.corres = []
 
-    def get_points_on_hull_ideal(self, V):
-        projected = project_points(V, self.params["K"], self.params["w2c"])[:, :2]
-        hull = cv2.convexHull(projected)
-        return hull[:, 0, :]
-
-    def get_points_on_hull(self, frame):
+    def get_silhouette(self, frame):
         contours, _ = cv2.findContours(
             frame, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
         )
-        return contours[0][:, 0, :]
-
-    def extract_silhouette(self, projected_points):
-        """
-        For simplicity, we use the convex hull as the silhouette.
-        Returns:
-        silhouette: (M,2) array of 2D points on the hull.
-        hull_indices: indices into the projected_points array.
-        """
-        pts = np.array(projected_points, dtype=np.float32).reshape(-1, 1, 2)
-        hull_indices = cv2.convexHull(pts, returnPoints=False)
-        hull_indices = hull_indices.flatten()
-        silhouette = pts[hull_indices].reshape(-1, 2)
-        return silhouette, hull_indices
+        c = max(contours, key=cv2.contourArea)
+        return c[:, 0, :].astype(np.float32)
 
     def find_closest_point(self, p, observed_silhouette):
         """
@@ -258,65 +261,101 @@ class HullTracker(EdgeTracker):
         best_point: the closest point on an edge,
         best_tangent: the unit tangent of that edge.
         """
-        best_distance = float("inf")
-        best_point = None
         best_tangent = None
-        N = observed_silhouette.shape[0]
-        for i in range(N):
-            a = observed_silhouette[i]
-            b = observed_silhouette[(i + 1) % N]
-            candidate = project_point_to_segment(p, a, b)
-            d = np.linalg.norm(p - candidate)
-            if d < best_distance:
-                best_distance = d
-                best_point = candidate
-                tangent = b - a
-                norm_t = np.linalg.norm(tangent)
-                best_tangent = tangent / norm_t if norm_t > 0 else np.array([0, 0])
+        a = observed_silhouette
+        b = np.roll(observed_silhouette, -1, axis=0)
+        candidate = project_point_to_segment(p, a, b)
+        d = np.linalg.norm(p - candidate, axis=-1)
+        best_point = candidate[d.argmin()]
+        # old serial implementation
+        # best_point = None
+        # best_distance = float("inf")
+        # N = observed_silhouette.shape[0]
+        # for i in range(N):
+        #     a = observed_silhouette[i]
+        #     b = observed_silhouette[(i + 1) % N]
+        #     candidate = project_point_to_segment(p, a[None, :], b[None, :])
+        #     d = np.linalg.norm(p - candidate)
+        #     if d < best_distance:
+        #         best_distance = d
+        #         best_point = candidate
+        #         # tangent = b - a
+        #         # norm_t = np.linalg.norm(tangent)
+        #         # best_tangent = tangent / norm_t if norm_t > 0 else np.array([0, 0])
         return best_point, best_tangent
 
-    def track(self, frame, **kwargs):
-        observed_silhouette = self.get_points_on_hull(frame)
+    def track(self, frame, i, **kwargs):
+        # time1 = time.time()
+        observed_silhouette = self.get_silhouette(frame)
+        # print("contour:", time.time() - time1)
         for i in range(self.params["iters_per_frame"]):
+            # save current pose for display / analysis
+            self.poses.append(self.cur_cam_pose.copy())
+            # time1 = time.time()
             # convert current o2c to o2w
             o2c = self.se3_to_SE3(self.cur_cam_pose)
             o2w = self.o2c_to_o2w(o2c)
+            # print("se32SE3:", time.time() - time1)
+            # time1 = time.time()
             sample_edge_points = self.sample_edge_points(
                 o2w, n_samples=self.params["sample_per_edge"]
             )
+            # print("sample:", time.time() - time1)
+            # time1 = time.time()
             projected_edge_points = project_points(
                 sample_edge_points,
                 self.params["K"],
                 to_34(o2c),
             )[:, :2]
+            # print("project:", time.time() - time1)
+            # time1 = time.time()
+            mask = np.zeros((len(sample_edge_points)), dtype=bool)
             correspondences = []
-            for p in projected_edge_points:
+            for ii, p in enumerate(projected_edge_points):
                 q, tangent = self.find_closest_point(p, observed_silhouette)
-                correspondences.append((p, (q, tangent)))
-            self.poses.append(self.cur_cam_pose.copy())
+                if np.linalg.norm(p - q) < self.params["corres_dist_threshold"]:
+                    correspondences.append((p, (q, tangent)))
+                    mask[ii] = True
+            if not mask.any():
+                print("tracker error, no correspondences")
+                correspondences.append(None)
+                continue
+            # print("correspondences:", time.time() - time1)
+            # time1 = time.time()
             self.corres.append(np.array([(c[0], c[1][0]) for c in correspondences]))
+            # print("append:", time.time() - time1)
+            # time1 = time.time()
             target_points = np.array([c[1][0] for c in correspondences])
-            # mean_error = np.mean(np.linalg.norm(projected_edge_points - target_points, axis=1))
-            # print(mean_error)
-            success, rvec, tvec = cv2.solvePnP(
-                sample_edge_points,
-                target_points,
-                self.params["K"],
-                self.dist_coeff,
-                self.cur_cam_pose[0:3],
-                self.cur_cam_pose[3:6],
-                useExtrinsicGuess=True,
-                flags=cv2.SOLVEPNP_ITERATIVE,
-            )  # finds best fitting w2c
-            if not success:
-                raise RuntimeError("solvePnP failed during refinement.")
-            # update pose for next iteration
-            self.cur_cam_pose = np.concatenate((rvec, tvec), axis=-1)
-            # and update sampled points
-            # o2c = self.se3_to_SE3(self.cur_cam_pose)
-            # o2w = self.o2c_to_o2w(o2c)
-            # self.sampled_points = self.sample_edge_points(o2w, n_samples=10)
-            ###
+            mean_error = np.mean(
+                np.linalg.norm(projected_edge_points[mask] - target_points, axis=1)
+            )
+            if mean_error > 5.0:
+                print("tracker error: avg mean error large {:.02f}".format(mean_error))
+                # self.cur_cam_pose = self.poses[-1].copy()
+                # continue
+            try:
+                success, rvec, tvec = cv2.solvePnP(
+                    sample_edge_points[mask],
+                    target_points,
+                    self.params["K"],
+                    self.dist_coeff,
+                    self.cur_cam_pose[0:3],
+                    self.cur_cam_pose[3:6],
+                    useExtrinsicGuess=True,
+                    flags=cv2.SOLVEPNP_ITERATIVE,
+                )  # finds best fitting w2c
+                if not success:
+                    print("tracker error: solvePnP returned false")
+                    # self.cur_cam_pose = self.poses[-1].copy()
+                    continue
+                # update pose for next iteration
+                self.cur_cam_pose = np.concatenate((rvec, tvec), axis=-1)
+            except cv2.error as e:
+                print("tracker error: solvePnP threw cv2.error")
+                print(e)
+                # self.cur_cam_pose = self.poses[-1].copy()
+                continue
+            # print("solve:", time.time() - time1)
 
     def get_results(self):
         # push last pose into poses
@@ -330,7 +369,7 @@ class HullTracker(EdgeTracker):
         return np.array(object_poses), self.corres
 
 
-class NaiveEdgeTracker(EdgeTracker):
+class NaiveEdgeTracker2(EdgeTracker):
     def __init__(self, init_o2w, params, name):
         super().__init__(params, name)
         # Assumes an initial object pose is given in world coordinates.

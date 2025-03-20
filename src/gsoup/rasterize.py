@@ -66,8 +66,7 @@ def should_cull_tri(v_in_f, camera_pos):
 
 def draw_line(image, p0, p1, color):
     """
-    Draws a line between p0 and p1 on the image using Bresenham's algorithm.
-
+    draws a line (in-place) between p0 and p1 on the image using Bresenham's algorithm.
     :param image: (height, width, 3) np.uint8 image.
     :param p0: Starting point (x, y).
     :param p1: Ending point (x, y).
@@ -102,7 +101,6 @@ def draw_triangle(image, depth_buffer, a, b, c, color):
     height, width = image.shape[:2]
     min_x, max_x = max(0, min(a[0], b[0], c[0])), min(width - 1, max(a[0], b[0], c[0]))
     min_y, max_y = max(0, min(a[1], b[1], c[1])), min(height - 1, max(a[1], b[1], c[1]))
-    ###
     xx, yy = np.meshgrid(
         np.arange(int(min_x), int(max_x + 1)),
         np.arange(int(min_y), int(max_y + 1)),
@@ -133,6 +131,7 @@ def draw_triangle(image, depth_buffer, a, b, c, color):
 def get_silhouette_edges(V, F, e2f, K, w2c):
     """
     returns a mask (E,) of edges that are silhouette edges, given a borderless mesh
+    does not take into account self-occlusions
     :param V: (n, 3) np.float32 vertices of the mesh
     :param F: (m, 3) np.int32 faces of the mesh
     :param e2f: dict mapping edge index to face indices
@@ -164,6 +163,7 @@ def get_silhouette_edges(V, F, e2f, K, w2c):
 def get_visible_edges(V, F, e2f, K, w2c):
     """
     returns a mask (E,) of edges that are visible (front facing) to camera, given a borderless mesh
+    does not take into account self-occlusions
     :param V: (n, 3) np.float32 vertices of the mesh
     :param F: (m, 3) np.int32 faces of the mesh
     :param e2f: dict mapping edge index to face indices

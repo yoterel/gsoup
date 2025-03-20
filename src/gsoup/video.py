@@ -176,9 +176,10 @@ def save_video(
     bitrate=None,
     codec="libx264",
     pixel_format="yuv420p",
+    verbose=False,
 ):
     """
-    Write video frames to disk.
+    Write video frames to disk, only supports mp4 container.
     Parameters:
       frames: (n_frames, height, width, 3) np array or an iterable yielding such frames.
       output_path: destination video file.
@@ -186,8 +187,11 @@ def save_video(
       bitrate: optional bitrate (e.g., "500k").
       codec: video codec to use.
       pixel_format: output pixel format.
+      :verbose: if True, show ffmpeg output.
     """
     output_path = Path(output_path)
+    if output_path.suffix != ".mp4":
+        raise ValueError("Only mp4 container is supported.")
     # Determine frame dimensions
     if isinstance(frames, np.ndarray):
         height, width = frames.shape[1:3]
@@ -220,6 +224,8 @@ def save_video(
     ]
     if bitrate:
         cmd.extend(["-b:v", str(bitrate)])
+    if not verbose:
+        cmd.extend(["-hide_banner", "-loglevel", "quiet"])
     cmd.append(str(output_path))
     pipe = subprocess.Popen(cmd, stdin=subprocess.PIPE)
     for frame in frame_iter:

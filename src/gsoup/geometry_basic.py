@@ -7,9 +7,15 @@ def scalar_projection(a, b):
     """
     computes a scalar projection of vector a onto b
     note: this is the size of the componenet of a tangent to b
-    :param a, b: np arrays of size 2 or 3
+    :param a, b: np arrays (n, 2) or (n, 3)
+    :return: np array (n,)
     """
-    return np.dot(a, b) / np.dot(b, b)
+    nom = a[:, None, :] @ b[:, :, None]
+    denom = b[:, None, :] @ b[:, :, None]
+    projection = nom.squeeze() / (denom.squeeze() + 1e-6)
+    if projection.ndim == 0:
+        projection = projection[None]
+    return projection
 
 
 def project_point_to_line(p, a, b):
@@ -24,7 +30,7 @@ def project_point_to_line(p, a, b):
     # direction of vector from a to p
     ap = p - a
     # compute the scalar projection of p-a onto b-a
-    t = scalar_projection(ap, ab)
+    t = scalar_projection(ap[None, :], ab[None, :])
     # compute the projection point
     return a + t * ab
 
@@ -32,19 +38,33 @@ def project_point_to_line(p, a, b):
 def project_point_to_segment(p, a, b):
     """
     Returns the closest point on a finite segment ab to point p.
-    p, a, b: numpy arrays of shape (2,).
+    :param p: numpy arrays of shape (2,).
+    :param a,b: numpy arrays of shape (n, 2) a batch of segments
+    :return: numpy arrays of shape (n, 2) the closest points on the segments
     """
-    if np.all(a == b):
-        return a
-    # direction vector of the line
+    if a.ndim != 2 or b.ndim != 2:
+        raise ValueError("a and b must be 2D arrays")
+    result = np.zeros_like(a)
+    equal_mask = (a == b).all(axis=-1)
+    result[equal_mask] = a[equal_mask]
     ab = b - a
-    # direction of vector from a to p
     ap = p - a
-    # compute the scalar projection of p-a onto b-a
     t = scalar_projection(ap, ab)
-    # clip result to either a or b
     t = np.clip(t, 0, 1)
-    return a + t * ab
+    result[~equal_mask] = a[~equal_mask] + t[~equal_mask][:, None] * ab[~equal_mask]
+    return result
+    #### older serial implementation
+    # if np.all(a == b):
+    #     return a
+    # # direction vector of the line
+    # ab = b - a
+    # # direction of vector from a to p
+    # ap = p - a
+    # # compute the scalar projection of p-a onto b-a
+    # t = scalar_projection(ap, ab)
+    # # clip result to either a or b
+    # t = np.clip(t, 0, 1)
+    # return a + t * ab
 
 
 def point_line_distance(p, a, b):

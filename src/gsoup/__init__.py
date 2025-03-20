@@ -164,6 +164,7 @@ from .rasterize import (
     should_cull_tri,
     get_silhouette_edges,
     get_visible_edges,
+    draw_line,
 )
 
 from . import structures
