@@ -1,7 +1,7 @@
 import numpy as np
 import gsoup
 from pathlib import Path
-from gsoup.track import NaiveEdgeTracker1, NaiveEdgeTracker2
+from gsoup.track import NaiveEdgeTracker
 import cv2
 import time
 
@@ -127,6 +127,7 @@ def main():
     vertices, faces = gsoup.load_mesh("tests/tests_resource/{}.obj".format(mesh_name))
     # vertices, faces = gsoup.structures.quad_cube()  # quad_cube(), icosehedron()
     # vertices[:, 2] *= 2
+    # gsoup.save_mesh(vertices, faces, "tests/tests_resource/{}.obj".format(mesh_name))
     vertices = gsoup.normalize_vertices(vertices) / 10
     edges, _, e2f = gsoup.faces2edges_naive(faces)
     params["v"] = vertices
@@ -136,7 +137,7 @@ def main():
     # video settings
     params["tmp_frames"] = 500  # n frames used to simulate motion
     params["n_frames"] = 500  # actual number of frames used for tracking
-    params["force_recreate_video"] = True
+    params["force_recreate_video"] = False
     # create video
     Path(params["dst_path"]).mkdir(exist_ok=True, parents=True)
     video_path = Path(params["dst_path"], "video.npy")
@@ -191,8 +192,7 @@ def main():
     gt_o2ws = gt_o2ws[: params["n_frames"] + 1]
     # initialize tracker
     print("init tracker...")
-    tracker = NaiveEdgeTracker1(gt_o2ws[0], params, "NaiveEdgeTracker1")
-    # tracker = NaiveEdgeTracker(gt_o2ws[0], params, "NaiveEdgeTracker2")
+    tracker = NaiveEdgeTracker(gt_o2ws[0], params, "NaiveEdgeTracker")
     print("starting tracking...")
     start_time = time.time()
     for i in range(len(video)):
@@ -215,7 +215,7 @@ def main():
         object_poses[:-1],
         correspondences,
         tracker.get_name(),
-        "track_debug",
+        "debug",
         video_wireframe,
         params,
     )

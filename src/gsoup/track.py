@@ -246,7 +246,7 @@ class EdgeTracker:
         return points
 
 
-class NaiveEdgeTracker1(EdgeTracker):
+class NaiveEdgeTracker(EdgeTracker):
     def __init__(self, init_o2w, params, name):
         super().__init__(params, name)
         self.dist_coeff = np.zeros((5, 1)).astype(np.float32)
@@ -422,7 +422,7 @@ class NaiveEdgeTracker1(EdgeTracker):
             return None, None
 
 
-class NaiveEdgeTracker2(EdgeTracker):
+class NaiveEdgeTracker_2(EdgeTracker):
     def __init__(self, init_o2w, params, name):
         super().__init__(params, name)
         # Assumes an initial object pose is given in world coordinates.
