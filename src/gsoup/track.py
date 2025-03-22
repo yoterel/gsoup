@@ -1,13 +1,25 @@
-import numpy as np
-from .transforms import compose_rt, invert_rigid
+from .transforms import (
+    compose_rt,
+    invert_rigid,
+)
 from .rasterize import (
     project_points,
     should_cull_tri,
     get_silhouette_edges,
     get_visible_edges,
 )
-from .core import to_34, to_44, to_hom, swap_columns
-from .geometry_basic import project_point_to_segment
+from .core import (
+    to_34,
+    to_44,
+    to_hom,
+    swap_columns,
+)
+from .geometry_basic import (
+    project_point_to_segment,
+    line_line_intersection,
+    is_on_segment,
+)
+import numpy as np
 import cv2
 from scipy.optimize import least_squares
 import time
@@ -146,13 +158,15 @@ class EdgeTracker:
 
     def track(self, frame, **kwargs):
         # should track the object in the frame by estimating the object pose
+        # returns the estimated o2w pose as a (4, 4) matrix, or None if failed to find a pose
         pass
 
     def get_results(self):
         # should return a tuple (o2w, correspondences)
         # n = number of frames
         # o2w is a (n, 3, 4) object to world transforms as computed by the tracker per frame
-        # correspondences is a list of (m, 2, 2) pixel-to-pixel correspondences where m is not necessarily the same for each entry
+        # correspondences is a list of m tuples (p, pnorm, q, qnorm) correspondences where m is not necessarily the same for each entry
+        # p, q are 2D points and pnorm, qnorm are their 2D normals
         # length of list must be n-1 (the last frame doesn't need any correspondences)
         # if no such info exists, should return None
         pass
@@ -224,7 +238,7 @@ class EdgeTracker:
         )  # (2, n_edges, 3)
         p0, p1 = points[0], points[1]
         # now interpolate between every pair of points n_samples
-        t = np.linspace(0, 1, n_samples)[:, None]
+        t = np.linspace(0, 1, n_samples, dtype=np.float32)[:, None]
         points = (p0[:, None, :] * (1 - t[None, :, :])) + (
             p1[:, None, :] * t[None, :, :]
         )  # (n_edges, n_samples, 3)
@@ -254,43 +268,47 @@ class NaiveEdgeTracker1(EdgeTracker):
         c = max(contours, key=cv2.contourArea)
         return c[:, 0, :].astype(np.float32)
 
-    def find_closest_point(self, p, observed_silhouette):
+    def find_best_point(self, p, observed_silhouette, use_normals=False):
         """
-        For a given 2D point p, find the closest point on the observed silhouette.
-        Returns:
-        best_point: the closest point on an edge,
-        best_tangent: the unit tangent of that edge.
+        finds the "best" point on the observed silhouette (2d contour) given p
+        :param p: the 2D point (2,) used as query or the point and its normal (2, 2)
+        :param observed_silouette: the (n, 2) endpoints of the contour
+        :param use_normals: if True, will use normal for search (more robust usually), expects p.shape==(2,2)
+        :return: (best_point, best_tangent): the best point on the contour, and optionally its tangent
         """
-        best_tangent = None
+        best_tangent = np.array([np.inf, np.inf])
+        # ab are the segments of the contour (target)
         a = observed_silhouette
         b = np.roll(observed_silhouette, -1, axis=0)
-        candidate = project_point_to_segment(p, a, b)
-        d = np.linalg.norm(p - candidate, axis=-1)
-        best_point = candidate[d.argmin()]
-        # old serial implementation
-        # best_point = None
-        # best_distance = float("inf")
-        # N = observed_silhouette.shape[0]
-        # for i in range(N):
-        #     a = observed_silhouette[i]
-        #     b = observed_silhouette[(i + 1) % N]
-        #     candidate = project_point_to_segment(p, a[None, :], b[None, :])
-        #     d = np.linalg.norm(p - candidate)
-        #     if d < best_distance:
-        #         best_distance = d
-        #         best_point = candidate
-        #         # tangent = b - a
-        #         # norm_t = np.linalg.norm(tangent)
-        #         # best_tangent = tangent / norm_t if norm_t > 0 else np.array([0, 0])
+        if use_normals:
+            assert p.shape == (2, 2)
+            p, n = p[0], p[1]
+            # with normal (find the closest point on the contour, but only in the direction of the normal)
+            intersections = line_line_intersection(
+                p[None, :], p[None, :] + n[None, :], a, b
+            )
+            mask = is_on_segment(intersections, a, b, collinear=True)
+            if not mask.any():
+                return best_tangent, best_tangent
+            intersections = intersections[mask]
+            d = np.linalg.norm(intersections - p, axis=-1)
+            best_point = intersections[d.argmin()]
+        else:
+            # without normal (find closest point on contour)
+            candidate = project_point_to_segment(p, a, b)
+            d = np.linalg.norm(p - candidate, axis=-1)
+            best_point = candidate[d.argmin()]
         return best_point, best_tangent
 
-    def track(self, frame, i, **kwargs):
+    def track(self, frame, frame_index, **kwargs):
+        updated_pose = False
         # time1 = time.time()
         observed_silhouette = self.get_silhouette(frame)
         # print("contour:", time.time() - time1)
         for i in range(self.params["iters_per_frame"]):
             # save current pose for display / analysis
-            self.poses.append(self.cur_cam_pose.copy())
+            if self.params["save_results"]:
+                self.poses.append(self.cur_cam_pose.copy())
             # time1 = time.time()
             # convert current o2c to o2w
             o2c = self.se3_to_SE3(self.cur_cam_pose)
@@ -300,6 +318,7 @@ class NaiveEdgeTracker1(EdgeTracker):
             sample_edge_points = self.sample_edge_points(
                 o2w, n_samples=self.params["sample_per_edge"]
             )
+            correspondence_mask = np.zeros((len(sample_edge_points)), dtype=bool)
             # print("sample:", time.time() - time1)
             # time1 = time.time()
             projected_edge_points = project_points(
@@ -307,35 +326,60 @@ class NaiveEdgeTracker1(EdgeTracker):
                 self.params["K"],
                 to_34(o2c),
             )[:, :2]
+            # compute image space normals for each edge point
+            if self.params["use_normals"]:
+                edge_points_normals = np.zeros_like(projected_edge_points)
+                points_per_edge = projected_edge_points.reshape(
+                    -1, self.params["sample_per_edge"], 2
+                )
+                tangents = np.diff(points_per_edge, axis=1).mean(axis=1)  # (n_edges, 2)
+                normals = np.array([-tangents[:, 1], tangents[:, 0]]).T
+                normals = normals / np.linalg.norm(normals, axis=1)[:, None]
+                normals = normals.repeat(self.params["sample_per_edge"], axis=0)
             # print("project:", time.time() - time1)
             # time1 = time.time()
-            mask = np.zeros((len(sample_edge_points)), dtype=bool)
             correspondences = []
             for ii, p in enumerate(projected_edge_points):
-                q, tangent = self.find_closest_point(p, observed_silhouette)
+                if self.params["use_normals"]:
+                    cur_p = np.array([p, normals[ii]])
+                else:
+                    cur_p = p
+                q, tangent = self.find_best_point(
+                    cur_p,
+                    observed_silhouette,
+                    use_normals=self.params["use_normals"],
+                )
                 if np.linalg.norm(p - q) < self.params["corres_dist_threshold"]:
-                    correspondences.append((p, (q, tangent)))
-                    mask[ii] = True
-            if not mask.any():
+                    if self.params["use_normals"]:
+                        cur_normal = normals[ii]
+                    else:
+                        cur_normal = np.array([np.inf, np.inf])
+                    correspondences.append(
+                        np.array([p, cur_normal, q, tangent], dtype=np.float32)
+                    )
+                    correspondence_mask[ii] = True
+            if self.params["save_results"]:
+                self.corres.append(correspondences)
+            if not correspondence_mask.any():
                 print("tracker error, no correspondences")
-                correspondences.append(None)
                 continue
             # print("correspondences:", time.time() - time1)
             # time1 = time.time()
-            self.corres.append(np.array([(c[0], c[1][0]) for c in correspondences]))
             # print("append:", time.time() - time1)
             # time1 = time.time()
-            target_points = np.array([c[1][0] for c in correspondences])
+            target_points = np.array(correspondences)[:, 2]
+            target_points = np.ascontiguousarray(target_points)
             mean_error = np.mean(
-                np.linalg.norm(projected_edge_points[mask] - target_points, axis=1)
+                np.linalg.norm(
+                    projected_edge_points[correspondence_mask] - target_points, axis=1
+                )
             )
             if mean_error > 5.0:
                 print("tracker error: avg mean error large {:.02f}".format(mean_error))
-                # self.cur_cam_pose = self.poses[-1].copy()
                 # continue
             try:
                 success, rvec, tvec = cv2.solvePnP(
-                    sample_edge_points[mask],
+                    sample_edge_points[correspondence_mask],
                     target_points,
                     self.params["K"],
                     self.dist_coeff,
@@ -346,27 +390,36 @@ class NaiveEdgeTracker1(EdgeTracker):
                 )  # finds best fitting w2c
                 if not success:
                     print("tracker error: solvePnP returned false")
-                    # self.cur_cam_pose = self.poses[-1].copy()
                     continue
                 # update pose for next iteration
                 self.cur_cam_pose = np.concatenate((rvec, tvec), axis=-1)
+                updated_pose = True
             except cv2.error as e:
                 print("tracker error: solvePnP threw cv2.error")
                 print(e)
-                # self.cur_cam_pose = self.poses[-1].copy()
+                # usually happens if inputs are not contiguous or float32
                 continue
             # print("solve:", time.time() - time1)
+        if updated_pose:
+            o2c = self.se3_to_SE3(self.cur_cam_pose)
+            o2w = self.o2c_to_o2w(o2c)
+            return o2w
+        else:
+            return None
 
     def get_results(self):
-        # push last pose into poses
-        self.poses.append(self.cur_cam_pose.copy())
-        # convert optimzed camera poses to object poses
-        object_poses = []
-        for i in range(len(self.poses)):
-            o2c = self.se3_to_SE3(self.poses[i])
-            o2w = self.o2c_to_o2w(o2c)
-            object_poses.append(o2w)
-        return np.array(object_poses), self.corres
+        if self.params["save_results"]:
+            # push last pose into poses
+            self.poses.append(self.cur_cam_pose.copy())
+            # convert optimzed camera poses to object poses
+            object_poses = []
+            for i in range(len(self.poses)):
+                o2c = self.se3_to_SE3(self.poses[i])
+                o2w = self.o2c_to_o2w(o2c)
+                object_poses.append(o2w)
+            return np.array(object_poses), self.corres
+        else:
+            return None, None
 
 
 class NaiveEdgeTracker2(EdgeTracker):

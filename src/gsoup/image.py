@@ -88,33 +88,47 @@ def alpha_compose(images, backgrounds=None, bg_color=None):
     return alpha * rgb + (1 - alpha) * bg_color
 
 
-def draw_text_on_image(images, text_per_image, loc=(0, 0), size=48, fill_white=True):
+def draw_text_on_image(images, text_per_image, loc=(0, 0), size=48, color=None):
     """
     writes text on images given as np array (b x H x W x 3)
     :param images: (b x H x W x 3) numpy array
-    :param text_per_image: list or np array of strings
+    :param text_per_image: string, list of strings or np array of strings
     :param loc: a tuple xy of anchor coordinates for the text (anchor is left-top of text)
     :param size: size of font
-    :param fill_white: if True, text is white, otherwise black
+    :param color: (1,) or (3,) or (4,) or (b, 1) or (b, 3) or (b, 4) np array representing the color of the text (+alpha), will default to white if Nonne
     :return: new (b x H x W x 3) numpy array with text written
     """
     is_numpy = is_np(images)
     if not is_numpy:
         device = images.device
         images = to_np(images)
+    if type(text_per_image) == str:
+        text_per_image = [text_per_image]
+    text_per_image = np.array(text_per_image)
+    if text_per_image.shape[0] == 1:
+        text_per_image = np.tile(text_per_image, images.shape[0])
     is_float = images.dtype == np.float32
     if is_float:
         images = to_8b(images)
     rgbs = [Image.fromarray(x) for x in images]
     resource_path = Path(__file__).parent.resolve()
     font = ImageFont.truetype(Path(resource_path, "FreeMono.ttf"), size)
-    if fill_white:
-        fill = "white"
+    if color is None:
+        color = np.full((len(rgbs), 4), 255, dtype=np.uint8)
     else:
-        fill = "black"
+        if type(color) == int:
+            color = np.array([color])
+        if color.ndim == 0:
+            color = np.array([color])
+        if color.ndim == 1:
+            color = np.tile(color[None, :], (len(rgbs), 1))
+        if color.shape[-1] == 1:
+            color = np.tile(color, (1, 4))
+        if color.shape[-1] == 3:
+            color = np.concatenate((color, np.full((len(rgbs), 1), 255)), axis=-1)
     for i, rgb in enumerate(rgbs):
         text = text_per_image[i]
-        ImageDraw.Draw(rgb).text(loc, text, fill=fill, font=font)
+        ImageDraw.Draw(rgb).text(loc, text, fill=tuple(color[i]), font=font)
     rgbs = np.array([np.asarray(rgb) for rgb in rgbs])
     if is_float:
         rgbs = to_float(rgbs)

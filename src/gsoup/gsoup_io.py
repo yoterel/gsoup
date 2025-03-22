@@ -706,13 +706,13 @@ def parse_obj(path, verbose=True):
                 continue
             if split[0] == "v":
                 if 3 <= len(split[1:]) <= 4:  # x y z [w]
-                    float_vertex = np.array([np.float64(x) for x in split[1:]])
+                    float_vertex = np.array([np.float32(x) for x in split[1:]])
                     if not np.isfinite(float_vertex).all():
                         finite_flag = True
                     vertex_list.append(float_vertex)
                 elif len(split[1:]) == 6:
-                    float_vertex = np.array([np.float64(x) for x in split[1:4]])
-                    float_color = np.array([np.float64(x) for x in split[4:]])
+                    float_vertex = np.array([np.float32(x) for x in split[1:4]])
+                    float_color = np.array([np.float32(x) for x in split[4:]])
                     if (float_color < 0.0).any() or (float_color > 1.0).any():
                         raise ValueError("color values must be in [0, 1]")
                     vertex_list.append(float_vertex)
@@ -761,11 +761,11 @@ def parse_obj(path, verbose=True):
                         )
                     )
                 else:
-                    float_vertex_normal = np.array([np.float64(x) for x in split[1:]])
+                    float_vertex_normal = np.array([np.float32(x) for x in split[1:]])
                     vertex_normal_list.append(float_vertex_normal)
             elif split[0] == "vt":
                 if 2 <= len(split[1:]) <= 3:  # u [v, w]
-                    float_vertex_tex = np.array([np.float64(x) for x in split[1:]])
+                    float_vertex_tex = np.array([np.float32(x) for x in split[1:]])
                     if (float_vertex_tex < 0).any():
                         pass
                         # print("warning: some texture coordinates are smaller than 0")

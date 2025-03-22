@@ -57,17 +57,26 @@ def create_video(V, F, n_frames, params, wireframe=False):
 
 
 def draw_correspondences(image, corr):
-    if corr is not None:
-        for c in corr:
+    if len(corr) != 0:
+        for c in corr:  # (p, pnorm, q, qnorm)
             source = c[0].round().astype(np.uint32)
-            target = c[1].round().astype(np.uint32)
-            image = cv2.arrowedLine(image, source, target, (127, 127, 127), 1)
+            target = c[2].round().astype(np.uint32)
+            # if (source != target).any():
+            # source_normal = (c[0] + (c[1] * 10)).round().astype(np.uint32)
+            # image = cv2.arrowedLine(image, source, source_normal, (255, 0, 0), 1)
+            image = cv2.arrowedLine(image, source, target, (255, 255, 0), 1)
+            image = cv2.circle(image, source, 2, (255, 0, 0), -1)
+            image = cv2.circle(image, target, 2, (0, 0, 255), -1)
+            # image[source[1], source[0]] = np.array([255, 0, 0])
+            # image[target[1], target[0]] = np.array([0, 0, 255])
     return image
 
 
 def render_video(video, params, name):
     captions = ["frame: {:03d}".format(i) for i in range(len(video))]
-    animation = gsoup.draw_text_on_image(video, captions, size=16)
+    animation = gsoup.draw_text_on_image(
+        video, captions, size=16, color=np.array([255, 255, 255])
+    )
     dst = Path(params["dst_path"])
     dst.mkdir(parents=True, exist_ok=True)
     gsoup.save_video(
@@ -79,6 +88,9 @@ def render_video(video, params, name):
 
 
 def get_silhouette(frame):
+    """
+    Get silhouette from frame, returns a 3-channel image.
+    """
     contours, _ = cv2.findContours(frame, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     c = max(contours, key=cv2.contourArea)
     silhouette = c[:, 0, :].astype(np.float32)
@@ -93,15 +105,17 @@ def get_silhouette(frame):
 def main():
     print("building scene...")
     params = {}
-    mesh_name = "octopus"
+    mesh_name = "fox"
     params["dst_path"] = "track_results_{}".format(mesh_name)
     # settings for tracker
-    params["sample_per_edge"] = 1
-    params["iters_per_frame"] = 1
+    params["save_results"] = True
+    params["sample_per_edge"] = 5
+    params["iters_per_frame"] = 3
     params["seed"] = 43
     params["corres_dist_threshold"] = 5.0
+    params["use_normals"] = True
     # settings for virtual camera
-    params["resolution"] = 512
+    params["resolution"] = 1024
     height, width, K, w2c = get_default_cam(params)
     params["height"] = height
     params["width"] = width
@@ -121,7 +135,7 @@ def main():
     params["f"] = faces
     # video settings
     params["tmp_frames"] = 500  # n frames used to simulate motion
-    params["n_frames"] = 300  # actual number of frames used for tracking
+    params["n_frames"] = 500  # actual number of frames used for tracking
     params["force_recreate_video"] = True
     # create video
     Path(params["dst_path"]).mkdir(exist_ok=True, parents=True)
@@ -184,7 +198,7 @@ def main():
     for i in range(len(video)):
         frame = video[i, :, :, 0]
         # gt_v = (gt_o2ws[i] @ gsoup.to_hom(params["v"]).T).T
-        tracker.track(frame, i)
+        pose = tracker.track(frame, i)
         end_time = time.time()
         print(
             "frame: {:03d} / {:03d}, ms: {:.03f}".format(
@@ -196,15 +210,6 @@ def main():
     # get results
     object_poses, correspondences = tracker.get_results()
     print("rendering results...")
-    # render error video
-    render_results(
-        object_poses[1:],
-        None,
-        tracker.get_name(),
-        "track_error",
-        video_wireframe,
-        params,
-    )
     # render debug video
     render_results(
         object_poses[:-1],
@@ -214,6 +219,15 @@ def main():
         video_wireframe,
         params,
     )
+    # render error video
+    # render_results(
+    #     object_poses[1:],
+    #     None,
+    #     tracker.get_name(),
+    #     "track_error",
+    #     video_wireframe,
+    #     params,
+    # )
 
 
 def render_results(object_poses, correspondences, tracker_name, name, gt_video, params):
@@ -237,20 +251,39 @@ def render_results(object_poses, correspondences, tracker_name, name, gt_video, 
             image=bg,
             wh=(params["width"], params["height"]),
         )
+        # image = get_silhouette(image[..., 0])
+        # image = np.max([image, bg], axis=0)
+        # draw correspondences
         if correspondences is not None:
             if i < len(correspondences):
-                draw_correspondences(image, correspondences[i])
-        animation.append(image)
-    # save resulting video
-    captions = [
-        "frame: {:03d}, iter: {:03d}".format(
+                image = draw_correspondences(image, correspondences[i])
+        # draw some info as text
+        caption = "frame: {:03d}, iter: {:03d}".format(
             i // params["iters_per_frame"], i % params["iters_per_frame"]
         )
-        for i in range(0, len(object_poses), 1)
-    ]
-    animation = gsoup.draw_text_on_image(np.array(animation), captions, size=16)
+        image = gsoup.draw_text_on_image(image[None, ...], caption, size=16)
+        image = gsoup.draw_text_on_image(
+            image,
+            "gt",
+            loc=(0, 16),
+            size=16,
+            color=np.array([0, 255, 0]),
+        )
+        image = gsoup.draw_text_on_image(
+            image,
+            "estimate",
+            loc=(0, 32),
+            size=16,
+            color=np.array([255, 255, 255]),
+        )
+        animation.append(image[0])
+    # save resulting video
     dst = Path(params["dst_path"])
     dst.mkdir(parents=True, exist_ok=True)
+    # gsoup.save_images(
+    #     animation,
+    #     Path(dst, "{}_{}".format(tracker_name, name)),
+    # )
     gsoup.save_video(
         animation,
         Path(dst, "{}_{}.mp4".format(tracker_name, name)),

@@ -3,6 +3,62 @@ import numpy as np
 from .core import is_np, broadcast_batch
 
 
+def is_on_segment(p, a, b, collinear=False):
+    """
+    checks if a point is on a line segment
+    :param p: a batch of points to check (n, 3)
+    :param a: a batch of first endpoint of segment (n, 3)
+    :param b: a batch of second endpoint of segment (n, 3)
+    :param collinear: if True, will assume p is on the line defined by a and b
+    :return: a boolean mask of size n
+    """
+    # Vector from a to b, and from a to p.
+    ab = b - a
+    ap = p - a
+    if not collinear:
+        # Check collinearity: cross product should be near zero.
+        cross_prod = np.cross(ap, ab)
+        collinear = cross_prod < 1e-6  # tolerance
+    else:
+        colinear = np.full(len(p), True)
+    # Check if p lies between a and b using dot product.
+    dot = np.sum(ap * ab, axis=1)
+    ab_squared_norm = np.sum(ab * ab, axis=1)
+    between = (dot >= 0) & (dot <= ab_squared_norm)
+    return collinear & between
+
+
+def line_line_intersection(A, B, C, D):
+    """
+    computes the intersection between two lines
+    :param A: (n, 2) a batch of first points on the first line
+    :param B: (n, 2) a batch of second points on the first line
+    :param C: (n, 2) a batch of first points on the second line
+    :param D: (n, 2) a batch of second points on the second line
+    :return: (n, 2) points of intersection (a point will have np.inf if parallel)
+    """
+    # A, B, C, D = ABCD.unbind(dim=-2)  # shape is (n, 2) each
+    # Line AB represented as a1x + b1y = c1
+    a1 = B[:, 1] - A[:, 1]
+    b1 = A[:, 0] - B[:, 0]
+    c1 = a1 * (A[:, 0]) + b1 * (A[:, 1])
+
+    # Line CD represented as a2x + b2y = c2
+    a2 = D[:, 1] - C[:, 1]
+    b2 = C[:, 0] - D[:, 0]
+    c2 = a2 * (C[:, 0]) + b2 * (C[:, 1])
+
+    determinant = a1 * b2 - a2 * b1
+    intersections = np.zeros((len(determinant), 2))
+    intersections[determinant == 0, :] = np.inf
+    xnom = b2 * c1 - b1 * c2
+    ynom = a1 * c2 - a2 * c1
+    x = xnom[determinant != 0] / determinant[determinant != 0]
+    y = ynom[determinant != 0] / determinant[determinant != 0]
+    intersections[determinant != 0, :] = np.stack((x, y), axis=-1)
+    return intersections
+
+
 def scalar_projection(a, b):
     """
     computes a scalar projection of vector a onto b

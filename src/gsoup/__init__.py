@@ -52,6 +52,8 @@ from .transforms import (
     mat2qvec,
 )
 from .geometry_basic import (
+    is_on_segment,
+    line_line_intersection,
     project_point_to_line,
     project_point_to_segment,
     point_line_distance,
