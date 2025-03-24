@@ -242,7 +242,7 @@ def invert_rigid(rt, square=False):
         return ValueError("rt must have shape (n, 4, 4)")
     if is_np(rt):
         R = np.transpose(rt[:, :3, :3], axes=(0, 2, 1))
-        t = (-R @ rt[:, :-1, -1].T)[:, :, 0]
+        t = (-R @ rt[:, :-1, -1:])[:, :, 0]
         return compose_rt(R, t, square)
     else:
         return NotImplementedError
@@ -250,13 +250,13 @@ def invert_rigid(rt, square=False):
 
 def look_at_np(eye, at, up, opengl=False):
     """
-    returns a batch of look_at transforms 4x4 (camera->world, the inverse of a ModelView matrix)
+    computes a look_at transform (camera->world, the inverse of a ModelView matrix)
     will broadcast upon batch dimension if necessary.
-    :param eye: n x 3 from vectors in world space
-    :param at: n x 3 at vector in world space
-    :param up: n x 3 up vector in world space
+    :param eye: (n, 3) from vectors in world space
+    :param at: (n, 3) at vector in world space
+    :param up: (n, 3) up vector in world space
     :param opengl: if True, output will be in OpenGL coordinates (z backward, y up) otherwise (z forward, y down)
-    :return: n x 4 x 4 transformation matrices (camera->world, the inverse of a ModelView matrix)
+    :return: (n, 4, 4) transformation matrices (camera->world, the inverse of a ModelView matrix)
     """
     eye, at, up = broadcast_batch(eye, at, up)
     forward = at - eye
