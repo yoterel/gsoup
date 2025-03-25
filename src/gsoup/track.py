@@ -173,24 +173,31 @@ class EdgeTracker:
 
     def se3_to_SE3(self, pose):
         """
-        Convert 6-vector to 4x4 pose matrix.
+        Convert (n, 6) se3 6-vector to (n, 4, 4) pose matrix.
         """
-        rvec = pose[0:3]
-        tvec = pose[3:6]
-        rmat, _ = cv2.Rodrigues(rvec)
-        o2c = compose_rt(rmat[None, ...], tvec[None, ...], square=True)[0]
-        return o2c
+        SE3s = np.empty((pose.shape[0], 4, 4), dtype=pose.dtype)
+        for i in range(len(pose)):
+            rvec = pose[i, 0:3]
+            tvec = pose[i, 3:6]
+            rmat, _ = cv2.Rodrigues(rvec)
+            SE3 = compose_rt(rmat[None, ...], tvec[None, ...], square=True)[0]
+            SE3s[i] = SE3
+        return SE3s
 
     def SE3_to_se3(self, o2c):
         """
-        Convert 4x4 pose matrix to 6-vector.
+        Convert (n, 4, 4) pose matrix to se3 6-vector.
         """
         # initial_rmat = np.eye(3).astype(np.float32)  # rand_rot_mat[0]
         # initial_tvec = np.zeros(3).astype(np.float32)  # rand_rot_trans[0]
-        rmat = o2c[:3, :3]
-        rvec, _ = cv2.Rodrigues(rmat)
-        tvec = o2c[:3, -1]
-        return np.concatenate((rvec[:, 0], tvec), axis=-1)
+        se3s = np.empty((o2c.shape[0], 6), dtype=o2c.dtype)
+        for i in range(len(o2c)):
+            rmat = o2c[i, :3, :3]
+            rvec, _ = cv2.Rodrigues(rmat)
+            tvec = o2c[i, :3, -1]
+            se3 = np.concatenate((rvec[:, 0], tvec), axis=-1)
+            se3s[i] = se3
+        return se3s
 
     def o2w_to_o2c(self, w2c, o2w):
         """
@@ -205,14 +212,15 @@ class EdgeTracker:
         Convert object-to-camera pose to object-to-world pose.
         """
         # o2w = c2w @ o2c
-        c2w = invert_rigid(to_44(self.params["w2c"])[None, ...], square=True)[0]
+        c2w = invert_rigid(to_44(self.params["w2c"]), square=True)
         o2w = to_34(c2w @ o2c)
         return o2w
 
-    def sample_edge_points(self, o2w, n_samples=10, silhouette=True):
+    def sample_edge_points(self, o2w, w2c, n_samples=10, silhouette=True):
         """
         Sample points uniformly along edges of the model.
-        o2w: 4x4 object-to-world pose matrix.
+        o2w: 3x4 object-to-world pose matrix.
+        w2c: 3x4 world-to-camera pose matrix.
         n_samples: number of points to sample along each edge.
         silhouette: if True, sample points on silhouette edges. Otherwise, sample visible edges.
         """
@@ -223,7 +231,7 @@ class EdgeTracker:
                 self.params["f"],
                 self.params["e2f"],
                 self.params["K"],
-                self.params["w2c"],
+                w2c,
             )
         else:
             edge_mask = get_visible_edges(
@@ -231,7 +239,7 @@ class EdgeTracker:
                 self.params["f"],
                 self.params["e2f"],
                 self.params["K"],
-                self.params["w2c"],
+                w2c,
             )
         points = self.params["v"][self.params["e"][edge_mask]].transpose(
             1, 0, 2
@@ -249,16 +257,14 @@ class EdgeTracker:
 class NaiveEdgeTracker(EdgeTracker):
     def __init__(self, init_o2w, params, name):
         super().__init__(params, name)
-        self.dist_coeff = np.zeros((5, 1)).astype(np.float32)
         # Assumes an initial object pose is given in world coordinates.
         # Also assumes camera is known.
         # define a virtual camera pose (using the gt object pose) which will be optimized
         # in reality, it is o2c, but for this optimization, it plays the role of w2c
-        init_o2c = self.o2w_to_o2c(self.params["w2c"], init_o2w)
-        self.cur_cam_pose = self.SE3_to_se3(init_o2c)
-        # sample points along edges of model in the init pose
-        # self.sampled_points = self.sample_edge_points(init_o2w, n_samples=10)
+        # init_o2c = self.o2w_to_o2c(self.params["w2c"], init_o2w)
+        self.cur_pose = self.SE3_to_se3(init_o2w[None, ...])[0]
         self.poses = []
+        self.errors = []
         self.corres = []
 
     def get_silhouette(self, frame):
@@ -300,124 +306,146 @@ class NaiveEdgeTracker(EdgeTracker):
             best_point = candidate[d.argmin()]
         return best_point, best_tangent
 
-    def track(self, frame, frame_index, **kwargs):
+    def track(self, frames, frame_index, **kwargs):
         updated_pose = False
         # time1 = time.time()
-        observed_silhouette = self.get_silhouette(frame)
-        # print("contour:", time.time() - time1)
-        for i in range(self.params["iters_per_frame"]):
-            # save current pose for display / analysis
-            if self.params["save_results"]:
-                self.poses.append(self.cur_cam_pose.copy())
-            # time1 = time.time()
-            # convert current o2c to o2w
-            o2c = self.se3_to_SE3(self.cur_cam_pose)
-            o2w = self.o2c_to_o2w(o2c)
-            # print("se32SE3:", time.time() - time1)
-            # time1 = time.time()
-            sample_edge_points = self.sample_edge_points(
-                o2w, n_samples=self.params["sample_per_edge"]
-            )
-            correspondence_mask = np.zeros((len(sample_edge_points)), dtype=bool)
-            # print("sample:", time.time() - time1)
-            # time1 = time.time()
-            projected_edge_points = project_points(
-                sample_edge_points,
-                self.params["K"],
-                to_34(o2c),
-            )[:, :2]
-            # compute image space normals for each edge point
-            if self.params["use_normals"]:
-                edge_points_normals = np.zeros_like(projected_edge_points)
-                points_per_edge = projected_edge_points.reshape(
-                    -1, self.params["sample_per_edge"], 2
+        error_per_view = np.full(frames.shape[0], 1e3).astype(np.float32)
+        cur_poses = np.vstack((self.cur_pose, self.cur_pose))
+        for i, frame in enumerate(frames):
+            observed_silhouette = self.get_silhouette(frame)
+            # print("contour:", time.time() - time1)
+            for ii in range(self.params["iters_per_frame"]):
+                # save current pose for display / analysis
+                if i == 0 and self.params["save_results"]:
+                    self.poses.append(self.cur_pose.copy())
+                # time1 = time.time()
+                # convert current o2c to o2w
+                o2w = self.se3_to_SE3(cur_poses[i : i + 1])
+                o2c = self.o2w_to_o2c(self.params["w2c"][i : i + 1], o2w)
+                cur_cam_pose = self.SE3_to_se3(o2c)[0]
+                # o2c = self.se3_to_SE3(self.cur_cam_pose[None, :])
+                # o2w = self.o2c_to_o2w(o2c)
+                # print("se32SE3:", time.time() - time1)
+                # time1 = time.time()
+                sample_edge_points = self.sample_edge_points(
+                    to_34(o2w[0]),
+                    self.params["w2c"][i],
+                    n_samples=self.params["sample_per_edge"],
                 )
-                tangents = np.diff(points_per_edge, axis=1).mean(axis=1)  # (n_edges, 2)
-                normals = np.array([-tangents[:, 1], tangents[:, 0]]).T
-                normals = normals / np.linalg.norm(normals, axis=1)[:, None]
-                normals = normals.repeat(self.params["sample_per_edge"], axis=0)
-            # print("project:", time.time() - time1)
-            # time1 = time.time()
-            correspondences = []
-            for ii, p in enumerate(projected_edge_points):
+                correspondence_mask = np.zeros((len(sample_edge_points)), dtype=bool)
+                # print("sample:", time.time() - time1)
+                # time1 = time.time()
+                projected_edge_points = project_points(
+                    sample_edge_points,
+                    self.params["K"],
+                    to_34(o2c[0]),
+                )[:, :2]
+                # compute image space normals for each edge point
                 if self.params["use_normals"]:
-                    cur_p = np.array([p, normals[ii]])
-                else:
-                    cur_p = p
-                q, tangent = self.find_best_point(
-                    cur_p,
-                    observed_silhouette,
-                    use_normals=self.params["use_normals"],
-                )
-                if np.linalg.norm(p - q) < self.params["corres_dist_threshold"]:
+                    edge_points_normals = np.zeros_like(projected_edge_points)
+                    points_per_edge = projected_edge_points.reshape(
+                        -1, self.params["sample_per_edge"], 2
+                    )
+                    tangents = np.diff(points_per_edge, axis=1).mean(
+                        axis=1
+                    )  # (n_edges, 2)
+                    normals = np.array([-tangents[:, 1], tangents[:, 0]]).T
+                    normals = normals / np.linalg.norm(normals, axis=1)[:, None]
+                    normals = normals.repeat(self.params["sample_per_edge"], axis=0)
+                # print("project:", time.time() - time1)
+                # time1 = time.time()
+                correspondences = []
+                for iii, p in enumerate(projected_edge_points):
                     if self.params["use_normals"]:
-                        cur_normal = normals[ii]
+                        cur_normal = normals[iii]
+                        cur_p = np.array([p, cur_normal])
                     else:
                         cur_normal = np.array([np.inf, np.inf])
-                    correspondences.append(
-                        np.array([p, cur_normal, q, tangent], dtype=np.float32)
+                        cur_p = p
+                    q, tangent = self.find_best_point(
+                        cur_p,
+                        observed_silhouette,
+                        use_normals=self.params["use_normals"],
                     )
-                    correspondence_mask[ii] = True
-            if self.params["save_results"]:
-                self.corres.append(correspondences)
-            if not correspondence_mask.any():
-                print("tracker error, no correspondences")
-                continue
-            # print("correspondences:", time.time() - time1)
-            # time1 = time.time()
-            # print("append:", time.time() - time1)
-            # time1 = time.time()
-            target_points = np.array(correspondences)[:, 2]
-            target_points = np.ascontiguousarray(target_points)
-            mean_error = np.mean(
-                np.linalg.norm(
-                    projected_edge_points[correspondence_mask] - target_points, axis=1
-                )
-            )
-            if mean_error > 5.0:
-                print("tracker error: avg mean error large {:.02f}".format(mean_error))
-                # continue
-            try:
-                success, rvec, tvec = cv2.solvePnP(
-                    sample_edge_points[correspondence_mask],
-                    target_points,
-                    self.params["K"],
-                    self.dist_coeff,
-                    self.cur_cam_pose[0:3],
-                    self.cur_cam_pose[3:6],
-                    useExtrinsicGuess=True,
-                    flags=cv2.SOLVEPNP_ITERATIVE,
-                )  # finds best fitting w2c
-                if not success:
-                    print("tracker error: solvePnP returned false")
+                    if np.linalg.norm(p - q) < self.params["corres_dist_threshold"]:
+                        correspondences.append(
+                            np.array([p, cur_normal, q, tangent], dtype=np.float32)
+                        )
+                        correspondence_mask[iii] = True
+                if self.params["save_results"]:
+                    self.corres.append(correspondences)
+                if np.count_nonzero(correspondence_mask) < 3:
+                    print("tracker not enough correspondences: {}, {}".format(i, ii))
                     continue
-                # update pose for next iteration
-                self.cur_cam_pose = np.concatenate((rvec, tvec), axis=-1)
-                updated_pose = True
-            except cv2.error as e:
-                print("tracker error: solvePnP threw cv2.error")
-                print(e)
-                # usually happens if inputs are not contiguous or float32
-                continue
+                # print("correspondences:", time.time() - time1)
+                # time1 = time.time()
+                # print("append:", time.time() - time1)
+                # time1 = time.time()
+                target_points = np.array(correspondences)[:, 2]
+                target_points = np.ascontiguousarray(target_points)
+                mean_error = np.mean(
+                    np.linalg.norm(
+                        projected_edge_points[correspondence_mask] - target_points,
+                        axis=1,
+                    )
+                )
+                error_per_view[i] = mean_error
+                if mean_error > 5.0:
+                    print("tracker: mean error large {:.02f}".format(mean_error))
+                try:
+                    success, rvec, tvec = cv2.solvePnP(
+                        sample_edge_points[correspondence_mask],
+                        target_points,
+                        self.params["K"],
+                        self.params["dist_coeffs"],
+                        cur_cam_pose[0:3],
+                        cur_cam_pose[3:6],
+                        useExtrinsicGuess=True,
+                        flags=cv2.SOLVEPNP_ITERATIVE,
+                    )  # finds best fitting w2c
+                    if not success:
+                        print("tracker error: solvePnP returned false")
+                        continue
+                    # update pose for next iteration
+                    o2c = self.se3_to_SE3(
+                        np.concatenate((rvec, tvec), axis=-1)[None, ...]
+                    )
+                    o2w = self.o2c_to_o2w(o2c)
+                    cur_poses[i] = self.SE3_to_se3(o2w)[0]
+                    updated_pose = True
+                except cv2.error as e:
+                    breakpoint()
+                    print("tracker error: solvePnP threw cv2.error")
+                    print(e)
+                    # usually happens if inputs are not contiguous or float32
+                    continue
             # print("solve:", time.time() - time1)
+        self.cur_pose = cur_poses[error_per_view.argmin()]
+        self.errors.append(error_per_view)
         if updated_pose:
-            o2c = self.se3_to_SE3(self.cur_cam_pose)
-            o2w = self.o2c_to_o2w(o2c)
-            return o2w
+            # weights = (1 - (error_per_view**2 / error_per_view.max())) ** 2
+            # o2c = self.se3_to_SE3(self.cur_cam_pose)
+            # o2w = self.o2c_to_o2w(o2c)
+            # o2w = (error_per_view @ o2w).squeeze()
+            # o2w = o2w[error_per_view.argmin()]
+            return self.se3_to_SE3(self.cur_pose[None, ...])[0]
         else:
             return None
 
     def get_results(self):
         if self.params["save_results"]:
             # push last pose into poses
-            self.poses.append(self.cur_cam_pose.copy())
+            self.poses.append(self.cur_pose.copy())
             # convert optimzed camera poses to object poses
             object_poses = []
-            for i in range(len(self.poses)):
-                o2c = self.se3_to_SE3(self.poses[i])
-                o2w = self.o2c_to_o2w(o2c)
-                object_poses.append(o2w)
-            return np.array(object_poses), self.corres
+            for i in range(0, len(self.poses)):
+                o2w = to_34(self.se3_to_SE3(self.poses[i][None, ...]))
+                object_poses.append(o2w[0])
+            corres = np.array(self.corres, dtype=object).reshape(
+                -1, self.params["n_views"], self.params["iters_per_frame"]
+            )
+            corres = corres.transpose(1, 0, 2).reshape(self.params["n_views"], -1)
+            return np.array(object_poses), corres
         else:
             return None, None
 
