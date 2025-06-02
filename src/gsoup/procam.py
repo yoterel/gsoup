@@ -1,11 +1,23 @@
 import numpy as np
 import cv2
-from .gsoup_io import save_image, save_images, load_images, load_image
+from .gsoup_io import (
+    save_image,
+    save_images,
+    load_images,
+    load_image,
+    write_exr,
+)
 from .transforms import compose_rt
 from .core import to_8b, to_hom, swap_columns, make_monotonic
-from .image import change_brightness, tonemap, add_alpha, resize
+from .image import (
+    change_brightness,
+    add_alpha,
+    resize,
+    tonemap_reinhard,
+    linear_to_srgb,
+)
 from .geometry_basic import ray_ray_intersection, point_line_distance
-from pathlib import Path
+from pathlib import Path, PosixPath
 from scipy.interpolate import LinearNDInterpolator, interp1d
 from scipy.spatial import ConvexHull
 from .projector_plugin_mitsuba import ProjectorPy
@@ -17,7 +29,7 @@ class ProjectorScene:
     A class to create a Mitsuba scene for procam algorithms testing.
     """
 
-    def __init__(self, variant=""):
+    def __init__(self):
         # Set the Mitsuba variant
         # mi.set_variant(variant)
         # Register the plugin
@@ -29,23 +41,25 @@ class ProjectorScene:
 
     def create_default_scene(
         self,
-        cam_ws=(256, 256),
+        cam_wh=(256, 256),
         cam_fov=45,
         proj_wh=None,
         proj_fov=45,
         proj_texture=None,
         proj_brightness=1.0,
+        proj_response_mode="srgb",
         ambient_color=[0.01, 0.01, 0.01],
         spp=256,
     ):
         """
         Create a default Mitsuba scene with a projector, camera, constant ambient light and two diffuse screens perpendicular to the projector.
-        :cam_ws: camera resolution as a tuple (width, height).
+        :cam_wh: camera resolution as a tuple (width, height).
         :cam_fov: field of view of the camera in degrees.
-        :proj_wh: projector resolution as a tuple (width, height). if None, will use texture resolution.
+        :proj_wh: projector resolution as a tuple (width, height). if None, will use texture resolution. if texture is a file, this will be ignored.
         :proj_fov: field of view of the projector in degrees.
-        :param proj_texture: texture to project, defining the projector resolution. if None will shine all-white.
+        :param proj_texture: texture to project as 3D numpy array (h, w, 3) or path to file. if None will shine all-white.
         :param proj_brightness: unitless brightness of the projector texture. the z=1 plane will have this brightness for an all-white texture.
+        :param proj_response_mode: "linear" or "gamma". if "linear", the projector proejcts in linear RGB space. if gamma, it applies **2.2 to the texture before projecting.
         :param ambient_color: constant color for ambient light
         :spp: samples per pixel for the camera.
         # x: positive is away from camera
@@ -54,123 +68,131 @@ class ProjectorScene:
         :return: the Mitsuba scene object.
         """
         if proj_texture is None:
-            breakpoint()
             proj_texture = np.ones(
                 (proj_wh[0], proj_wh[1], 3), dtype=np.float32
             )  # white texture
         else:
-            assert proj_texture.ndim == 3, "proj_texture must be a 3D numpy array."
-            if proj_wh is not None:
-                if proj_texture.shape[-2::-1] != proj_wh:
-                    proj_texture = resize(
-                        proj_texture[None, ...], proj_wh[1], proj_wh[0]
-                    )[0]
-
-        self.scene = mi.load_dict(
-            {
-                "type": "scene",
-                "proj_texture": {
-                    "type": "bitmap",
-                    "data": proj_texture,
-                    "raw": True,  # assuming the image is in linear RGB
+            if type(proj_texture) == np.ndarray:
+                assert proj_texture.ndim == 3, "proj_texture must be a 3D numpy array."
+                if proj_wh is not None:
+                    if proj_texture.shape[-2::-1] != proj_wh:
+                        proj_texture = resize(
+                            proj_texture[None, ...], proj_wh[1], proj_wh[0]
+                        )[0]
+            elif type(proj_texture) == str or type(proj_texture) == PosixPath:
+                proj_texture = str(proj_texture)
+            else:
+                raise TypeError("proj_texture must be a numpy array or a file path.")
+        scene_dict = {
+            "type": "scene",
+            "proj_texture": {
+                "type": "bitmap",
+            },
+            "integrator": {
+                "type": "path",
+                "hide_emitters": True,
+                "max_depth": 6,
+            },
+            "camera": {
+                "type": "perspective",
+                "fov": cam_fov,
+                "to_world": mi.ScalarTransform4f().look_at(
+                    origin=[2.5, 0, 0.3],  # along +X axis
+                    target=[0, 0, 0],
+                    up=[0, 0, 1],  # Z-up
+                ),
+                "film": {
+                    "type": "hdrfilm",
+                    "width": cam_wh[0],
+                    "height": cam_wh[1],
+                    "pixel_format": "rgba",
+                    "rfilter": {"type": "box"},
                 },
-                "integrator": {
-                    "type": "path",
-                    "hide_emitters": True,
-                    "max_depth": 6,
+                "sampler": {
+                    "type": "independent",
+                    "sample_count": spp,  # number of samples per pixel
                 },
-                "camera": {
-                    "type": "perspective",
-                    "fov": cam_fov,
-                    "to_world": mi.ScalarTransform4f().look_at(
-                        origin=[2.5, 0, 0.3],  # along +X axis
-                        target=[0, 0, 0],
-                        up=[0, 0, 1],  # Z-up
-                    ),
-                    "film": {
-                        "type": "hdrfilm",
-                        "width": cam_wh[0],
-                        "height": cam_wh[1],
-                        "pixel_format": "rgba",
-                        "rfilter": {"type": "box"},
-                    },
-                    "sampler": {
-                        "type": "independent",
-                        "sample_count": spp,  # number of samples per pixel
-                    },
+            },
+            # "sphere1": {
+            #     "type": "sphere",
+            #     "center": [0, 0, 0],
+            #     "radius": 0.5,
+            #     "bsdf": {
+            #         "type": "diffuse",
+            #         "reflectance": {"type": "rgb", "value": [1.0, 1.0, 1.0]},
+            #     },
+            # },
+            # "sphere2": {
+            #     "type": "sphere",
+            #     "center": [-1, -1, 0],
+            #     "radius": 0.5,
+            #     "bsdf": {
+            #         "type": "diffuse",
+            #         "reflectance": {"type": "rgb", "value": [1.0, 1.0, 1.0]},
+            #     },
+            # },
+            "wall1": {
+                "type": "rectangle",
+                "to_world": mi.ScalarTransform4f()
+                .translate([-1.0, 1.0, 0.0])
+                .rotate([0, 1, 0], 90),
+                # "flip_normals": True,
+                "bsdf": {
+                    "type": "diffuse",
+                    "reflectance": {"type": "rgb", "value": [1.0, 1.0, 1.0]},
                 },
-                # "sphere1": {
-                #     "type": "sphere",
-                #     "center": [0, 0, 0],
-                #     "radius": 0.5,
-                #     "bsdf": {
-                #         "type": "diffuse",
-                #         "reflectance": {"type": "rgb", "value": [1.0, 1.0, 1.0]},
-                #     },
-                # },
-                # "sphere2": {
-                #     "type": "sphere",
-                #     "center": [-1, -1, 0],
-                #     "radius": 0.5,
-                #     "bsdf": {
-                #         "type": "diffuse",
-                #         "reflectance": {"type": "rgb", "value": [1.0, 1.0, 1.0]},
-                #     },
-                # },
-                "wall1": {
-                    "type": "rectangle",
-                    "to_world": mi.ScalarTransform4f()
-                    .translate([-1.0, 1.0, 0.0])
-                    .rotate([0, 1, 0], 90),
-                    # "flip_normals": True,
-                    "bsdf": {
-                        "type": "diffuse",
-                        "reflectance": {"type": "rgb", "value": [1.0, 1.0, 1.0]},
-                    },
+            },
+            "wall2": {
+                "type": "rectangle",
+                "to_world": mi.ScalarTransform4f()
+                .translate([-2.0, -1.0, 0.0])
+                .rotate([0, 1, 0], 90),
+                # "flip_normals": True,
+                "bsdf": {
+                    "type": "diffuse",
+                    "reflectance": {"type": "rgb", "value": [1.0, 1.0, 1.0]},
                 },
-                "wall2": {
-                    "type": "rectangle",
-                    "to_world": mi.ScalarTransform4f()
-                    .translate([-2.0, -1.0, 0.0])
-                    .rotate([0, 1, 0], 90),
-                    # "flip_normals": True,
-                    "bsdf": {
-                        "type": "diffuse",
-                        "reflectance": {"type": "rgb", "value": [1.0, 1.0, 1.0]},
-                    },
+            },
+            # "light": {
+            #     "type": "point",
+            #     "position": [0, 0, 2],  # @ z_up_transform,  # above the sphere)
+            #     "intensity": {
+            #         "type": "rgb",
+            #         "value": 1.0,
+            #     },
+            # },
+            "projector": {
+                "type": "projector_py",
+                "irradiance": {
+                    "type": "ref",
+                    "id": "proj_texture",
+                    # "type": "bitmap",
+                    # "filename": str(texture_file),
+                    # "raw": True,  # assuming the image is in linear RGB
                 },
-                # "light": {
-                #     "type": "point",
-                #     "position": [0, 0, 2],  # @ z_up_transform,  # above the sphere)
-                #     "intensity": {
-                #         "type": "rgb",
-                #         "value": 1.0,
-                #     },
-                # },
-                "projector": {
-                    "type": "projector_py",
-                    "irradiance": {
-                        "type": "ref",
-                        "id": "proj_texture",
-                        # "type": "bitmap",
-                        # "filename": str(texture_file),
-                        # "raw": True,  # assuming the image is in linear RGB
-                    },
-                    "scale": proj_brightness,
-                    "to_world": mi.ScalarTransform4f().look_at(
-                        origin=[1.5, 0, 0],  # along +X axis
-                        target=[0, 0, 0],
-                        up=[0, 0, 1],  # Z-up
-                    ),
-                    "fov": proj_fov,
-                },
-                "ambient": {
-                    "type": "constant",
-                    "radiance": {"type": "rgb", "value": ambient_color},
-                },
-            }
-        )
-        return self.scene
+                "scale": proj_brightness,
+                "to_world": mi.ScalarTransform4f().look_at(
+                    origin=[1.5, 0, 0],  # along +X axis
+                    target=[0, 0, 0],
+                    up=[0, 0, 1],  # Z-up
+                ),
+                "fov": proj_fov,
+                "response_mode": proj_response_mode,
+            },
+            "ambient": {
+                "type": "constant",
+                "radiance": {"type": "rgb", "value": ambient_color},
+            },
+        }
+        # post process scene dict to add projector texture
+        if type(proj_texture) == np.ndarray:
+            scene_dict["proj_texture"]["data"] = proj_texture
+        else:
+            scene_dict["proj_texture"]["filename"] = proj_texture
+        scene_dict["proj_texture"][
+            "raw"
+        ] = True  # disk image aren't usually linear, but for consistency we assume the texture is linear RGB
+        self.scene = mi.load_dict(scene_dict)
 
     def set_projector_texture(self, texture):
         """
@@ -179,9 +201,15 @@ class ProjectorScene:
         """
         if self.scene is None:
             raise RuntimeError("Scene not created yet.")
+        if type(texture) == str or type(texture) == PosixPath:
+            texture = load_image(texture, as_float=True)
+        elif type(texture) == np.ndarray:
+            pass
+        else:
+            raise TypeError("texture must be a numpy array or a file path.")
         new_bitmap = mi.Bitmap(texture)
         new_bitmap = new_bitmap.convert(
-            mi.Bitmap.PixelFormat.RGB, mi.Struct.Type.Float32, srgb_gamma=True
+            mi.Bitmap.PixelFormat.RGB, mi.Struct.Type.Float32, srgb_gamma=False
         )
         params = mi.traverse(self.scene)
         params["projector.irradiance.data"] = new_bitmap
@@ -211,20 +239,22 @@ class ProjectorScene:
         params["camera.to_world"] = transform
         params.update()
 
-    def render(self, tonemap_render=True):
+    def capture(self, raw=False):
         if self.scene is None:
             raise RuntimeError("Scene not created yet.")
         raw_render = mi.render(self.scene)
-        # mi.util.write_bitmap("test.exr", render)
+        # mi.util.write_bitmap("test.exr", raw_render)
         np_render = np.array(raw_render)
-        if tonemap_render:
+        # write_exr(np_render, "test.exr")
+        if raw:
+            final_image = np_render
+        else:
             alpha = np_render[:, :, -1:]
             image = np_render[:, :, :3]
             # no_alpha_render = gsoup.alpha_compose(render)
-            image = tonemap(image, exposure=0.0, offset=0.0, gamma=2.2)
+            image = tonemap_reinhard(image, exposure=1.0)
+            image = linear_to_srgb(image)
             final_image = add_alpha(image, alpha)
-        else:
-            final_image = np_render
         return final_image
 
 

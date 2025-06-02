@@ -815,7 +815,7 @@ def linear_to_srgb(linear):
 
 def srgb_to_linear(srgb):
     """
-    converts linear RGB to sRGB, see https://en.wikipedia.org/wiki/SRGB.
+    converts sRGB to linear RGB, see https://en.wikipedia.org/wiki/SRGB.
     note: srgb is expected to be in the range [0, 1]
     """
     eps = np.finfo(np.float32).eps
@@ -859,7 +859,27 @@ def compute_color_distance(image1, image2, bin_per_dim=10):
     return result
 
 
-def tonemap(
+def tonemap_reinhard(hdr_image, exposure=1.0, clip=True):
+    """
+    maps an input image [-inf, inf] to [0, 1] using Reinhard's tonemapping operator x / 1 + x
+    :param hdr_image: a numpy array or torch tensor (channels first or last, any float type)
+    :param exposure: an exposure factor e*x / 1 + e*x
+    :param clip: if true will clip result to [0.0, 1.0]
+    :return: the tonemapped image, with same dtype and shape
+    """
+    image = exposure * hdr_image
+    image = image / (image + 1.0)
+    if clip:
+        if type(hdr_image) == np.ndarray:
+            image = np.clip(image, 0.0, 1.0)
+        elif type(hdr_image) == torch.Tensor:
+            image = torch.clamp(image, 0.0, 1.0)
+        else:
+            raise TypeError("hdr_image must be either a numpy array or torch tensor")
+    return image
+
+
+def tonemap_tev(
     hdr_image, exposure=0.0, offset=0.0, gamma=2.2, only_preproc=False, clip=True
 ):
     """

@@ -129,7 +129,8 @@ from .image import (
     mask_regions,
     crop_center,
     compute_color_distance,
-    tonemap,
+    tonemap_reinhard,
+    tonemap_tev,
 )
 
 from .video import (

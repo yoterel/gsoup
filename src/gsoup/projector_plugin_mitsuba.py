@@ -1,11 +1,25 @@
 import mitsuba as mi
 import drjit as dr
 import numpy as np
+from .image import srgb_to_linear
 
 mi.set_variant(
     "llvm_ad_rgb"
     # "scalar_rgb"
 )  # "llvm_ad_rgb", "scalar_rgb" # must set before defining the emitter
+
+
+def srgb_response(srgb):
+    """
+    converts sRGB to linear RGB, see https://en.wikipedia.org/wiki/SRGB.
+    note: srgb is expected to be in the range [0, 1]
+    """
+    eps = np.finfo(np.float32).eps
+    linear0 = 25 / 323 * srgb
+    linear1 = dr.maximum(eps, ((200 * srgb + 11) / (211))) ** (12 / 5)
+    mask = srgb <= 0.04045
+    y = dr.select(mask, linear0, linear1)
+    return y
 
 
 class ProjectorPy(mi.Emitter):
@@ -28,6 +42,18 @@ class ProjectorPy(mi.Emitter):
         self.m_x_fov = float(mi.parse_fov(props, size[0] / float(size[1])))
         self.parameters_changed()
         self.m_flags = mi.EmitterFlags.DeltaPosition
+        self.response_mode = props.get("response_mode", "linear")
+        if self.response_mode == "linear":
+            self.response_f = lambda x: x
+        elif self.response_mode == "gamma":
+            self.response_f = lambda x: x**2.2
+        elif self.response_mode == "srgb":
+            self.response_f = lambda x: srgb_response(x)
+        else:
+            raise ValueError(
+                f"Unknown response mode: {self.response_mode}. "
+                "Supported modes are 'linear', 'gamma', and 'srgb'."
+            )
 
     def traverse(self, callback):
         super().traverse(callback)
@@ -143,7 +169,7 @@ class ProjectorPy(mi.Emitter):
             * self.m_intensity_scale
             / (dr.square(it_local.z) * -dr.dot(ds.n, ds.d))
         )
-
+        spec = self.response_f(spec)
         return ds, mi.depolarizer(spec & active)
 
     def sample_position(self, time, sample, active=True):

@@ -6,21 +6,53 @@ from pathlib import Path
 
 def test_synthetic_projector():
     texture = gsoup.generate_voronoi_diagram(512, 512, 1000)
+    texture_file = Path("resource/synth_proj_texture.png")
+    gsoup.save_image(texture, texture_file)
+    #### from array, srgb response, raw and non-raw output
     projected_texture = gsoup.to_float(texture)
     projector_scene = gsoup.ProjectorScene()
-    projector_scene.create_default_scene(proj_texture=projected_texture)
+    projector_scene.create_default_scene(
+        proj_texture=projected_texture,
+        proj_brightness=3.0,
+        proj_response_mode="srgb",
+    )
+    capture = projector_scene.capture(raw=True)
+    gsoup.write_exr(capture, "resource/synth_proj_srgb.exr")
+    capture = projector_scene.capture(raw=False)
+    gsoup.save_image(capture, "resource/synth_proj_srgb.png")
+    #### from array, gamma response
+    projected_texture = gsoup.to_float(texture)
+    projector_scene = gsoup.ProjectorScene()
+    projector_scene.create_default_scene(
+        proj_texture=projected_texture,
+        proj_brightness=3.0,
+        proj_response_mode="gamma",
+    )
+    capture = projector_scene.capture(raw=False)
+    gsoup.save_image(capture, "resource/synth_proj_gamma.png")
+    #### from file, linear response
+    projector_scene = gsoup.ProjectorScene()
+    projector_scene.create_default_scene(
+        proj_texture=texture_file,
+        proj_brightness=3.0,
+        proj_response_mode="linear",
+    )
+    capture = projector_scene.capture(raw=False)
+    gsoup.save_image(capture, "resource/synth_proj_linear.png")
+    #### set texture from array (linear response)
+    projector_scene.set_projector_texture(projected_texture)
+    capture = projector_scene.capture(raw=False)
+    gsoup.save_image(capture, "resource/synth_proj_set_texture_linear1.png")
+    ### set texture from file (linear response)
+    projector_scene.set_projector_texture(texture_file)
+    capture = projector_scene.capture(raw=False)
+    gsoup.save_image(capture, "resource/synth_proj_set_texture_linear2.png")
     # projector_scene.set_projector_transform(
     #     np.array([[1, 0, 0, 0], [0, -1, 0, 0], [0, 0, -1, 0], [0, 0, 0, 1]])
     # )  # this is the projector to world transform, it is identity in this case
     # projector_scene.set_camera_transform(
     #     np.array([[1, 0, 0, 0], [0, -1, 0, 0], [0, 0, -1, 0], [0, 0, 0, 1]])
     # )  # this is the projector to world transform, it is identity in this case
-    render = projector_scene.render()
-    gsoup.save_image(render, "resource/synth_projector.png")
-    texture2 = gsoup.generate_voronoi_diagram(200, 600, 1000)
-    projector_scene.set_projector_texture(texture2)
-    render = projector_scene.render()
-    gsoup.save_image(render, "resource/synth_projector2.png")
 
 
 def test_procam():
