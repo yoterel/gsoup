@@ -4,38 +4,37 @@ from pathlib import Path
 import numpy as np
 import mitsuba as mi
 
-if __name__ == "__main__":
-    ###############
+
+def simulate_procam(orig_patterns):
     projector_scene = gsoup.ProjectorScene()
-    # projector_scene.load_scene_from_file("./scenes/projector.xml")
-    projected_texture = gsoup.load_image("texture1.jpg", as_float=True)
-    projector_scene.create_default_scene(
-        proj_texture=projected_texture, proj_res=(200, 200)
-    )
-    ###############
+    projector_scene.create_default_scene()
+    renders = []
+    ### simulate procam ###
+    for i, pattern in enumerate(orig_patterns):
+        projector_scene.set_projector_texture(pattern)
+        render = projector_scene.render()
+        renders.append(render)
+    ### end simulate procam ###
+    return np.array(renders)
+
+
+if __name__ == "__main__":
     # instantiate a gray code object
     gray = gsoup.GrayCode()
     # set projector resolution
-    proj_wh = (200, 200)
+    proj_wh = (800, 800)
     # set decoding mode (rows first or columns first)
     mode = "ij"  # "ij" is rows first, "xy" is columns first
     # generate the gray code patterns, this is the ground truth
     orig_patterns = gray.encode(proj_wh)
-    # save the patterns for projection and capturing
-    gsoup.save_images(orig_patterns, "tests/tests_resource/patterns/")
-    ### start capture time ###
-    for i, pattern in enumerate(orig_patterns):
-        projector_scene.set_projector_texture(pattern)
-        render = projector_scene.render()
-        gsoup.save_image(
-            render, f"tests/tests_resource/correspondence/captured_{i:03d}.png"
-        )
-    # here is the point you need to project these patterns onto the scene and capture with a camera
-    # the captured images should be saved in a folder with increasing numbers or increasing alphanumerical as names
-    ### end capture time ###
+    ### project patterns and capture ###
+    # here we used blender to do this.
+    # todo: replace blender renders with simulated mitsuba projector like below
+    # captured_patterns = simulate_procam(orig_patterns) ###
+    ## end project patterns and capture ###
     # load simulated captured images
     captured_patterns = gsoup.load_images(
-        Path("tests/tests_resource/correspondence"),
+        Path("tests/tests_resource/correspondence_blender"),
     )
     # find camera resolution
     cam_wh = (
@@ -51,7 +50,6 @@ if __name__ == "__main__":
         debug=True,
         mode=mode,
     )
-    breakpoint()
     # the map is nice for many tasks, but we want to reconsutrct the scene in 3D, so we need to calibrate the procam pair.
     # first, lets decide where the camera is. Usually you will set this as identity (camera is at the origin).
     # but this scene was simulated in blender with a different known camera transform, so we will use that transform here.

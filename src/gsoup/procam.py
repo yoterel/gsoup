@@ -29,9 +29,9 @@ class ProjectorScene:
 
     def create_default_scene(
         self,
-        cam_res=(256, 256),
+        cam_ws=(256, 256),
         cam_fov=45,
-        proj_res=None,
+        proj_wh=None,
         proj_fov=45,
         proj_texture=None,
         proj_brightness=1.0,
@@ -40,9 +40,9 @@ class ProjectorScene:
     ):
         """
         Create a default Mitsuba scene with a projector, camera, constant ambient light and two diffuse screens perpendicular to the projector.
-        :cam_res: camera resolution as a tuple (width, height).
+        :cam_ws: camera resolution as a tuple (width, height).
         :cam_fov: field of view of the camera in degrees.
-        :proj_res: projector resolution as a tuple (width, height). if None, will use texture resolution.
+        :proj_wh: projector resolution as a tuple (width, height). if None, will use texture resolution.
         :proj_fov: field of view of the projector in degrees.
         :param proj_texture: texture to project, defining the projector resolution. if None will shine all-white.
         :param proj_brightness: unitless brightness of the projector texture. the z=1 plane will have this brightness for an all-white texture.
@@ -56,14 +56,14 @@ class ProjectorScene:
         if proj_texture is None:
             breakpoint()
             proj_texture = np.ones(
-                (proj_res[0], proj_res[1], 3), dtype=np.float32
+                (proj_wh[0], proj_wh[1], 3), dtype=np.float32
             )  # white texture
         else:
             assert proj_texture.ndim == 3, "proj_texture must be a 3D numpy array."
-            if proj_res is not None:
-                if proj_texture.shape[-2::-1] != proj_res:
+            if proj_wh is not None:
+                if proj_texture.shape[-2::-1] != proj_wh:
                     proj_texture = resize(
-                        proj_texture[None, ...], proj_res[1], proj_res[0]
+                        proj_texture[None, ...], proj_wh[1], proj_wh[0]
                     )[0]
 
         self.scene = mi.load_dict(
@@ -89,8 +89,8 @@ class ProjectorScene:
                     ),
                     "film": {
                         "type": "hdrfilm",
-                        "width": cam_res[0],
-                        "height": cam_res[1],
+                        "width": cam_wh[0],
+                        "height": cam_wh[1],
                         "pixel_format": "rgba",
                         "rfilter": {"type": "box"},
                     },
