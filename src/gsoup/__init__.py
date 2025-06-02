@@ -153,6 +153,7 @@ from .procam import (
     naive_color_compensate,
     reconstruct_pointcloud,
     GrayCode,
+    ProjectorScene,
 )
 
 from .sphere_trace import (

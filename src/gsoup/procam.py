@@ -2,12 +2,368 @@ import numpy as np
 import cv2
 from .gsoup_io import save_image, save_images, load_images, load_image
 from .transforms import compose_rt
-from .core import to_8b, to_hom, swap_columns
-from .image import change_brightness
+from .core import to_8b, to_hom, swap_columns, make_monotonic
+from .image import change_brightness, tonemap, add_alpha, resize
 from .geometry_basic import ray_ray_intersection, point_line_distance
 from pathlib import Path
-from scipy.interpolate import LinearNDInterpolator
+from scipy.interpolate import LinearNDInterpolator, interp1d
 from scipy.spatial import ConvexHull
+from .projector_plugin_mitsuba import ProjectorPy
+import mitsuba as mi
+
+
+class ProjectorScene:
+    """
+    A class to create a Mitsuba scene for procam algorithms testing.
+    """
+
+    def __init__(self, variant=""):
+        # Set the Mitsuba variant
+        # mi.set_variant(variant)
+        # Register the plugin
+        mi.register_emitter("projector_py", lambda props: ProjectorPy(props))
+        self.scene = None
+
+    def load_scene_from_file(self, file_path):
+        self.scene = mi.load_file(file_path)
+
+    def create_default_scene(
+        self,
+        cam_res=(256, 256),
+        cam_fov=45,
+        proj_res=None,
+        proj_fov=45,
+        proj_texture=None,
+        proj_brightness=1.0,
+        ambient_color=[0.01, 0.01, 0.01],
+        spp=256,
+    ):
+        """
+        Create a default Mitsuba scene with a projector, camera, constant ambient light and two diffuse screens perpendicular to the projector.
+        :cam_res: camera resolution as a tuple (width, height).
+        :cam_fov: field of view of the camera in degrees.
+        :proj_res: projector resolution as a tuple (width, height). if None, will use texture resolution.
+        :proj_fov: field of view of the projector in degrees.
+        :param proj_texture: texture to project, defining the projector resolution. if None will shine all-white.
+        :param proj_brightness: unitless brightness of the projector texture. the z=1 plane will have this brightness for an all-white texture.
+        :param ambient_color: constant color for ambient light
+        :spp: samples per pixel for the camera.
+        # x: positive is away from camera
+        # y: positive is right
+        # z: positive is up
+        :return: the Mitsuba scene object.
+        """
+        if proj_texture is None:
+            breakpoint()
+            proj_texture = np.ones(
+                (proj_res[0], proj_res[1], 3), dtype=np.float32
+            )  # white texture
+        else:
+            assert proj_texture.ndim == 3, "proj_texture must be a 3D numpy array."
+            if proj_res is not None:
+                if proj_texture.shape[-2::-1] != proj_res:
+                    proj_texture = resize(
+                        proj_texture[None, ...], proj_res[1], proj_res[0]
+                    )[0]
+
+        self.scene = mi.load_dict(
+            {
+                "type": "scene",
+                "proj_texture": {
+                    "type": "bitmap",
+                    "data": proj_texture,
+                    "raw": True,  # assuming the image is in linear RGB
+                },
+                "integrator": {
+                    "type": "path",
+                    "hide_emitters": True,
+                    "max_depth": 6,
+                },
+                "camera": {
+                    "type": "perspective",
+                    "fov": cam_fov,
+                    "to_world": mi.ScalarTransform4f().look_at(
+                        origin=[2.5, 0, 0.3],  # along +X axis
+                        target=[0, 0, 0],
+                        up=[0, 0, 1],  # Z-up
+                    ),
+                    "film": {
+                        "type": "hdrfilm",
+                        "width": cam_res[0],
+                        "height": cam_res[1],
+                        "pixel_format": "rgba",
+                        "rfilter": {"type": "box"},
+                    },
+                    "sampler": {
+                        "type": "independent",
+                        "sample_count": spp,  # number of samples per pixel
+                    },
+                },
+                # "sphere1": {
+                #     "type": "sphere",
+                #     "center": [0, 0, 0],
+                #     "radius": 0.5,
+                #     "bsdf": {
+                #         "type": "diffuse",
+                #         "reflectance": {"type": "rgb", "value": [1.0, 1.0, 1.0]},
+                #     },
+                # },
+                # "sphere2": {
+                #     "type": "sphere",
+                #     "center": [-1, -1, 0],
+                #     "radius": 0.5,
+                #     "bsdf": {
+                #         "type": "diffuse",
+                #         "reflectance": {"type": "rgb", "value": [1.0, 1.0, 1.0]},
+                #     },
+                # },
+                "wall1": {
+                    "type": "rectangle",
+                    "to_world": mi.ScalarTransform4f()
+                    .translate([-1.0, 1.0, 0.0])
+                    .rotate([0, 1, 0], 90),
+                    # "flip_normals": True,
+                    "bsdf": {
+                        "type": "diffuse",
+                        "reflectance": {"type": "rgb", "value": [1.0, 1.0, 1.0]},
+                    },
+                },
+                "wall2": {
+                    "type": "rectangle",
+                    "to_world": mi.ScalarTransform4f()
+                    .translate([-2.0, -1.0, 0.0])
+                    .rotate([0, 1, 0], 90),
+                    # "flip_normals": True,
+                    "bsdf": {
+                        "type": "diffuse",
+                        "reflectance": {"type": "rgb", "value": [1.0, 1.0, 1.0]},
+                    },
+                },
+                # "light": {
+                #     "type": "point",
+                #     "position": [0, 0, 2],  # @ z_up_transform,  # above the sphere)
+                #     "intensity": {
+                #         "type": "rgb",
+                #         "value": 1.0,
+                #     },
+                # },
+                "projector": {
+                    "type": "projector_py",
+                    "irradiance": {
+                        "type": "ref",
+                        "id": "proj_texture",
+                        # "type": "bitmap",
+                        # "filename": str(texture_file),
+                        # "raw": True,  # assuming the image is in linear RGB
+                    },
+                    "scale": proj_brightness,
+                    "to_world": mi.ScalarTransform4f().look_at(
+                        origin=[1.5, 0, 0],  # along +X axis
+                        target=[0, 0, 0],
+                        up=[0, 0, 1],  # Z-up
+                    ),
+                    "fov": proj_fov,
+                },
+                "ambient": {
+                    "type": "constant",
+                    "radiance": {"type": "rgb", "value": ambient_color},
+                },
+            }
+        )
+        return self.scene
+
+    def set_projector_texture(self, texture):
+        """
+        Set the projector texture from a numpy array / image file path.
+        :param texture_numpy: a numpy array of shape (H, W, 3) or (H, W, 4) representing the texture or an image file path.
+        """
+        if self.scene is None:
+            raise RuntimeError("Scene not created yet.")
+        new_bitmap = mi.Bitmap(texture)
+        new_bitmap = new_bitmap.convert(
+            mi.Bitmap.PixelFormat.RGB, mi.Struct.Type.Float32, srgb_gamma=True
+        )
+        params = mi.traverse(self.scene)
+        params["projector.irradiance.data"] = new_bitmap
+        params.update()
+
+    def set_projector_transform(self, transform):
+        """
+        Set the projector transform.
+        :param transform: a 4x4 numpy array representing the projector to world transformation.
+        """
+        if self.scene is None:
+            raise RuntimeError("Scene not created yet.")
+        assert transform.shape == (4, 4), "transform must be a 4x4 matrix."
+        params = mi.traverse(self.scene)
+        params["projector.to_world"] = transform
+        params.update()
+
+    def set_camera_transform(self, transform):
+        """
+        Set the camera transform.
+        :param transform: a 4x4 numpy array representing the projector to world transformation.
+        """
+        if self.scene is None:
+            raise RuntimeError("Scene not created yet.")
+        assert transform.shape == (4, 4), "transform must be a 4x4 matrix."
+        params = mi.traverse(self.scene)
+        params["camera.to_world"] = transform
+        params.update()
+
+    def render(self, tonemap_render=True):
+        if self.scene is None:
+            raise RuntimeError("Scene not created yet.")
+        raw_render = mi.render(self.scene)
+        # mi.util.write_bitmap("test.exr", render)
+        np_render = np.array(raw_render)
+        if tonemap_render:
+            alpha = np_render[:, :, -1:]
+            image = np_render[:, :, :3]
+            # no_alpha_render = gsoup.alpha_compose(render)
+            image = tonemap(image, exposure=0.0, offset=0.0, gamma=2.2)
+            final_image = add_alpha(image, alpha)
+        else:
+            final_image = np_render
+        return final_image
+
+
+def offline_radiomatric_calibrate():
+    """
+    performs off-line radiometric calibration.
+    based on "A Projection System with Radiometric Compensation for Screen Imperfections"
+    radiometric model at pixel x:
+        C_x = V_x @ p(I_y) + F_x
+    where:
+    - C: measured camera RGB of pixel x
+    - I: projector RGB input of pixel y, which maps to x after geometric calibration
+    - p: per-channel nonlinear response, applied elementwise (global)
+    - V_x: 3x3 per-pixel color mixing matrix
+    - F_x: 3-vector per-pixel ambient/floor illumination and black level projector image
+    returns: F (ambient image), invV (inverse per-pixel color mixing matrix), p^-1 (inverse response curve)
+    """
+    raise NotImplementedError("This function is not implemented yet.")
+
+
+def online_radiometric_compensate():
+    """
+    performs online radiometric compensation.
+    based on "A Projection System with Radiometric Compensation for Screen Imperfections"
+    radiometric model at pixel x:
+        C_x = V_x @ p(I_y) + F_x
+    where:
+    - C: measured camera RGB of pixel x
+    - I: projector RGB input of pixel y, which maps to x after geometric calibration
+    - p: per-channel nonlinear response, applied elementwise (global)
+    - V_x: 3x3 per-pixel color mixing matrix
+    - F_x: 3-vector per-pixel ambient/floor illumination and black level projector image
+    :param desired_C: the desried image to be seen by camera (H,W,3)
+    :param F: ambient image taken when projector projects all black (H,W,3)
+    :param invV: the per-pixel inverse color mixing matrix (H,W,3,3)
+    :param p_inv_response: the per-channel inverse response function as tuples of start and end points on the curve
+    returns projector input I of same shape as desired_C
+    """
+    raise NotImplementedError("This function is not implemented yet.")
+
+
+def estimate_color_mixing_matrix(
+    off_image, red_image, green_image, blue_image, cam_inv_response
+):
+    """
+    estimates the color mixing matrix V per-pixel for a projector-camera pair.
+    assumptions:
+        - assumes projector and camera are geometrically calibrated.
+        - assumes camera is photometrically calibrated, i.e. the camera response is linear.
+        - assumes pixels are independant (no GI)
+        - assumes monotonic response per channel.
+    :param off_image: image taken when projector projects constant value of 80
+    :param red_image: image taken when projector projects constant value of 80, except red channel which is 170
+    :param green_image: image taken when projector projects constant value of 80, except green channel which is 170
+    :param blue_image: image taken when projector projects constant value of 80, except blue channel which is 170
+    :param cam_inv_response: a list of inverse response functions per channel, each is a callable that maps radiance to input value.
+    :return: a 3D numpy array of shape (H, W, 3, 3) representing the color mixing matrix V.
+    """
+    H, W, _ = off_image.shape
+    V = np.zeros((H, W, 3, 3), dtype=np.float32)
+
+    # Helper: apply inverse response to image
+    def apply_inverse_response(img):
+        return np.stack([cam_inv_response[c](img[..., c]) for c in range(3)], axis=-1)
+
+    # Linearize all images
+    I_off = apply_inverse_response(off_image)
+    I_r = apply_inverse_response(red_image)
+    I_g = apply_inverse_response(green_image)
+    I_b = apply_inverse_response(blue_image)
+
+    # Known input bump values (RGB)
+    delta_inputs = np.array(
+        [
+            [80, 0, 0],  # red bump
+            [0, 80, 0],  # green bump
+            [0, 0, 80],  # blue bump
+        ],
+        dtype=np.float32,
+    ).T  # shape: (3, 3)
+
+    # Compute per-pixel response deltas
+    delta_outputs = np.stack(
+        [I_r - I_off, I_g - I_off, I_b - I_off], axis=-1
+    )  # shape: (H, W, 3, 3)
+
+    # Solve 3x3 system per pixel: delta_outputs = V * delta_inputs
+    # So V = delta_outputs @ inv(delta_inputs)
+    inv_input = np.linalg.inv(delta_inputs)
+
+    for y in range(H):
+        for x in range(W):
+            V[y, x] = delta_outputs[y, x] @ inv_input
+
+    return V
+
+
+def estimate_projector_inverse_response(
+    measured_radiance,  # shape: (N, H, W) or (N, H, W, C)
+    input_values=None,  # shape: (N,)
+):
+    """
+    estimate inverse response per channel
+    :param measured_radiance: np.ndarray of shape (N, H, W) or (N, H, W, C)
+    :param input_values: np.ndarray of input intensity values. If None, assumes np.arange(N).
+    :return: list of interp1d functions, one per channel. Each maps radiance → input value.
+    """
+    # Validate input
+    if measured_radiance.ndim == 3:
+        # Grayscale: (N, H, W)
+        measured_radiance = measured_radiance[..., np.newaxis]  # to (N, H, W, 1)
+    elif measured_radiance.ndim != 4:
+        raise ValueError("measured_radiance must be shape (N, H, W) or (N, H, W, C)")
+
+    N, H, W, C = measured_radiance.shape
+    if input_values is None:
+        input_values = np.arange(N)
+
+    if len(input_values) != N:
+        raise ValueError(
+            "Length of input_values must match number of input images (N)."
+        )
+
+    inverse_functions = []
+    for c in range(C):
+        channel_data = measured_radiance[..., c]
+        avg_radiance = channel_data.mean(axis=(1, 2))  # shape: (N,)
+        avg_radiance = make_monotonic(avg_radiance, increasing=True)
+        # Create inverse interpolation: radiance → input value
+        interp_fn = interp1d(
+            avg_radiance,
+            input_values,
+            kind="linear",
+            bounds_error=False,
+            fill_value=(input_values[0], input_values[-1]),
+        )
+        inverse_functions.append(interp_fn)
+
+    return inverse_functions  # list of callables, one per channel
 
 
 def blend_intensity_multi_projectors(forward_maps, fgs, proj_whs, mode="ij"):

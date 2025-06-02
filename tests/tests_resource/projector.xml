@@ -1,0 +1,70 @@
+<scene version="3.0.0">
+    <default name="spp" value="256"/>
+	<default name="resx" value="256"/>
+	<default name="resy" value="256"/>
+    <default name="max_depth" value="6"/>
+    <default name="integrator" value="path"/>
+    <integrator type='$integrator'>
+        <integer name="max_depth" value="$max_depth"/>
+		<boolean name="hide_emitters" value="true"/>
+    </integrator>
+    <!-- Camera -->
+    <sensor type="perspective" id="sensor" name="sensor">
+		<integer name="fov" value="45"/>
+		<transform name="to_world">
+            <lookat origin="4, 0, 0" target="0, 0, 0" up="0, 0, 1"/>
+        </transform>
+		<film type="hdrfilm" name="film">
+			<integer name="width" value="$resx"/>
+			<integer name="height" value="$resy"/>
+			<string name="pixel_format" value="rgba"/>
+			<rfilter type="box" name="filter"/>
+			<!--string name="component_format" value="float32"/-->
+			<!--rfilter type="gaussian"/-->
+		</film>
+		<sampler type="independent">
+            <integer name="sample_count" value="$spp"/>
+        </sampler>
+	</sensor>
+
+    <!-- Sphere -->
+    <shape type="sphere">
+        <float name="radius" value="1"/>
+        <transform name="to_world">
+            <translate x="0" y="0" z="0"/>
+        </transform>
+        <bsdf type="diffuse">
+            <rgb name="reflectance" value="1.0, 1.0, 1.0"/>
+        </bsdf>
+    </shape>
+	<!-- Walls -->
+	<!--shape type="rectangle" id="wall1" name="wall1">
+		<transform name="to_world">
+			<matrix value="8.000000 0.000000 0.000000 0.000000 0.000000 2.000000 0.000000 0.000000 0.000000 0.000000 2.000000 -5.000000 0.000000 0.000000 0.000000 1.000000"/>
+		</transform>
+	</shape-->
+	<!--shape type="rectangle" id="wall2" name="wall2">
+		<transform name="to_world">
+			<matrix value="0.000000 0.000000 2.000000 -5.000000 0.000000 2.000000 0.000000 0.000000 -8.000000 0.000000 0.000000 0.000000 0.000000 0.000000 0.000000 1.000000"/>
+		</transform>
+	</shape-->
+    <!-- Projector Emitter -->
+    <emitter type="projector" id="projector">
+        <transform name="to_world">
+            <lookat origin="2, 2, 2" target="0, 0, 0" up="0, 0, 1"/>
+        </transform>
+		<texture type="bitmap" name="irradiance">
+                <string name="filename" value="texture.jpg" />
+                <boolean name="raw" value="True" />
+        </texture>
+        <float name="fov" value="45"/>
+		<float name="scale" value="10"/>
+        <!--rgb name="intensity" value="20, 20, 20"-->
+    </emitter>
+	<!--emitter type="constant">
+		<rgb name="radiance" value="0.3"/>
+	</emitter-->
+	<!--emitter type="point">
+		<point name="position" value="0.0, 2.0, 0.0"/>
+    <rgb name="intensity" value="1.0"/-->
+</scene>

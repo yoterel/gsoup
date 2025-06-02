@@ -561,7 +561,9 @@ def resize(images, H, W, mode="bilinear"):
         raise ValueError("images must be a 4D array")
     was_numpy = False
     if is_np(images):
-        imgs_torch = to_torch(images).permute(2, 0, 1)
+        imgs_torch = to_torch(images).permute(
+            0, 3, 1, 2
+        )  # (b, h, w, c) -> (b, c, h, w)
         was_numpy = True
     else:
         imgs_torch = images
@@ -575,7 +577,9 @@ def resize(images, H, W, mode="bilinear"):
         antialias=False,
     )
     if was_numpy:
-        interpolated = to_np(interpolated.permute(1, 2, 0))
+        interpolated = to_np(
+            interpolated.permute(0, 2, 3, 1)
+        )  # (b, c, h, w) -> (b, h, w, c)
     return interpolated
 
 

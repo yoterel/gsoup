@@ -340,3 +340,16 @@ def color_to_gray(x, keep_channels=False):
             else:
                 x = x.repeat(1, 1, 1, c)
     return x
+
+
+def make_monotonic(y, increasing=True):
+    """
+    Ensure a 1D array is monotonic increasing or decreasing.
+    :param y: np.ndarray of shape (N,) to be made monotonic.
+    :param increasing: if True, enforce increasing monotonicity; if False, enforce decreasing.
+    :return: np.ndarray of the same shape as y, made monotonic.
+    """
+    if increasing:
+        return np.maximum.accumulate(y)
+    else:
+        return np.minimum.accumulate(y)
