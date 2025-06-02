@@ -115,7 +115,7 @@ def get_silhouette(frame):
 
 
 def main():
-    print("building scene...")
+    print("Tracking Example")
     params = {}
     mesh_name = "cube"
     params["dst_path"] = "track_results_{}".format(mesh_name)

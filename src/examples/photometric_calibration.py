@@ -1,8 +1,9 @@
-improt gsoup
-improt numpy as np
+import gsoup
+import numpy as np
 from pathlib import Path
 
 if __name__ == "__main__":
+    print("Photometric Calibration Example")
     # offline steps for photometric calibration
     # 1. create patterns
     # 2. project patterns and acquire images

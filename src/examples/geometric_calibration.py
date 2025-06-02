@@ -19,6 +19,7 @@ def simulate_procam(orig_patterns):
 
 
 if __name__ == "__main__":
+    print("Geometric Calibration + Reconstruction Example")
     # instantiate a gray code object
     gray = gsoup.GrayCode()
     # set projector resolution
