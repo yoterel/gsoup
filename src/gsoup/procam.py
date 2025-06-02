@@ -272,6 +272,11 @@ def offline_radiomatric_calibrate():
     - F_x: 3-vector per-pixel ambient/floor illumination and black level projector image
     returns: F (ambient image), invV (inverse per-pixel color mixing matrix), p^-1 (inverse response curve)
     """
+    # capture off_image, red_image, green_image, blue_image
+    # get camera response function
+    # call estimate_color_mixing_matrix() to get V
+    # call estimate_projector_inverse_response() to get p^-1
+    # return F, invV, p_inv_response
     raise NotImplementedError("This function is not implemented yet.")
 
 
@@ -293,11 +298,19 @@ def online_radiometric_compensate():
     :param p_inv_response: the per-channel inverse response function as tuples of start and end points on the curve
     returns projector input I of same shape as desired_C
     """
+    # compensate using the formula:
+    # I_y = p^-1((C_x - F_x) @ invV_x)
     raise NotImplementedError("This function is not implemented yet.")
 
 
 def estimate_color_mixing_matrix(
-    off_image, red_image, green_image, blue_image, cam_inv_response
+    off_image,
+    red_image,
+    green_image,
+    blue_image,
+    cam_inv_response,
+    bump_value_low=80,
+    bump_value_high=170,
 ):
     """
     estimates the color mixing matrix V per-pixel for a projector-camera pair.
@@ -306,11 +319,13 @@ def estimate_color_mixing_matrix(
         - assumes camera is photometrically calibrated, i.e. the camera response is linear.
         - assumes pixels are independant (no GI)
         - assumes monotonic response per channel.
-    :param off_image: image taken when projector projects constant value of 80
-    :param red_image: image taken when projector projects constant value of 80, except red channel which is 170
-    :param green_image: image taken when projector projects constant value of 80, except green channel which is 170
-    :param blue_image: image taken when projector projects constant value of 80, except blue channel which is 170
-    :param cam_inv_response: a list of inverse response functions per channel, each is a callable that maps radiance to input value.
+    :param off_image: image taken when projector projects constant value of "bump_value_low"
+    :param red_image: image taken when projector projects constant value of "bump_value_low", except red channel which is "bump_value_high"
+    :param green_image: image taken when projector projects constant value of "bump_value_low", except green channel which is "bump_value_high"
+    :param blue_image: image taken when projector projects constant value of "bump_value_low", except blue channel which is "bump_value_high"
+    :param cam_inv_response: a list of inverse response functions per channel, each is a callable that maps radiance to input value (pass identity for linear camera).
+    :param bump_value_low: the constant uint8 value used in the off_image
+    :param bump_value_high: the constant uint8 value used in each of the red, green, blue images (in the respected channel)
     :return: a 3D numpy array of shape (H, W, 3, 3) representing the color mixing matrix V.
     """
     H, W, _ = off_image.shape
@@ -329,9 +344,9 @@ def estimate_color_mixing_matrix(
     # Known input bump values (RGB)
     delta_inputs = np.array(
         [
-            [80, 0, 0],  # red bump
-            [0, 80, 0],  # green bump
-            [0, 0, 80],  # blue bump
+            [bump_value_low, 0, 0],  # red bump
+            [0, bump_value_low, 0],  # green bump
+            [0, 0, bump_value_low],  # blue bump
         ],
         dtype=np.float32,
     ).T  # shape: (3, 3)
