@@ -1,17 +1,41 @@
 import gsoup
 import numpy as np
 from pathlib import Path
+import mitsuba as mi
 
 
-def simulate_procam(patterns_to_project):
+def create_scene(proj_wh, cam_wh):
     projector_scene = gsoup.ProjectorScene()
-    projector_scene.create_default_scene()
+    projector_scene.create_default_scene(
+        proj_wh=proj_wh,
+        cam_wh=cam_wh,
+        proj_fov=30.0,
+        cam_fov=45.0,
+        proj_brightness=2.0,
+    )
+    transform = (
+        mi.ScalarTransform4f().look_at(
+            origin=[0.0, 0.0, 0.0],  # along +X axis
+            target=[-1, 0, 0],
+            up=[0, 0, 1],  # Z-up
+        ),
+    )
+    projector_scene.set_projector_transform(np.array(transform[0].matrix))
+    projector_scene.set_camera_transform(np.array(transform[0].matrix))
+    return projector_scene
+
+
+def simulate_procam(patterns_to_project, scene, synth_V=None):
     captures = {}
     ### simulate procam ###
     for i, pattern_name in enumerate(sorted(patterns_to_project.keys())):
         pattern = patterns_to_project[pattern_name]
-        projector_scene.set_projector_texture(pattern)
-        capture = projector_scene.capture(raw=True)
+        scene.set_projector_texture(pattern)
+        capture = scene.capture(raw=True)
+        if synth_V is not None:
+            capture_expanded = capture[..., None]  # (H, W, 3, 1)
+            mixed = np.matmul(synth_V, capture_expanded)  # (H, W, 3, 1)
+            capture = capture_expanded[..., 0]  # remove singleton dimension → (H, W, 3)
         captures[pattern_name] = capture
     ### end simulate procam ###
     return captures
@@ -19,39 +43,50 @@ def simulate_procam(patterns_to_project):
 
 if __name__ == "__main__":
     print("Photometric Calibration Example")
-    proj_wh = (800, 600)
+    proj_wh = (512, 512)
+    cam_wh = (512, 512)
     low_val = 80 / 255
     high_val = 170 / 255
     n_samples_per_channel = 20
     ################## offline steps for photometric calibration ##################
+    # 0. create a scene
+    scene = create_scene(proj_wh, cam_wh)
     # 1. create patterns
+    test_texture = gsoup.generate_voronoi_diagram(512, 512, 1000)
+    test_texture = gsoup.to_float(test_texture)
     patterns = {
+        "test_image": test_texture,
+        "all_black": np.zeros(proj_wh + (3,), dtype=np.float32),
         "off_image": np.ones(proj_wh + (3,), dtype=np.float32) * low_val,
         "red_image": np.ones(proj_wh + (3,), dtype=np.float32) * low_val,
         "green_image": np.ones(proj_wh + (3,), dtype=np.float32) * low_val,
         "blue_image": np.ones(proj_wh + (3,), dtype=np.float32) * low_val,
     }
-    patterns["r_image"][:, :, 0] = high_val
-    patterns["g_image"][:, :, 1] = high_val
-    patterns["b_image"][:, :, 2] = high_val
+    patterns["red_image"][:, :, 0] = high_val
+    patterns["green_image"][:, :, 1] = high_val
+    patterns["blue_image"][:, :, 2] = high_val
     for i in range(n_samples_per_channel):
         patterns["gray_{:03d}".format(i)] = (
             np.ones(proj_wh + (3,), dtype=np.float32) * i / 20
         )
-    # 2. project patterns and acquire images
-    captured = simulate_procam(patterns)
+    # 2. project patterns and acquire images (also simulate a global color mixing matrix)
+    # synth_V = np.array([[0.9, 0.1, 0.1], [0.2, 0.8, 0.2], [0.1, 0.1, 0.9]])
+    captured = simulate_procam(patterns, scene, synth_V=None)
+    # save the captured images
+    for name, img in captured.items():
+        gsoup.save_image(img, f"resource/photometric_compensation/{name}.png")
     # 3. we use a "linear" camera here, if not possible we need to find camera response function per channel
     # 4. and linearize camera response function
     # 5. no need to white balance camera channels, color mixing matrix will take care of that
     # 6. find color mixing matrix per-pixel
     V = gsoup.estimate_color_mixing_matrix(
         captured["off_image"],
-        captured[]"red_image"],
+        captured["red_image"],
         captured["green_image"],
         captured["blue_image"],
         cam_inv_response=None,
-        bump_value_low=int(low_val*255),
-        bump_value_high=int(high_val*255),
+        bump_value_low=int(low_val * 255),
+        bump_value_high=int(high_val * 255),
     )
     # 7. find projector inverse response function
     measured = np.stack(
@@ -78,7 +113,5 @@ if __name__ == "__main__":
         proj_inverse_response=None,
     )
     # 3. project compensation image
-    result = simulate_procam(
-        {"compensation_image": compensation_image}
-    )
+    result = simulate_procam({"compensation_image": compensation_image})
     gsoup.save_image(result["compensation_image"], "compensation_image.png")

@@ -35,6 +35,8 @@ class ProjectorScene:
         # Register the plugin
         mi.register_emitter("projector_py", lambda props: ProjectorPy(props))
         self.scene = None
+        self.proj_wh = None  # projector resolution (width, height)
+        self.cam_wh = None  # camera resolution (width, height)
 
     def load_scene_from_file(self, file_path):
         self.scene = mi.load_file(file_path)
@@ -43,7 +45,7 @@ class ProjectorScene:
         self,
         cam_wh=(256, 256),
         cam_fov=45,
-        proj_wh=None,
+        proj_wh=(256, 256),
         proj_fov=45,
         proj_texture=None,
         proj_brightness=1.0,
@@ -55,7 +57,7 @@ class ProjectorScene:
         Create a default Mitsuba scene with a projector, camera, constant ambient light and two diffuse screens perpendicular to the projector.
         :cam_wh: camera resolution as a tuple (width, height).
         :cam_fov: field of view of the camera in degrees.
-        :proj_wh: projector resolution as a tuple (width, height). if None, will use texture resolution. if texture is a file, this will be ignored.
+        :proj_wh: projector resolution as a tuple (width, height).
         :proj_fov: field of view of the projector in degrees.
         :param proj_texture: texture to project as 3D numpy array (h, w, 3) or path to file. if None will shine all-white.
         :param proj_brightness: unitless brightness of the projector texture. the z=1 plane will have this brightness for an all-white texture.
@@ -67,6 +69,8 @@ class ProjectorScene:
         # z: positive is up
         :return: the Mitsuba scene object.
         """
+        self.proj_wh = proj_wh
+        self.cam_wh = cam_wh
         if proj_texture is None:
             proj_texture = np.ones(
                 (proj_wh[0], proj_wh[1], 3), dtype=np.float32
@@ -74,13 +78,14 @@ class ProjectorScene:
         else:
             if type(proj_texture) == np.ndarray:
                 assert proj_texture.ndim == 3, "proj_texture must be a 3D numpy array."
-                if proj_wh is not None:
-                    if proj_texture.shape[-2::-1] != proj_wh:
-                        proj_texture = resize(
-                            proj_texture[None, ...], proj_wh[1], proj_wh[0]
-                        )[0]
+                if proj_texture.shape[-2::-1] != proj_wh:
+                    proj_texture = resize(
+                        proj_texture[None, ...], proj_wh[1], proj_wh[0]
+                    )[0]
             elif type(proj_texture) == str or type(proj_texture) == PosixPath:
-                proj_texture = str(proj_texture)
+                proj_texture = load_image(
+                    proj_texture, as_float=True, resize_wh=proj_wh
+                )
             else:
                 raise TypeError("proj_texture must be a numpy array or a file path.")
         scene_dict = {
@@ -134,7 +139,7 @@ class ProjectorScene:
             "wall1": {
                 "type": "rectangle",
                 "to_world": mi.ScalarTransform4f()
-                .translate([-1.0, 1.0, 0.0])
+                .translate([-2.0, 0.0, 0.0])
                 .rotate([0, 1, 0], 90),
                 # "flip_normals": True,
                 "bsdf": {
@@ -142,17 +147,17 @@ class ProjectorScene:
                     "reflectance": {"type": "rgb", "value": [1.0, 1.0, 1.0]},
                 },
             },
-            "wall2": {
-                "type": "rectangle",
-                "to_world": mi.ScalarTransform4f()
-                .translate([-2.0, -1.0, 0.0])
-                .rotate([0, 1, 0], 90),
-                # "flip_normals": True,
-                "bsdf": {
-                    "type": "diffuse",
-                    "reflectance": {"type": "rgb", "value": [1.0, 1.0, 1.0]},
-                },
-            },
+            # "wall2": {
+            #     "type": "rectangle",
+            #     "to_world": mi.ScalarTransform4f()
+            #     .translate([-2.0, -1.0, 0.0])
+            #     .rotate([0, 1, 0], 90),
+            #     # "flip_normals": True,
+            #     "bsdf": {
+            #         "type": "diffuse",
+            #         "reflectance": {"type": "rgb", "value": [1.0, 1.0, 1.0]},
+            #     },
+            # },
             # "light": {
             #     "type": "point",
             #     "position": [0, 0, 2],  # @ z_up_transform,  # above the sphere)
@@ -188,10 +193,11 @@ class ProjectorScene:
         if type(proj_texture) == np.ndarray:
             scene_dict["proj_texture"]["data"] = proj_texture
         else:
-            scene_dict["proj_texture"]["filename"] = proj_texture
-        scene_dict["proj_texture"][
-            "raw"
-        ] = True  # disk image aren't usually linear, but for consistency we assume the texture is linear RGB
+            raise TypeError("proj_texture must be a numpy array.")
+            # can't enter here, but if we were to use a file path, we would do:
+            # scene_dict["proj_texture"]["filename"] = proj_texture
+        # disk image aren't usually linear, but for consistency we assume the texture is linear RGB
+        scene_dict["proj_texture"]["raw"] = True
         self.scene = mi.load_dict(scene_dict)
 
     def set_projector_texture(self, texture):
@@ -202,9 +208,13 @@ class ProjectorScene:
         if self.scene is None:
             raise RuntimeError("Scene not created yet.")
         if type(texture) == str or type(texture) == PosixPath:
-            texture = load_image(texture, as_float=True)
+            texture = load_image(texture, as_float=True, resize_wh=self.proj_wh)
         elif type(texture) == np.ndarray:
-            pass
+            assert texture.ndim == 3, "proj_texture must be a 3D numpy array."
+            if texture.shape[-2::-1] != self.proj_wh:
+                texture = resize(texture[None, ...], self.proj_wh[1], self.proj_wh[0])[
+                    0
+                ]
         else:
             raise TypeError("texture must be a numpy array or a file path.")
         new_bitmap = mi.Bitmap(texture)
