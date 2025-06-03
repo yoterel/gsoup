@@ -8,14 +8,14 @@ import mitsuba as mi
 def simulate_procam(orig_patterns):
     projector_scene = gsoup.ProjectorScene()
     projector_scene.create_default_scene()
-    renders = []
+    captures = []
     ### simulate procam ###
     for i, pattern in enumerate(orig_patterns):
         projector_scene.set_projector_texture(pattern)
-        render = projector_scene.render()
-        renders.append(render)
+        capture = projector_scene.capture()
+        captures.append(capture)
     ### end simulate procam ###
-    return np.array(renders)
+    return np.array(captures)
 
 
 if __name__ == "__main__":

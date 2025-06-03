@@ -314,6 +314,7 @@ def estimate_color_mixing_matrix(
 ):
     """
     estimates the color mixing matrix V per-pixel for a projector-camera pair.
+    based on "A Projection System with Radiometric Compensation for Screen Imperfections"
     assumptions:
         - assumes projector and camera are geometrically calibrated.
         - assumes camera is photometrically calibrated, i.e. the camera response is linear.
@@ -335,11 +336,18 @@ def estimate_color_mixing_matrix(
     def apply_inverse_response(img):
         return np.stack([cam_inv_response[c](img[..., c]) for c in range(3)], axis=-1)
 
-    # Linearize all images
-    I_off = apply_inverse_response(off_image)
-    I_r = apply_inverse_response(red_image)
-    I_g = apply_inverse_response(green_image)
-    I_b = apply_inverse_response(blue_image)
+    if cam_inv_response is not None:
+        # Linearize all images
+        I_off = apply_inverse_response(off_image)
+        I_r = apply_inverse_response(red_image)
+        I_g = apply_inverse_response(green_image)
+        I_b = apply_inverse_response(blue_image)
+    else:
+        # If no inverse response is provided, assume linear camera response
+        I_off = off_image
+        I_r = red_image
+        I_g = green_image
+        I_b = blue_image
 
     # Known input bump values (RGB)
     delta_inputs = np.array(
@@ -370,11 +378,14 @@ def estimate_color_mixing_matrix(
 def estimate_projector_inverse_response(
     measured_radiance,  # shape: (N, H, W) or (N, H, W, C)
     input_values=None,  # shape: (N,)
+    fg_mask=None,  # shape: (H, W) or None
 ):
     """
-    estimate inverse response per channel
+    estimate inverse response per channel of a projector
+    based on "A Projection System with Radiometric Compensation for Screen Imperfections"
     :param measured_radiance: np.ndarray of shape (N, H, W) or (N, H, W, C)
     :param input_values: np.ndarray of input intensity values. If None, assumes np.arange(N).
+    :param fg_mask: foreground mask of shape (H, W) or None. If provided, only uses pixels where fg_mask is True.
     :return: list of interp1d functions, one per channel. Each maps radiance → input value.
     """
     # Validate input
@@ -386,7 +397,7 @@ def estimate_projector_inverse_response(
 
     N, H, W, C = measured_radiance.shape
     if input_values is None:
-        input_values = np.arange(N)
+        input_values = np.arange(N) / 255
 
     if len(input_values) != N:
         raise ValueError(
@@ -394,9 +405,13 @@ def estimate_projector_inverse_response(
         )
 
     inverse_functions = []
+    if fg_mask is None:
+        fg_mask = np.ones((H, W), dtype=bool)
+    breakpoint()
     for c in range(C):
-        channel_data = measured_radiance[..., c]
-        avg_radiance = channel_data.mean(axis=(1, 2))  # shape: (N,)
+        channel_data = measured_radiance[..., c]  # shape: (N, H, W)
+        channel_data = channel_data[:, fg_mask]  # shape: (N, fg_count)
+        avg_radiance = channel_data.mean(axis=-1)  # shape: (N,)
         avg_radiance = make_monotonic(avg_radiance, increasing=True)
         # Create inverse interpolation: radiance → input value
         interp_fn = interp1d(
@@ -409,6 +424,37 @@ def estimate_projector_inverse_response(
         inverse_functions.append(interp_fn)
 
     return inverse_functions  # list of callables, one per channel
+
+
+def compute_compensation_image(
+    orig_image,
+    Vinv,
+    cam_inverse_response=None,
+    proj_inverse_response=None,
+):
+    """
+    computes a compensation image, such that when projected, the camera will observe the original image.
+    based on "A Projection System with Radiometric Compensation for Screen Imperfections"
+    :param image: the desired image to be seen by camera (H,W,3)
+    :param Vinv: the per-pixel inverse color mixing matrix (H,W,3,3)
+    :param cam_inverse_response: a list of callables per channel that map camera pixel values to radiance.
+    :param proj_inverse_response: a list of callables per channel that maps projector radiance to pixel values.
+    """
+    n_channels = orig_image.shape[-1]
+    if cam_inverse_response is not None:
+        C = np.zeros_like(orig_image, dtype=np.float32)
+        for channel in n_channels:
+            C[..., channek] = cam_inverse_response(orig_image[..., channel])
+    else:
+        C = orig_image
+    P = Vinv @ C
+    if proj_inverse_response is not None:
+        I = np.zeros_like(orig_image, dtype=np.float32)
+        for channel in range(n_channels):
+            I[..., channel] = proj_inverse_response(P[..., channel])
+    else:
+        I = P
+    return I
 
 
 def blend_intensity_multi_projectors(forward_maps, fgs, proj_whs, mode="ij"):
