@@ -155,6 +155,9 @@ from .procam import (
     reconstruct_pointcloud,
     GrayCode,
     ProjectorScene,
+    estimate_color_mixing_matrix,
+    estimate_projector_inverse_response,
+    compute_compensation_image,
 )
 
 from .sphere_trace import (

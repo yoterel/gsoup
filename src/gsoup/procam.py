@@ -8,7 +8,7 @@ from .gsoup_io import (
     write_exr,
 )
 from .transforms import compose_rt
-from .core import to_8b, to_hom, swap_columns, make_monotonic
+from .core import to_8b, to_hom, swap_columns, make_monotonic, to_float
 from .image import (
     change_brightness,
     add_alpha,
@@ -61,7 +61,7 @@ class ProjectorScene:
         :proj_fov: field of view of the projector in degrees.
         :param proj_texture: texture to project as 3D numpy array (h, w, 3) or path to file. if None will shine all-white.
         :param proj_brightness: unitless brightness of the projector texture. the z=1 plane will have this brightness for an all-white texture.
-        :param proj_response_mode: "linear" or "gamma". if "linear", the projector proejcts in linear RGB space. if gamma, it applies **2.2 to the texture before projecting.
+        :param proj_response_mode: projector response function ("linear", "gamma" or "srgb").
         :param ambient_color: constant color for ambient light
         :spp: samples per pixel for the camera.
         # x: positive is away from camera
@@ -250,6 +250,11 @@ class ProjectorScene:
         params.update()
 
     def capture(self, raw=False):
+        """
+        captures an image with the virtual camera.
+        :param raw: if true, will return the raw radiance values using the default units of Mitsuba
+        otherwise, will tonemap the result and convert to srgb (gamma correction).
+        """
         if self.scene is None:
             raise RuntimeError("Scene not created yet.")
         raw_render = mi.render(self.scene)
@@ -268,59 +273,12 @@ class ProjectorScene:
         return final_image
 
 
-def offline_radiomatric_calibrate():
-    """
-    performs off-line radiometric calibration.
-    based on "A Projection System with Radiometric Compensation for Screen Imperfections"
-    radiometric model at pixel x:
-        C_x = V_x @ p(I_y) + F_x
-    where:
-    - C: measured camera RGB of pixel x
-    - I: projector RGB input of pixel y, which maps to x after geometric calibration
-    - p: per-channel nonlinear response, applied elementwise (global)
-    - V_x: 3x3 per-pixel color mixing matrix
-    - F_x: 3-vector per-pixel ambient/floor illumination and black level projector image
-    returns: F (ambient image), invV (inverse per-pixel color mixing matrix), p^-1 (inverse response curve)
-    """
-    # capture off_image, red_image, green_image, blue_image
-    # get camera response function
-    # call estimate_color_mixing_matrix() to get V
-    # call estimate_projector_inverse_response() to get p^-1
-    # return F, invV, p_inv_response
-    raise NotImplementedError("This function is not implemented yet.")
-
-
-def online_radiometric_compensate():
-    """
-    performs online radiometric compensation.
-    based on "A Projection System with Radiometric Compensation for Screen Imperfections"
-    radiometric model at pixel x:
-        C_x = V_x @ p(I_y) + F_x
-    where:
-    - C: measured camera RGB of pixel x
-    - I: projector RGB input of pixel y, which maps to x after geometric calibration
-    - p: per-channel nonlinear response, applied elementwise (global)
-    - V_x: 3x3 per-pixel color mixing matrix
-    - F_x: 3-vector per-pixel ambient/floor illumination and black level projector image
-    :param desired_C: the desried image to be seen by camera (H,W,3)
-    :param F: ambient image taken when projector projects all black (H,W,3)
-    :param invV: the per-pixel inverse color mixing matrix (H,W,3,3)
-    :param p_inv_response: the per-channel inverse response function as tuples of start and end points on the curve
-    returns projector input I of same shape as desired_C
-    """
-    # compensate using the formula:
-    # I_y = p^-1((C_x - F_x) @ invV_x)
-    raise NotImplementedError("This function is not implemented yet.")
-
-
 def estimate_color_mixing_matrix(
     off_image,
     red_image,
     green_image,
     blue_image,
-    cam_inv_response,
-    bump_value_low=80,
-    bump_value_high=170,
+    cam_inv_response=None,
 ):
     """
     estimates the color mixing matrix V per-pixel for a projector-camera pair.
@@ -334,9 +292,7 @@ def estimate_color_mixing_matrix(
     :param red_image: image taken when projector projects constant value of "bump_value_low", except red channel which is "bump_value_high"
     :param green_image: image taken when projector projects constant value of "bump_value_low", except green channel which is "bump_value_high"
     :param blue_image: image taken when projector projects constant value of "bump_value_low", except blue channel which is "bump_value_high"
-    :param cam_inv_response: a list of inverse response functions per channel, each is a callable that maps radiance to input value (pass identity for linear camera).
-    :param bump_value_low: the constant uint8 value used in the off_image
-    :param bump_value_high: the constant uint8 value used in each of the red, green, blue images (in the respected channel)
+    :param cam_inv_response: a list of inverse response functions per channel, each is a callable that maps radiance to input value (pass None for linear camera).
     :return: a 3D numpy array of shape (H, W, 3, 3) representing the color mixing matrix V.
     """
     H, W, _ = off_image.shape
@@ -358,31 +314,31 @@ def estimate_color_mixing_matrix(
         I_r = red_image
         I_g = green_image
         I_b = blue_image
+    # I_off = to_float(I_off)
+    # I_r = to_float(I_r)
+    # I_g = to_float(I_g)
+    # I_b = to_float(I_b)
+    assert I_off.dtype == np.float32
+    V = np.tile(np.eye(3)[None, None, ...], (H, W, 1, 1))
+    dr = np.clip(I_r - I_off, 0.0, None)
+    Vrg = dr[..., 1] / (dr[..., 0] + 1e-6)
+    Vrb = dr[..., 2] / (dr[..., 0] + 1e-6)
+    dg = np.clip(I_g - I_off, 0.0, None)
+    Vgr = dg[..., 0] / (dg[..., 1] + 1e-6)
+    Vgb = dg[..., 2] / (dg[..., 1] + 1e-6)
+    db = np.clip(I_b - I_off, 0.0, None)
+    Vbr = db[..., 0] / (db[..., 2] + 1e-6)
+    Vbg = db[..., 1] / (db[..., 2] + 1e-6)
+    V[:, :, 0, 1] = Vrg
+    V[:, :, 0, 2] = Vrb
+    V[:, :, 1, 0] = Vgr
+    V[:, :, 1, 2] = Vgb
+    V[:, :, 2, 0] = Vbr
+    V[:, :, 2, 1] = Vbg
 
-    # Known input bump values (RGB)
-    delta_inputs = np.array(
-        [
-            [bump_value_low, 0, 0],  # red bump
-            [0, bump_value_low, 0],  # green bump
-            [0, 0, bump_value_low],  # blue bump
-        ],
-        dtype=np.float32,
-    ).T  # shape: (3, 3)
-
-    # Compute per-pixel response deltas
-    delta_outputs = np.stack(
-        [I_r - I_off, I_g - I_off, I_b - I_off], axis=-1
-    )  # shape: (H, W, 3, 3)
-
-    # Solve 3x3 system per pixel: delta_outputs = V * delta_inputs
-    # So V = delta_outputs @ inv(delta_inputs)
-    inv_input = np.linalg.inv(delta_inputs)
-
-    for y in range(H):
-        for x in range(W):
-            V[y, x] = delta_outputs[y, x] @ inv_input
-
-    return V
+    # Solve 3x3 system per pixel
+    inv_V = np.linalg.inv(V)
+    return inv_V
 
 
 def estimate_projector_inverse_response(
@@ -414,10 +370,11 @@ def estimate_projector_inverse_response(
             "Length of input_values must match number of input images (N)."
         )
 
+    if C == 4:  # discard alpha channel
+        C = 3
     inverse_functions = []
     if fg_mask is None:
         fg_mask = np.ones((H, W), dtype=bool)
-    breakpoint()
     for c in range(C):
         channel_data = measured_radiance[..., c]  # shape: (N, H, W)
         channel_data = channel_data[:, fg_mask]  # shape: (N, fg_count)
@@ -432,7 +389,6 @@ def estimate_projector_inverse_response(
             fill_value=(input_values[0], input_values[-1]),
         )
         inverse_functions.append(interp_fn)
-
     return inverse_functions  # list of callables, one per channel
 
 
@@ -454,14 +410,16 @@ def compute_compensation_image(
     if cam_inverse_response is not None:
         C = np.zeros_like(orig_image, dtype=np.float32)
         for channel in n_channels:
-            C[..., channek] = cam_inverse_response(orig_image[..., channel])
+            C[..., channel] = cam_inverse_response[channel](orig_image[..., channel])
     else:
         C = orig_image
-    P = Vinv @ C
+    H, W, _ = C.shape
+    # P = Vinv @ C
+    P = np.matmul(Vinv.reshape(-1, 3, 3), C.reshape(-1, 3, 1)).reshape(H, W, 3)
     if proj_inverse_response is not None:
         I = np.zeros_like(orig_image, dtype=np.float32)
         for channel in range(n_channels):
-            I[..., channel] = proj_inverse_response(P[..., channel])
+            I[..., channel] = proj_inverse_response[channel](P[..., channel])
     else:
         I = P
     return I
@@ -619,16 +577,16 @@ def naive_color_compensate(
         output_path = Path(output_path)
         output_path.parent.mkdir(parents=True, exist_ok=True)
     target_image = load_image(
-        target_image, to_float=True, resize_wh=(cam_width, cam_height)
+        target_image, as_float=True, resize_wh=(cam_width, cam_height)
     )[..., :3]
     target_image = change_brightness(target_image, brightness_decrease)
     if debug:
         save_image(target_image, Path(output_path.parent, "decrease_brightness.png"))
     all_white_image = load_image(
-        all_white_image, to_float=True, resize_wh=(cam_width, cam_height)
+        all_white_image, as_float=True, resize_wh=(cam_width, cam_height)
     )
     all_black_image = load_image(
-        all_black_image, to_float=True, resize_wh=(cam_width, cam_height)
+        all_black_image, as_float=True, resize_wh=(cam_width, cam_height)
     )
     compensated = (target_image - all_black_image) / all_white_image
     compensated = np.power(compensated, (1 / projector_gamma))
@@ -1025,7 +983,7 @@ def reconstruct_pointcloud(
 
 class GrayCode:
     """
-    a class that handles encoding and decoding graycode patterns
+    a class that handles encoding and decoding binary graycode patterns
     """
 
     def encode1d(self, length):
