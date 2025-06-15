@@ -182,6 +182,8 @@ class ProjectorScene:
                     up=[0, 0, 1],  # Z-up
                 ),
                 "fov": proj_fov,
+                "principal_point_offset_x": 0.0,
+                "principal_point_offset_y": 0.0,
                 "response_mode": proj_response_mode,
             },
             "ambient": {

@@ -40,6 +40,8 @@ class ProjectorPy(mi.Emitter):
         # val = self.m_irradiance.eval(it_query, True)
         size = self.m_irradiance.resolution()
         self.m_x_fov = float(mi.parse_fov(props, size[0] / float(size[1])))
+        self.m_principal_point_offset_x = props.get("principal_point_offset_x", 0.0)
+        self.m_principal_point_offset_y = props.get("principal_point_offset_y", 0.0)
         self.parameters_changed()
         self.m_flags = mi.EmitterFlags.DeltaPosition
         self.response_mode = props.get("response_mode", "linear")
@@ -125,10 +127,12 @@ class ProjectorPy(mi.Emitter):
     def sample_direction(self, it, sample, active=True):
         # 1. Transform the reference point into the local coordinate system
         it_local = self.m_to_world.inverse().transform_affine(it.p)
-
         # 2. Map to UV coordinates
         uv = self.m_camera_to_sample @ it_local
-        uv = mi.Point2f(uv.x, uv.y)
+        uv = mi.Point2f(
+            uv.x - self.m_principal_point_offset_x,
+            uv.y - self.m_principal_point_offset_y,
+        )
         active &= dr.all(uv >= 0) & dr.all(uv <= 1) & (it_local.z > 0)
 
         # 3. Query texture
@@ -153,7 +157,6 @@ class ProjectorPy(mi.Emitter):
         # print(ds.n)
         # print(ds.d)
         # print(dr.dot(ds.n, ds.d))
-        # breakpoint()
         if hasattr(mi, "EmitterPtr"):
             ds.emitter = mi.EmitterPtr(self)
         else:
