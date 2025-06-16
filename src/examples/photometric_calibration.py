@@ -9,12 +9,29 @@ def create_scene(proj_wh, cam_wh):
     helper function creating a mitsuba scene with a projector-camera pair
     """
     projector_scene = gsoup.ProjectorScene()
+    proj_cv_K = np.array(
+        [
+            [proj_wh[0], 0.0, proj_wh[0] / 2],
+            [0.0, proj_wh[1], proj_wh[1] / 2],
+            [0.0, 0.0, 1.0],
+        ]
+    )
+    cam_cv_K = np.array(
+        [
+            [cam_wh[0], 0.0, cam_wh[0] / 2],
+            [0.0, cam_wh[1], cam_wh[1] / 2],
+            [0.0, 0.0, 1.0],
+        ]
+    )
     projector_scene.create_default_scene(
         proj_wh=proj_wh,
         cam_wh=cam_wh,
-        proj_fov=45.0,
-        cam_fov=45.0,
+        cam_cv_K=cam_cv_K,
+        proj_cv_K=proj_cv_K,
+        # proj_fov=45.0,
+        # cam_fov=45.0,
         proj_brightness=2.0,
+        spp=512,
     )
     transform = (
         mi.ScalarTransform4f().look_at(
@@ -124,13 +141,13 @@ if __name__ == "__main__":
     )
     gsoup.save_image(
         result["compensation_image"],
-        Path("resource/photometric_compensation/compensated.png"),
+        Path("resource/photometric_compensation/_compensated.png"),
     )
     gsoup.save_image(
         result["texture_float"],
-        Path("resource/photometric_compensation/uncompensated.png"),
+        Path("resource/photometric_compensation/_uncompensated.png"),
     )
     gsoup.save_image(
         texture_float,
-        Path("resource/photometric_compensation/target.png"),
+        Path("resource/photometric_compensation/_target.png"),
     )

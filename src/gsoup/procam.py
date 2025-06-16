@@ -45,8 +45,14 @@ class ProjectorScene:
         self,
         cam_wh=(256, 256),
         cam_fov=45,
+        cam_cx=0.5,
+        cam_cy=0.5,
+        cam_cv_K=None,
         proj_wh=(256, 256),
         proj_fov=45,
+        proj_cx=0.5,
+        proj_cy=0.5,
+        proj_cv_K=None,
         proj_texture=None,
         proj_brightness=1.0,
         proj_response_mode="srgb",
@@ -57,8 +63,14 @@ class ProjectorScene:
         Create a default Mitsuba scene with a projector, camera, constant ambient light and two diffuse screens perpendicular to the projector.
         :cam_wh: camera resolution as a tuple (width, height).
         :cam_fov: field of view of the camera in degrees.
+        :cam_cx: x coord of principal point of camera in normalized coordinates (0.5=center).
+        :cam_cy: y coord of principal point of camera in normalized coordinates (0.5=center).
+        :cam_cv_K: opencv style intrinsics for camera (will override fov/cx/cy).
         :proj_wh: projector resolution as a tuple (width, height).
         :proj_fov: field of view of the projector in degrees.
+        :proj_cx: x coord of principal point of projector in normalized coordinates (0.5=center).
+        :proj_cy: y coord of principal point of projector in normalized coordinates (0.5=center).
+        :proj_cv_K: opencv style intrinsics for projector (will override fov/cx/cy).
         :param proj_texture: texture to project as 3D numpy array (h, w, 3) or path to file. if None will shine all-white.
         :param proj_brightness: unitless brightness of the projector texture. the z=1 plane will have this brightness for an all-white texture.
         :param proj_response_mode: projector response function ("linear", "gamma" or "srgb").
@@ -88,6 +100,31 @@ class ProjectorScene:
                 )
             else:
                 raise TypeError("proj_texture must be a numpy array or a file path.")
+        if proj_cv_K is None:
+            # mitsuba expects normalized coordinates relative to screen center rather than corner
+            proj_cx = proj_cx - 0.5
+            proj_cy = proj_cy - 0.5
+        else:
+            assert proj_cv_K.shape == (3, 3)
+            # mitsuba expects normalized coordinates relative to screen center rather than corner
+            proj_cx = (proj_cv_K[0, 2] / proj_wh[0]) - 0.5
+            proj_cy = (proj_cv_K[1, 2] / proj_wh[1]) - 0.5
+            # mistuba expects fov in degrees
+            proj_fov = self.focal_length_to_fov(proj_cv_K[0, 0], proj_wh[0])
+            # fy = focal_length_to_fov(proj_cv_K[1, 1], proj_wh[1])
+        if cam_cv_K is None:
+            # mitsuba expects normalized coordinates relative to screen center rather than corner
+            cam_cx = cam_cx - 0.5
+            cam_cy = cam_cy - 0.5
+        else:
+            assert cam_cv_K.shape == (3, 3)
+            # mitsuba expects normalized coordinates relative to screen center rather than corner
+            cam_cx = (cam_cv_K[0, 2] / cam_wh[0]) - 0.5
+            cam_cy = (cam_cv_K[1, 2] / cam_wh[1]) - 0.5
+            # mistuba expects fov in degrees
+            cam_fov = self.focal_length_to_fov(cam_cv_K[0, 0], cam_wh[0])
+            # fy = focal_length_to_fov(proj_cv_K[1, 1], proj_wh[1])
+
         scene_dict = {
             "type": "scene",
             "proj_texture": {
@@ -96,11 +133,13 @@ class ProjectorScene:
             "integrator": {
                 "type": "path",
                 "hide_emitters": True,
-                "max_depth": 6,
+                "max_depth": 8,
             },
             "camera": {
                 "type": "perspective",
                 "fov": cam_fov,
+                "principal_point_offset_x": cam_cx,
+                "principal_point_offset_y": cam_cy,
                 "to_world": mi.ScalarTransform4f().look_at(
                     origin=[2.5, 0, 0.3],  # along +X axis
                     target=[0, 0, 0],
@@ -111,31 +150,13 @@ class ProjectorScene:
                     "width": cam_wh[0],
                     "height": cam_wh[1],
                     "pixel_format": "rgba",
-                    "rfilter": {"type": "box"},
+                    "rfilter": {"type": "gaussian"},
                 },
                 "sampler": {
                     "type": "independent",
                     "sample_count": spp,  # number of samples per pixel
                 },
             },
-            # "sphere1": {
-            #     "type": "sphere",
-            #     "center": [0, 0, 0],
-            #     "radius": 0.5,
-            #     "bsdf": {
-            #         "type": "diffuse",
-            #         "reflectance": {"type": "rgb", "value": [1.0, 1.0, 1.0]},
-            #     },
-            # },
-            # "sphere2": {
-            #     "type": "sphere",
-            #     "center": [-1, -1, 0],
-            #     "radius": 0.5,
-            #     "bsdf": {
-            #         "type": "diffuse",
-            #         "reflectance": {"type": "rgb", "value": [1.0, 1.0, 1.0]},
-            #     },
-            # },
             "wall1": {
                 "type": "rectangle",
                 "to_world": mi.ScalarTransform4f()
@@ -158,14 +179,6 @@ class ProjectorScene:
             #         "reflectance": {"type": "rgb", "value": [1.0, 1.0, 1.0]},
             #     },
             # },
-            # "light": {
-            #     "type": "point",
-            #     "position": [0, 0, 2],  # @ z_up_transform,  # above the sphere)
-            #     "intensity": {
-            #         "type": "rgb",
-            #         "value": 1.0,
-            #     },
-            # },
             "projector": {
                 "type": "projector_py",
                 "irradiance": {
@@ -182,8 +195,8 @@ class ProjectorScene:
                     up=[0, 0, 1],  # Z-up
                 ),
                 "fov": proj_fov,
-                "principal_point_offset_x": 0.0,
-                "principal_point_offset_y": 0.0,
+                "principal_point_offset_x": proj_cx,
+                "principal_point_offset_y": proj_cy,
                 "response_mode": proj_response_mode,
             },
             "ambient": {
@@ -201,6 +214,11 @@ class ProjectorScene:
         # disk image aren't usually linear, but for consistency we assume the texture is linear RGB
         scene_dict["proj_texture"]["raw"] = True
         self.scene = mi.load_dict(scene_dict)
+
+    def focal_length_to_fov(self, focal_length_px, image_width):
+        fov_rad = 2 * np.arctan(image_width / (2 * focal_length_px))
+        fov_deg = np.rad2deg(fov_rad)
+        return fov_deg
 
     def set_projector_texture(self, texture):
         """
