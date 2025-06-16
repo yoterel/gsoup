@@ -31,7 +31,7 @@ def create_scene(proj_wh, cam_wh):
         # proj_fov=45.0,
         # cam_fov=45.0,
         proj_brightness=2.0,
-        spp=512,
+        spp=256,
     )
     transform = (
         mi.ScalarTransform4f().look_at(

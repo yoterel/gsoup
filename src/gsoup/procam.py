@@ -150,7 +150,7 @@ class ProjectorScene:
                     "width": cam_wh[0],
                     "height": cam_wh[1],
                     "pixel_format": "rgba",
-                    "rfilter": {"type": "gaussian"},
+                    "rfilter": {"type": "box"},
                 },
                 "sampler": {
                     "type": "independent",
