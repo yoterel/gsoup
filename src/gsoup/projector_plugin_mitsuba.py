@@ -5,6 +5,7 @@ from .image import srgb_to_linear
 
 mi.set_variant(
     "llvm_ad_rgb"
+    # "llvm_ad_spectral"
     # "scalar_rgb"
 )  # "llvm_ad_rgb", "scalar_rgb" # must set before defining the emitter
 

@@ -77,7 +77,7 @@ if __name__ == "__main__":
     ################## offline steps for photometric calibration ##################
     # 0. create a scene
     scene = create_scene(proj_wh, cam_wh)
-    # 1. create patterns
+    # 1. create patterns for calibration
     # test_texture = gsoup.generate_voronoi_diagram(512, 512, 1000)
     # test_texture = gsoup.to_float(test_texture)
     patterns = {
@@ -87,6 +87,8 @@ if __name__ == "__main__":
         "red_image": np.ones(proj_wh + (3,), dtype=np.float32) * low_val,
         "green_image": np.ones(proj_wh + (3,), dtype=np.float32) * low_val,
         "blue_image": np.ones(proj_wh + (3,), dtype=np.float32) * low_val,
+        "on_image": np.ones(proj_wh + (3,), dtype=np.float32) * high_val,
+        "white_image": np.ones(proj_wh + (3,), dtype=np.float32),
     }
     patterns["red_image"][:, :, 0] = high_val
     patterns["green_image"][:, :, 1] = high_val
@@ -125,8 +127,9 @@ if __name__ == "__main__":
     )
     ################## online steps for photometric calibration ##################
     # 1. load/create pattern to project
-    texture = gsoup.generate_voronoi_diagram(512, 512, 1000)
-    texture_float = gsoup.to_float(texture)
+    # texture = gsoup.generate_voronoi_diagram(512, 512, 1000)
+    # texture_float = gsoup.to_float(texture)
+    texture_float = np.ones((512, 512, 3), dtype=np.float32)
     # 2. compute compensation image
     compensation_image = gsoup.compute_compensation_image(
         texture_float,

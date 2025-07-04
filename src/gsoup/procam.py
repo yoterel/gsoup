@@ -124,11 +124,15 @@ class ProjectorScene:
             # mistuba expects fov in degrees
             cam_fov = self.focal_length_to_fov(cam_cv_K[0, 0], cam_wh[0])
             # fy = focal_length_to_fov(proj_cv_K[1, 1], proj_wh[1])
-
         scene_dict = {
             "type": "scene",
             "proj_texture": {
                 "type": "bitmap",
+            },
+            "wall_texture": {
+                "type": "checkerboard",
+                "color0": {"type": "rgb", "value": [0.6, 0.9, 0.6]},
+                "color1": {"type": "rgb", "value": [0.9, 0.6, 0.6]},
             },
             "integrator": {
                 "type": "path",
@@ -165,7 +169,12 @@ class ProjectorScene:
                 # "flip_normals": True,
                 "bsdf": {
                     "type": "diffuse",
-                    "reflectance": {"type": "rgb", "value": [1.0, 1.0, 1.0]},
+                    "reflectance": {
+                        "type": "ref",
+                        "id": "wall_texture",
+                        # "type": "rgb",
+                        # "value": [1.0, 1.0, 1.0],
+                    },
                 },
             },
             # "wall2": {
