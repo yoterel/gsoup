@@ -546,6 +546,7 @@ def compute_backward_map(
     :param debug: if True, saves a visualization of the backward map to output_dir (R=X, G=Y, B=0) where X increases from left to right and Y increases from top to bottom
     :return: backward map as a numpy array of shape (projector_height, projector_width, 2) of type int32, last channel encodes (height, width).
     """
+    #### TODO: return subpixel accurate map using median / averaging / both
     if output_dir is not None:
         output_dir = Path(output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)

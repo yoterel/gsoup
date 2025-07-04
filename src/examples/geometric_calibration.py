@@ -43,6 +43,7 @@ if __name__ == "__main__":
         captured_patterns[0].shape[0],
     )
     # finally, decode the captured images
+    # TODO: seperate direct and indirect light, and use only direct channel for better inlier detection
     # the result is a dense map from camera pixels to projector pixels and a foreground mask
     forward_map, fg = gray.decode(
         captured_patterns,
