@@ -129,7 +129,7 @@ if __name__ == "__main__":
     # 1. load/create pattern to project
     # texture = gsoup.generate_voronoi_diagram(512, 512, 1000)
     # texture_float = gsoup.to_float(texture)
-    texture_float = np.ones((512, 512, 3), dtype=np.float32)
+    texture_float = np.ones((512, 512, 3), dtype=np.float32) * 0.85
     # 2. compute compensation image
     compensation_image = gsoup.compute_compensation_image(
         texture_float,

@@ -381,7 +381,7 @@ def estimate_projector_inverse_response(
     :param measured_radiance: np.ndarray of shape (N, H, W) or (N, H, W, C)
     :param input_values: np.ndarray of input intensity values. If None, assumes np.arange(N).
     :param fg_mask: foreground mask of shape (H, W) or None. If provided, only uses pixels where fg_mask is True.
-    :return: list of interp1d functions, one per channel. Each maps radiance → input value.
+    :return: np.ndarray (H, W, C) of interp1d functions. Each maps radiance -> input value.
     """
     # Validate input
     if measured_radiance.ndim == 3:
@@ -401,24 +401,26 @@ def estimate_projector_inverse_response(
 
     if C == 4:  # discard alpha channel
         C = 3
-    inverse_functions = []
     if fg_mask is None:
         fg_mask = np.ones((H, W), dtype=bool)
+    inverse_maps = np.empty((H, W, C), dtype=object)
     for c in range(C):
-        channel_data = measured_radiance[..., c]  # shape: (N, H, W)
-        channel_data = channel_data[:, fg_mask]  # shape: (N, fg_count)
-        avg_radiance = channel_data.mean(axis=-1)  # shape: (N,)
-        avg_radiance = make_monotonic(avg_radiance, increasing=True)
-        # Create inverse interpolation: radiance → input value
-        interp_fn = interp1d(
-            avg_radiance,
-            input_values,
-            kind="linear",
-            bounds_error=False,
-            fill_value=(input_values[0], input_values[-1]),
-        )
-        inverse_functions.append(interp_fn)
-    return inverse_functions  # list of callables, one per channel
+        for x in range(W):
+            for y in range(H):
+                if fg_mask[y, x]:
+                    radiance = measured_radiance[..., y, x, c]  # shape: (N, H, W)
+                    radiance = make_monotonic(radiance, increasing=True)
+                    interp_fn = interp1d(
+                        radiance,
+                        input_values,
+                        kind="linear",
+                        bounds_error=False,
+                        fill_value=(input_values[0], input_values[-1]),
+                    )
+                    inverse_maps[y, x, c] = interp_fn
+                else:
+                    inverse_maps[y, x, c] = None
+    return inverse_maps  # list of callables, one per channel
 
 
 def compute_compensation_image(
@@ -433,7 +435,7 @@ def compute_compensation_image(
     :param image: the desired image to be seen by camera (H,W,3)
     :param Vinv: the per-pixel inverse color mixing matrix (H,W,3,3)
     :param cam_inverse_response: a list of callables per channel that map camera pixel values to radiance.
-    :param proj_inverse_response: a list of callables per channel that maps projector radiance to pixel values.
+    :param proj_inverse_response: a per-pixel callable that maps projector radiance to pixel values.
     """
     n_channels = orig_image.shape[-1]
     if cam_inverse_response is not None:
@@ -448,7 +450,12 @@ def compute_compensation_image(
     if proj_inverse_response is not None:
         I = np.zeros_like(orig_image, dtype=np.float32)
         for channel in range(n_channels):
-            I[..., channel] = proj_inverse_response[channel](P[..., channel])
+            for x in np.arange(W):
+                for y in np.arange(H):
+                    if proj_inverse_response[y, x, channel] is not None:
+                        I[y, x, channel] = proj_inverse_response[y, x, channel](
+                            P[y, x, channel]
+                        )
     else:
         I = P
     return I
