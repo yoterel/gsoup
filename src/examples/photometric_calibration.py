@@ -127,9 +127,10 @@ if __name__ == "__main__":
     )
     ################## online steps for photometric calibration ##################
     # 1. load/create pattern to project
-    # texture = gsoup.generate_voronoi_diagram(512, 512, 1000)
-    # texture_float = gsoup.to_float(texture)
-    texture_float = np.ones((512, 512, 3), dtype=np.float32) * 0.5
+    texture = gsoup.generate_voronoi_diagram(512, 512, 1000)
+    # reduce brightness for compensation to work
+    texture_float = gsoup.to_float(texture) * 0.75
+    # texture_float = np.ones((512, 512, 3), dtype=np.float32) * 0.5
     # 2. compute compensation image
     compensation_image = gsoup.compute_compensation_image(
         texture_float,
