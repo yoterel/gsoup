@@ -115,15 +115,23 @@ if __name__ == "__main__":
         blue_image=captured["blue_image"],
         cam_inv_response=None,
     )
+    V = np.linalg.inv(inv_v)  # V is the color mixing matrix
     # 7. find projector inverse response function
     measured = np.stack(
         [captured["gray_{:03d}".format(i)] for i in range(n_samples_per_channel)],
         axis=0,
     )
-    proj_response = gsoup.estimate_projector_inverse_response(
+    proj_response = gsoup.estimate_projector_response(
         measured,
         input_values=input_values,
         fg_mask=None,
+    )
+
+    proj_response_forward = gsoup.estimate_projector_response(
+        measured,
+        input_values=input_values,
+        fg_mask=None,
+        inverse=False,  # forward response
     )
     ################## online steps for photometric calibration ##################
     # 1. load/create pattern to project
@@ -138,6 +146,13 @@ if __name__ == "__main__":
         cam_inverse_response=None,
         proj_inverse_response=proj_response,
     )
+
+    simulation_img = gsoup.procam.compute_compensation_image(
+    texture_float,
+    V,
+    cam_inverse_response=None,
+    proj_inverse_response=proj_response_forward)
+    
     # 3. project compensation image and uncompensated for comaprisons
     result = simulate_procam(
         {"compensation_image": compensation_image, "texture_float": texture_float},
@@ -154,4 +169,8 @@ if __name__ == "__main__":
     gsoup.save_image(
         texture_float,
         Path("resource/photometric_compensation/_target.png"),
+    )
+    gsoup.save_image(
+        simulation_img,
+        Path("resource/photometric_compensation/_simulation.png"),
     )

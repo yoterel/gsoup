@@ -370,10 +370,11 @@ def estimate_color_mixing_matrix(
     return inv_V
 
 
-def estimate_projector_inverse_response(
+def estimate_projector_response(
     measured_radiance,  # shape: (N, H, W) or (N, H, W, C)
     input_values=None,  # shape: (N,)
     fg_mask=None,  # shape: (H, W) or None
+    inverse=True,
 ):
     """
     estimate inverse response per channel of a projector
@@ -410,12 +411,18 @@ def estimate_projector_inverse_response(
                 if fg_mask[y, x]:
                     radiance = measured_radiance[..., y, x, c]  # shape: (N, H, W)
                     radiance = make_monotonic(radiance, increasing=True)
+                    if inverse:
+                        source = radiance
+                        target = input_values
+                    else:
+                        source = input_values
+                        target = radiance
                     interp_fn = interp1d(
-                        radiance,
-                        input_values,
+                        source,
+                        target,
                         kind="linear",
                         bounds_error=False,
-                        fill_value=(input_values[0], input_values[-1]),
+                        fill_value=(target[0], target[-1]),
                     )
                     inverse_maps[y, x, c] = interp_fn
                 else:
