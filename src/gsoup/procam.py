@@ -5,6 +5,7 @@ from .gsoup_io import (
     save_images,
     load_images,
     load_image,
+    save_mesh,
     write_exr,
 )
 from .transforms import compose_rt
@@ -22,6 +23,7 @@ from scipy.interpolate import LinearNDInterpolator, interp1d
 from scipy.spatial import ConvexHull
 from .projector_plugin_mitsuba import ProjectorPy
 import mitsuba as mi
+import drjit as dr
 
 
 class ProjectorScene:
@@ -57,6 +59,11 @@ class ProjectorScene:
         proj_brightness=1.0,
         proj_response_mode="srgb",
         ambient_color=[0.01, 0.01, 0.01],
+        mesh_file=None,
+        mesh_scale=1.0,
+        cb_tex_col1=[0.6, 0.9, 0.6],
+        cb_tex_col2=[0.9, 0.6, 0.6],
+        cb_tex_scale=5.0,
         spp=256,
     ):
         """
@@ -75,10 +82,16 @@ class ProjectorScene:
         :param proj_brightness: unitless brightness of the projector texture. the z=1 plane will have this brightness for an all-white texture.
         :param proj_response_mode: projector response function ("linear", "gamma" or "srgb").
         :param ambient_color: constant color for ambient light
+        :param mesh_file: path to a mesh file to add to the scene. if None, a perpendicular wall will be added.
+        :param mesh_scale: scale of the mesh in the scene.
+        :cb_tex_col1: color of the first checkerboard square type.
+        :cb_tex_col2: color of the second checkerboard square type.
+        :cb_tex_scale: scale of the checkerboard texture.
         :spp: samples per pixel for the camera.
-        # x: positive is away from camera
-        # y: positive is right
-        # z: positive is up
+        For Mitsuba, sensors have:
+        # Z: forward direction
+        # Y: up direction
+        # X: left
         :return: the Mitsuba scene object.
         """
         self.proj_wh = proj_wh
@@ -131,8 +144,11 @@ class ProjectorScene:
             },
             "wall_texture": {
                 "type": "checkerboard",
-                "color0": {"type": "rgb", "value": [0.6, 0.9, 0.6]},
-                "color1": {"type": "rgb", "value": [0.9, 0.6, 0.6]},
+                "color0": {"type": "rgb", "value": cb_tex_col1},
+                "color1": {"type": "rgb", "value": cb_tex_col2},
+                "to_uv": mi.ScalarTransform4f().scale(
+                    [cb_tex_scale, cb_tex_scale, cb_tex_scale]
+                ),
             },
             "integrator": {
                 "type": "path",
@@ -144,6 +160,8 @@ class ProjectorScene:
                 "fov": cam_fov,
                 "principal_point_offset_x": cam_cx,
                 "principal_point_offset_y": cam_cy,
+                "near_clip": 0.01,
+                "far_clip": 10000,
                 "to_world": mi.ScalarTransform4f().look_at(
                     origin=[2.5, 0, 0.3],  # along +X axis
                     target=[0, 0, 0],
@@ -161,33 +179,6 @@ class ProjectorScene:
                     "sample_count": spp,  # number of samples per pixel
                 },
             },
-            "wall1": {
-                "type": "rectangle",
-                "to_world": mi.ScalarTransform4f()
-                .translate([-2.0, 0.0, 0.0])
-                .rotate([0, 1, 0], 90),
-                # "flip_normals": True,
-                "bsdf": {
-                    "type": "diffuse",
-                    "reflectance": {
-                        "type": "ref",
-                        "id": "wall_texture",
-                        # "type": "rgb",
-                        # "value": [1.0, 1.0, 1.0],
-                    },
-                },
-            },
-            # "wall2": {
-            #     "type": "rectangle",
-            #     "to_world": mi.ScalarTransform4f()
-            #     .translate([-2.0, -1.0, 0.0])
-            #     .rotate([0, 1, 0], 90),
-            #     # "flip_normals": True,
-            #     "bsdf": {
-            #         "type": "diffuse",
-            #         "reflectance": {"type": "rgb", "value": [1.0, 1.0, 1.0]},
-            #     },
-            # },
             "projector": {
                 "type": "projector_py",
                 "irradiance": {
@@ -222,6 +213,120 @@ class ProjectorScene:
             # scene_dict["proj_texture"]["filename"] = proj_texture
         # disk image aren't usually linear, but for consistency we assume the texture is linear RGB
         scene_dict["proj_texture"]["raw"] = True
+        if mesh_file is not None:
+            assert mesh_file.suffix in [".obj", ".ply"], "Unsupported mesh file format."
+            scene_dict["geometry"] = {
+                "type": mesh_file.suffix[1:],
+                "filename": str(mesh_file),
+                "bsdf": {
+                    "type": "diffuse",
+                    "reflectance": {
+                        "type": "rgb",
+                        "value": [1.0, 1.0, 1.0],
+                    },
+                },
+                "to_world": mi.ScalarTransform4f().scale(
+                    [mesh_scale, mesh_scale, mesh_scale]
+                ),
+            }
+        else:
+            v = np.array(
+                [
+                    [0, -1.0, -1.0],
+                    [0, -1.0, 1.0],
+                    [0, 1.0, 1.0],
+                    [0, 1.0, -1.0],
+                ],
+                dtype=np.float32,
+            )
+            # v = v * quad_scale  # scale the vertices
+            f = np.array(
+                [
+                    [0, 1, 2, 3],
+                ],
+                dtype=np.int32,
+            )
+            # uv = np.array(
+            #     [
+            #         [0, 0],
+            #         [0, 1],
+            #         [1, 1],
+            #         [1, 0],
+            #     ],
+            #     dtype=np.float32,
+            # )
+            save_mesh(
+                v, f, "resource/square.obj"
+            )  # hack until mitsuba supports set_bsdf
+            square_scale = np.tan((cam_fov / 2) * np.pi / 180)
+            scene_dict["geometry"] = {
+                "type": "obj",
+                "filename": "resource/square.obj",
+                "bsdf": {
+                    "type": "diffuse",
+                    "reflectance": {
+                        "type": "rgb",
+                        "value": [1.0, 1.0, 1.0],
+                    },
+                },
+                "to_world": mi.ScalarTransform4f().scale(
+                    [square_scale, square_scale, square_scale]
+                ),
+            }
+            # scene_dict["geometry"] = {
+            #     "type": "rectangle",
+            #     "to_world": mi.ScalarTransform4f()
+            #     .translate([-2.0, 0.0, 0.0])
+            #     .rotate([0, 1, 0], 90),
+            #     # "flip_normals": True,
+            #     "bsdf": {
+            #         "type": "diffuse",
+            #         "reflectance": {
+            #             "type": "ref",
+            #             "id": "wall_texture",
+            #             # "type": "rgb",
+            #             # "value": [1.0, 1.0, 1.0],
+            #         },
+            #     },
+            # }
+            # quad_scale = np.tan((cam_fov / 2) * np.pi / 180)
+            # wall_bsdf = mi.load_dict(
+            #     {
+            #         "type": "diffuse",
+            #         "reflectance": {
+            #             # "type": "ref",
+            #             # "id": "wall_texture",
+            #             "type": "rgb",
+            #             "value": [1.0, 1.0, 1.0],
+            #         },
+            #     }
+            # )
+            # mesh = mi.Mesh(
+            #     "wall",
+            #     vertex_count=4,
+            #     face_count=2,
+            #     has_vertex_normals=False,
+            #     has_vertex_texcoords=False,
+            #     # bsdf=wall_bsdf,
+            # )
+            # mesh_params = mi.traverse(mesh)
+            # mesh_params["vertex_positions"] = dr.llvm.Float(v.reshape(-1))
+            # mesh_params["faces"] = dr.llvm.UInt(f.reshape(-1))
+            # mesh_params["vertex_texcoords"] = dr.llvm.Float(uv.reshape(-1))
+            # # mesh_params["bsdf"] = {
+            # #     "type": "diffuse",
+            # #     "reflectance": {
+            # #         "type": "ref",
+            # #         "id": "wall_texture",
+            # #         # "type": "rgb",
+            # #         # "value": [1.0, 1.0, 1.0],
+            # #     },
+            # # }
+            # # mesh_params["to_world"] = mi.ScalarTransform4f()
+            # #     .translate([-2.0, 0.0, 0.0])
+            # #     .rotate([0, 1, 0], 90)
+            # mesh_params.update()
+            # scene_dict["geometry"] = mesh
         self.scene = mi.load_dict(scene_dict)
 
     def focal_length_to_fov(self, focal_length_px, image_width):
@@ -277,6 +382,121 @@ class ProjectorScene:
         params = mi.traverse(self.scene)
         params["camera.to_world"] = transform
         params.update()
+
+    def project_point_to_01(self, point_3d, sensor_id="camera"):
+        """
+        Given a Mitsuba 3 scene (Python form), a 3D point, and an optional sensor id,
+        returns the pixel coordinates (x, y) where the point would appear in the sensor image.
+        """
+        # 1. Get the sensor object
+        scene = mi.traverse(self.scene)
+        to_world = scene["camera.to_world"]
+        film_size = scene["camera.film.size"]
+        crop_size = scene["camera.film.crop_size"]
+        crop_offset = scene["camera.film.crop_offset"]
+        x_fov = scene["camera.x_fov"]
+        near_clip = scene["camera.near_clip"]
+        far_clip = scene["camera.far_clip"]
+        principal_x = scene["camera.principal_point_offset_x"]
+        principal_y = scene["camera.principal_point_offset_y"]
+
+        # 2. Transform world position to camera space
+        point_world = mi.Point3f(point_3d)
+        to_camera = to_world.inverse()
+        point_cam = to_camera @ point_world
+        # 3. Get perspective projection matrix
+        persp_mat = mi.perspective_projection(
+            film_size, crop_size, crop_offset, x_fov, near_clip, far_clip
+        )
+        # 4. Project to sample space (homogeneous divide)
+        normalized_cords = (
+            persp_mat @ point_cam
+        )  # already in sample space (i.e. [0, 1])
+        x_norm = normalized_cords.x + principal_x
+        y_norm = normalized_cords.y + principal_y
+        # ndc = ndc / ndc.w
+        # 5. NDC to normalized [0,1], then add principal offset (in normalized units)
+        # x_norm = (ndc.x + 1) * 0.5 + principal_x
+        # y_norm = (ndc.y + 1) * 0.5 + principal_y
+        # 6. Map NDC [-1,1] to pixel space [0,width-1], [0,height-1]
+        # x_pix = (ndc.x + 1) * 0.5 * (film_size[0] - 1)
+        # y_pix = (1 - (ndc.y + 1) * 0.5) * (
+        #     film_size[1] - 1
+        # )  # Mitsuba images are top-to-bottom
+        return x_norm[0], y_norm[0]
+
+    def transform_square_randomly(self, max_trials=1000):
+        """
+        generates a random transformation for the square geometry in the Mitsuba scene.
+        The transformation is valid if the square is fully visible in the camera image and facing the camera.
+        :param max_trials: maximum number of trials to find a valid transformation.
+        :return: a valid transformation matrix (mi.ScalarTransform4f) that can be
+        """
+        if self.scene is None:
+            raise RuntimeError("Scene not created yet.")
+        params = mi.traverse(self.scene)
+        # Rectangle model space corners (in [-1, 1] for unit rectangle centered at origin)
+        # scale = 0.41
+        # corners_local = np.array(
+        #     [
+        #         [0, -scale, -scale],
+        #         [0, -scale, scale],
+        #         [0, scale, scale],
+        #         [0, scale, -scale],
+        #     ]
+        # )
+        corners_local = np.array(params["geometry.vertex_positions"]).reshape(4, 3)
+        # Surface normal of rectangle in world space
+        normal_local = np.array([1, 0, 0])
+        cam_to_world = params["camera.to_world"]
+        world_to_cam = cam_to_world.inverse()
+
+        rng = np.random.default_rng()
+        for trial in range(max_trials):
+            print(trial)
+            # Sample random translation in camera space
+            tx = rng.uniform(-1.0, 1.0)
+            ty = rng.uniform(-1.0, 1.0)
+            tz = rng.uniform(-1.0, 1.0)  # Must be in front of camera
+
+            # Random small rotation around X and Y axes (keep it front-facing)
+            rx = rng.uniform(-90, 90)  # degrees
+            ry = rng.uniform(-90, 90)
+            rz = rng.uniform(-90, 90)
+
+            local_to_world = (
+                mi.ScalarTransform4f().translate([tx, ty, tz])
+                @ mi.ScalarTransform4f().rotate([1, 0, 0], rx)
+                @ mi.ScalarTransform4f().rotate([0, 1, 0], ry)
+                @ mi.ScalarTransform4f().rotate([0, 0, 1], rz)
+            )
+            # local_to_world = mi.ScalarTransform4f()
+
+            # Transform to world space
+            to_world = local_to_world
+            # Transform corners to camera space for projection
+            world_space_corners = [
+                to_world @ mi.ScalarPoint3f(p) for p in corners_local
+            ]
+            # Project to normalized image coordinates
+            projected = [self.project_point_to_01(p) for p in world_space_corners]
+            # Check all points are inside [0, 1] x [0, 1]
+            inside = all((0 <= p[0] <= 1) and (0 <= p[1] <= 1) for p in projected)
+            # Check if surface normal is facing the camera (Z < 0 in camera space)
+            normal_cam = (
+                world_to_cam.matrix
+                @ local_to_world.matrix
+                @ mi.ScalarVector4f(
+                    normal_local[0], normal_local[1], normal_local[2], 0.0
+                )
+            )
+            facing_camera = normal_cam[2][0] < 0
+            if inside and facing_camera:
+                params["geometry.vertex_positions"] = dr.ravel(
+                    np.array(world_space_corners).T
+                )
+                params.update()
+                return to_world
 
     def capture(self, raw=False):
         """

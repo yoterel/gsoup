@@ -103,7 +103,7 @@ if __name__ == "__main__":
     captured = simulate_procam(patterns, scene, synth_V=None)
     # save the captured images
     for name, img in captured.items():
-        gsoup.save_image(img, f"resource/photometric_compensation/{name}.png")
+        gsoup.save_image(img, f"resource/photometric_calibration/{name}.png")
     # 3. we use a "linear" camera here, if not possible we need to find camera response function per channel
     # 4. and linearize camera response function
     # 5. no need to white balance camera channels, color mixing matrix will take care of that
@@ -145,13 +145,13 @@ if __name__ == "__main__":
     )
     gsoup.save_image(
         result["compensation_image"],
-        Path("resource/photometric_compensation/_compensated.png"),
+        Path("resource/photometric_calibration/_compensated.png"),
     )
     gsoup.save_image(
         result["texture_float"],
-        Path("resource/photometric_compensation/_uncompensated.png"),
+        Path("resource/photometric_calibration/_uncompensated.png"),
     )
     gsoup.save_image(
         texture_float,
-        Path("resource/photometric_compensation/_target.png"),
+        Path("resource/photometric_calibration/_target.png"),
     )
