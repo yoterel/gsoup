@@ -2,16 +2,16 @@ import mitsuba as mi
 import drjit as dr
 import numpy as np
 from .image import srgb_to_linear
+
 try:
     mi.set_variant(
         "llvm_ad_rgb"
         # "llvm_ad_spectral"
         # "scalar_rgb"
-    )# must set before defining emitters
+    )  # must set before defining emitters
 except ImportError:
-    mi.set_variant(
-        "scalar_rgb"
-    )
+    mi.set_variant("scalar_rgb")
+
 
 def srgb_response(srgb):
     """

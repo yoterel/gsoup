@@ -35,6 +35,7 @@ class ProjectorScene:
         # mi.set_variant(variant)
         # Register the plugin
         from .projector_plugin_mitsuba import ProjectorPy
+
         mi.register_emitter("projector_py", lambda props: ProjectorPy(props))
         self.scene = None
         self.proj_wh = None  # projector resolution (width, height)
