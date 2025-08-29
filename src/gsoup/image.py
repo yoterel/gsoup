@@ -827,7 +827,7 @@ def srgb_to_linear(srgb):
 def inset(base_image, inset_image, corner="bottom_right", percent=0.2, margin=0.02):
     """
     Embeds an inset image into a base image at one of the corners.
-    
+
     :param base_image: numpy array or torch tensor (b x h x w x c)
     :param inset_image: numpy array or torch tensor (b x h x w x c)
     :param corner: one of "top_left", "top_right", "bottom_left", "bottom_right"
@@ -836,31 +836,33 @@ def inset(base_image, inset_image, corner="bottom_right", percent=0.2, margin=0.
     :return: base image with inset embedded, same type and shape as base_image
     """
     if corner not in ["top_left", "top_right", "bottom_left", "bottom_right"]:
-        raise ValueError("corner must be one of 'top_left', 'top_right', 'bottom_left', 'bottom_right'")
-    
+        raise ValueError(
+            "corner must be one of 'top_left', 'top_right', 'bottom_left', 'bottom_right'"
+        )
+
     if percent <= 0.0 or percent > 1.0:
         raise ValueError("percent must be between 0.0 and 1.0")
-    
+
     if margin < 0.0 or margin >= 1.0:
         raise ValueError("margin must be between 0.0 and 1.0")
-    
+
     # Ensure inputs are 4D (batched)
     if base_image.ndim != 4:
         raise ValueError("base_image must be 4D (b x h x w x c)")
     if inset_image.ndim != 4:
         raise ValueError("inset_image must be 4D (b x h x w x c)")
-    
+
     # Use broadcasting to handle different batch sizes
     base_image, inset_image = broadcast_batch(base_image, inset_image)
-    
+
     # Get dimensions
     base_h, base_w = base_image.shape[1:3]
     inset_h, inset_w = inset_image.shape[1:3]
-    
+
     # Calculate inset size based on longest dimension of base image
     max_base_dim = max(base_h, base_w)
     inset_size = int(max_base_dim * percent)
-    
+
     # Resize inset image to fit within the calculated size while maintaining aspect ratio
     if inset_h > inset_w:
         new_inset_h = inset_size
@@ -868,13 +870,13 @@ def inset(base_image, inset_image, corner="bottom_right", percent=0.2, margin=0.
     else:
         new_inset_w = inset_size
         new_inset_h = int(inset_size * inset_h / inset_w)
-    
+
     # Resize inset image - resize function expects 4D input
     resized_inset = resize(inset_image, new_inset_h, new_inset_w, mode="bilinear")
-    
+
     # Calculate margin in pixels
     margin_pixels = int(max_base_dim * margin)
-    
+
     # Calculate inset position
     if corner == "top_left":
         start_h = margin_pixels
@@ -888,21 +890,21 @@ def inset(base_image, inset_image, corner="bottom_right", percent=0.2, margin=0.
     else:  # bottom_right
         start_h = base_h - margin_pixels - new_inset_h
         start_w = base_w - margin_pixels - new_inset_w
-    
+
     # Ensure inset fits within base image bounds
     start_h = max(0, min(start_h, base_h - new_inset_h))
     start_w = max(0, min(start_w, base_w - new_inset_w))
-    
+
     # Create output image (copy base image)
     if is_np(base_image):
         result = base_image.copy()
     else:
         result = base_image.clone()
-    
+
     # Embed inset image
     end_h = start_h + new_inset_h
     end_w = start_w + new_inset_w
-    
+
     if is_np(result):
         result[:, start_h:end_h, start_w:end_w, :] = resized_inset
     else:
@@ -912,7 +914,7 @@ def inset(base_image, inset_image, corner="bottom_right", percent=0.2, margin=0.
         result[:, :, start_h:end_h, start_w:end_w] = resized_inset
         # Convert back to (b, h, w, c) format
         result = result.permute(0, 2, 3, 1)
-    
+
     return result
 
 
