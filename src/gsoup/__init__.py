@@ -117,6 +117,7 @@ from .image import (
     generate_gaussian_image,
     image_grid,
     grid_image,
+    inset,
     resize,
     resize_images_naive,
     adjust_contrast_brightness,
