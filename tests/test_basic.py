@@ -390,8 +390,10 @@ def test_image():
     assert dist1 < dist2
     test = np.zeros((1, 512, 512, 3), dtype=np.uint8)
     test = gsoup.draw_text_on_image(test, np.array(["target"]))
-    test2 = np.ones((1, 512, 512, 3), dtype=np.uint8)*255
-    test2 = gsoup.draw_text_on_image(test2, np.array(["target"]), color=np.array([0, 0, 0]))
+    test2 = np.ones((1, 512, 512, 3), dtype=np.uint8) * 255
+    test2 = gsoup.draw_text_on_image(
+        test2, np.array(["target"]), color=np.array([0, 0, 0])
+    )
     assert np.any(test) > 0
     color_image = np.random.uniform(size=(512, 512, 3))
     gray_image = gsoup.color_to_gray(color_image)
@@ -404,9 +406,13 @@ def test_image():
     assert inset_image.shape == (1, 512, 512, 3)
     inset_image = gsoup.inset(test, test2, corner="top_right", percent=0.2, margin=0.02)
     assert inset_image.shape == (1, 512, 512, 3)
-    inset_image = gsoup.inset(test, test2, corner="bottom_left", percent=0.2, margin=0.02)
+    inset_image = gsoup.inset(
+        test, test2, corner="bottom_left", percent=0.2, margin=0.02
+    )
     assert inset_image.shape == (1, 512, 512, 3)
-    inset_image = gsoup.inset(test, test2, corner="bottom_right", percent=0.2, margin=0.02)
+    inset_image = gsoup.inset(
+        test, test2, corner="bottom_right", percent=0.2, margin=0.02
+    )
     assert inset_image.shape == (1, 512, 512, 3)
     gsoup.save_image(inset_image[0], "resource/inset.png")
 
