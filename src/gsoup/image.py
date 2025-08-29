@@ -828,8 +828,8 @@ def inset(base_image, inset_image, corner="bottom_right", percent=0.2, margin=0.
     """
     Embeds an inset image into a base image at one of the corners.
     
-    :param base_image: numpy array or torch tensor (b x h x w x c)
-    :param inset_image: numpy array or torch tensor (b x h x w x c)
+    :param base_image: numpy array (b, h, w, c) or torch tensor (b, c, h, w)
+    :param inset_image: numpy array (b, h, w, c) or torch tensor (b, c, h, w)
     :param corner: one of "top_left", "top_right", "bottom_left", "bottom_right"
     :param percent: size of inset as a percentage of base image's longest dimension (0.0 to 1.0)
     :param margin: margin from corner as a percentage of base image's longest dimension (0.0 to 1.0)
@@ -849,13 +849,23 @@ def inset(base_image, inset_image, corner="bottom_right", percent=0.2, margin=0.
         raise ValueError("base_image must be 4D (b x h x w x c)")
     if inset_image.ndim != 4:
         raise ValueError("inset_image must be 4D (b x h x w x c)")
-    
+    was_numpy = False
+    if is_np(base_image):
+        was_numpy = True
+        base_image = to_torch(base_image).permute(
+            0, 3, 1, 2
+        )  # (b, h, w, c) -> (b, c, h, w)
+    if is_np(inset_image):
+        was_numpy = True
+        inset_image = to_torch(inset_image).permute(
+            0, 3, 1, 2
+        )  # (b, h, w, c) -> (b, c, h, w)
     # Use broadcasting to handle different batch sizes
     base_image, inset_image = broadcast_batch(base_image, inset_image)
     
     # Get dimensions
-    base_h, base_w = base_image.shape[1:3]
-    inset_h, inset_w = inset_image.shape[1:3]
+    base_h, base_w = base_image.shape[2:]
+    inset_h, inset_w = inset_image.shape[2:]
     
     # Calculate inset size based on longest dimension of base image
     max_base_dim = max(base_h, base_w)
@@ -902,17 +912,10 @@ def inset(base_image, inset_image, corner="bottom_right", percent=0.2, margin=0.
     # Embed inset image
     end_h = start_h + new_inset_h
     end_w = start_w + new_inset_w
-    
-    if is_np(result):
-        result[:, start_h:end_h, start_w:end_w, :] = resized_inset
-    else:
-        # For torch tensors, the resize function returns (b, c, h, w) format
-        # We need to convert result to (b, c, h, w) format for indexing
-        result = result.permute(0, 3, 1, 2)
-        result[:, :, start_h:end_h, start_w:end_w] = resized_inset
-        # Convert back to (b, h, w, c) format
-        result = result.permute(0, 2, 3, 1)
-    
+    result[:, :, start_h:end_h, start_w:end_w] = resized_inset
+
+    if was_numpy:
+        result = to_np(result.permute(0, 2, 3, 1))
     return result
 
 
