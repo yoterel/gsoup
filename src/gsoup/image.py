@@ -827,7 +827,7 @@ def srgb_to_linear(srgb):
 def inset(base_image, inset_image, corner="bottom_right", percent=0.2, margin=0.02):
     """
     Embeds an inset image into a base image at one of the corners.
-    
+
     :param base_image: numpy array (b, h, w, c) or torch tensor (b, c, h, w)
     :param inset_image: numpy array (b, h, w, c) or torch tensor (b, c, h, w)
     :param corner: one of "top_left", "top_right", "bottom_left", "bottom_right"
@@ -868,7 +868,7 @@ def inset(base_image, inset_image, corner="bottom_right", percent=0.2, margin=0.
     # Get dimensions
     base_h, base_w = base_image.shape[2:]
     inset_h, inset_w = inset_image.shape[2:]
-    
+
     # Calculate inset size based on longest dimension of base image
     max_base_dim = max(base_h, base_w)
     inset_size = int(max_base_dim * percent)
