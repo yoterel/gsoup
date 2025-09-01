@@ -22,6 +22,7 @@ from pathlib import Path, PosixPath
 from scipy.interpolate import LinearNDInterpolator, interp1d
 from scipy.spatial import ConvexHull
 from .projector_plugin_mitsuba import ProjectorPy
+from itertools import product
 import mitsuba as mi
 import drjit as dr
 
@@ -1392,3 +1393,58 @@ class GrayCode:
                     composed_normalized_8b_3c, Path(output_dir, "forward_map.png")
                 )
         return forward_map, fg
+
+
+class DeBruijn:
+    """
+    a class that handles encoding and decoding De Bruijn patterns
+    """
+
+    def __init__(self):
+        # Parameters
+        self.alphabet = [0.5, 1.0]  # Two levels per channel
+        self.n = 3  # Order of De Bruijn sequences
+        self.symbol_size = 16  # Size of each symbol/block in pixels
+        self.color_table = self.generate_color_alphabet()
+        self.k = int(np.cbrt(len(color_table)))
+
+    # Generate color alphabet: 3^2 = 9 colors (e.g., (R, G), (G, B), etc.)
+    def generate_color_alphabet(self):
+        channels = list(product(self.alphabet, repeat=3))  # All RGB triples
+        return np.array(channels)
+
+    def generate_de_bruijn_indices(self):
+        """
+        Generate a De Bruijn sequence for alphabet of size k and order n.
+        Returns a list of indices in range [0, k).
+        """
+        a = [0] * self.k * self.n
+        sequence = []
+
+        def db(t, p):
+            if t > n:
+                if n % p == 0:
+                    sequence.extend(a[1 : p + 1])
+            else:
+                a[t] = a[t - p]
+                db(t + 1, p)
+                for j in range(a[t - p] + 1, self.k):
+                    a[t] = j
+                    db(t + 1, t)
+
+        db(1, 1)
+        return sequence
+
+    # Combine horizontal and vertical sequences into a 2D pattern
+    def generate_2d_pattern(self, row_indices, col_indices, color_table):
+        H, W = len(row_indices), len(col_indices)
+        pattern = np.zeros((H * symbol_size, W * symbol_size, 3))
+
+        for i, r_idx in enumerate(row_indices):
+            for j, c_idx in enumerate(col_indices):
+                color_idx = (r_idx * len(color_table) + c_idx) % len(color_table)
+                color = color_table[color_idx]
+                y0, y1 = i * symbol_size, (i + 1) * symbol_size
+                x0, x1 = j * symbol_size, (j + 1) * symbol_size
+                pattern[y0:y1, x0:x1, :] = color
+        return pattern

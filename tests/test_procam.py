@@ -4,6 +4,20 @@ import numpy as np
 from pathlib import Path
 
 
+def test_debrujiun():
+    debruijn = gsoup.DeBruijn()
+    color_table = debruijn.generate_color_alphabet()  # 9 RGB colors
+
+    # Generate De Bruijn indices for rows and columns
+    k = len(color_table)
+    row_indices = debruijn.generate_de_bruijn_indices(k, n)
+    col_indices = debruijn.generate_de_bruijn_indices(k, n)
+
+    # Generate 2D structured light pattern
+    pattern = debruijn.generate_2d_pattern(row_indices, col_indices, color_table)
+    gsoup.save_image(pattern, "de_bruijn_pattern.png")
+
+
 def test_synthetic_projector():
     texture = gsoup.generate_voronoi_diagram(512, 512, 1000)
     texture_file = Path("resource/synth_proj_texture.png")
