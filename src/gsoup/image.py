@@ -521,7 +521,7 @@ def grid_image(images, rows, cols, pad=0, pad_color=None):
 
 def image_grid(images, rows, cols, pad=0, pad_color=None):
     """
-    :param images: list of images
+    :param images: (B, H, W, C) np.array or torch.tensor of images
     :param rows: number of rows
     :param cols: number of cols
     :param pad: will pad images by this number of pixels with pad_color
@@ -822,6 +822,103 @@ def srgb_to_linear(srgb):
     linear0 = 25 / 323 * srgb
     linear1 = np.maximum(eps, ((200 * srgb + 11) / (211))) ** (12 / 5)
     return np.where(srgb <= 0.04045, linear0, linear1)
+
+
+def inset(base_image, inset_image, corner="bottom_right", percent=0.2, margin=0.02):
+    """
+    Embeds an inset image into a base image at one of the corners.
+
+    :param base_image: numpy array (b, h, w, c) or torch tensor (b, c, h, w)
+    :param inset_image: numpy array (b, h, w, c) or torch tensor (b, c, h, w)
+    :param corner: one of "top_left", "top_right", "bottom_left", "bottom_right"
+    :param percent: size of inset as a percentage of base image's longest dimension (0.0 to 1.0)
+    :param margin: margin from corner as a percentage of base image's longest dimension (0.0 to 1.0)
+    :return: base image with inset embedded, same type and shape as base_image
+    """
+    if corner not in ["top_left", "top_right", "bottom_left", "bottom_right"]:
+        raise ValueError(
+            "corner must be one of 'top_left', 'top_right', 'bottom_left', 'bottom_right'"
+        )
+
+    if percent <= 0.0 or percent > 1.0:
+        raise ValueError("percent must be between 0.0 and 1.0")
+
+    if margin < 0.0 or margin >= 1.0:
+        raise ValueError("margin must be between 0.0 and 1.0")
+
+    # Ensure inputs are 4D (batched)
+    if base_image.ndim != 4:
+        raise ValueError("base_image must be 4D (b x h x w x c)")
+    if inset_image.ndim != 4:
+        raise ValueError("inset_image must be 4D (b x h x w x c)")
+    was_numpy = False
+    if is_np(base_image):
+        was_numpy = True
+        base_image = to_torch(base_image).permute(
+            0, 3, 1, 2
+        )  # (b, h, w, c) -> (b, c, h, w)
+    if is_np(inset_image):
+        was_numpy = True
+        inset_image = to_torch(inset_image).permute(
+            0, 3, 1, 2
+        )  # (b, h, w, c) -> (b, c, h, w)
+    # Use broadcasting to handle different batch sizes
+    base_image, inset_image = broadcast_batch(base_image, inset_image)
+
+    # Get dimensions
+    base_h, base_w = base_image.shape[2:]
+    inset_h, inset_w = inset_image.shape[2:]
+
+    # Calculate inset size based on longest dimension of base image
+    max_base_dim = max(base_h, base_w)
+    inset_size = int(max_base_dim * percent)
+
+    # Resize inset image to fit within the calculated size while maintaining aspect ratio
+    if inset_h > inset_w:
+        new_inset_h = inset_size
+        new_inset_w = int(inset_size * inset_w / inset_h)
+    else:
+        new_inset_w = inset_size
+        new_inset_h = int(inset_size * inset_h / inset_w)
+
+    # Resize inset image - resize function expects 4D input
+    resized_inset = resize(inset_image, new_inset_h, new_inset_w, mode="bilinear")
+
+    # Calculate margin in pixels
+    margin_pixels = int(max_base_dim * margin)
+
+    # Calculate inset position
+    if corner == "top_left":
+        start_h = margin_pixels
+        start_w = margin_pixels
+    elif corner == "top_right":
+        start_h = margin_pixels
+        start_w = base_w - margin_pixels - new_inset_w
+    elif corner == "bottom_left":
+        start_h = base_h - margin_pixels - new_inset_h
+        start_w = margin_pixels
+    else:  # bottom_right
+        start_h = base_h - margin_pixels - new_inset_h
+        start_w = base_w - margin_pixels - new_inset_w
+
+    # Ensure inset fits within base image bounds
+    start_h = max(0, min(start_h, base_h - new_inset_h))
+    start_w = max(0, min(start_w, base_w - new_inset_w))
+
+    # Create output image (copy base image)
+    if is_np(base_image):
+        result = base_image.copy()
+    else:
+        result = base_image.clone()
+
+    # Embed inset image
+    end_h = start_h + new_inset_h
+    end_w = start_w + new_inset_w
+    result[:, :, start_h:end_h, start_w:end_w] = resized_inset
+
+    if was_numpy:
+        result = to_np(result.permute(0, 2, 3, 1))
+    return result
 
 
 def compute_color_distance(image1, image2, bin_per_dim=10):

@@ -24,7 +24,7 @@ from scipy.spatial import ConvexHull
 from .projector_plugin_mitsuba import ProjectorPy
 from itertools import product
 import mitsuba as mi
-import drjit as dr
+import drjit
 
 
 class ProjectorScene:
@@ -36,6 +36,8 @@ class ProjectorScene:
         # Set the Mitsuba variant
         # mi.set_variant(variant)
         # Register the plugin
+        from .projector_plugin_mitsuba import ProjectorPy
+
         mi.register_emitter("projector_py", lambda props: ProjectorPy(props))
         self.scene = None
         self.proj_wh = None  # projector resolution (width, height)
@@ -311,9 +313,9 @@ class ProjectorScene:
             #     # bsdf=wall_bsdf,
             # )
             # mesh_params = mi.traverse(mesh)
-            # mesh_params["vertex_positions"] = dr.llvm.Float(v.reshape(-1))
-            # mesh_params["faces"] = dr.llvm.UInt(f.reshape(-1))
-            # mesh_params["vertex_texcoords"] = dr.llvm.Float(uv.reshape(-1))
+            # mesh_params["vertex_positions"] = drjit.llvm.Float(v.reshape(-1))
+            # mesh_params["faces"] = drjit.llvm.UInt(f.reshape(-1))
+            # mesh_params["vertex_texcoords"] = drjit.llvm.Float(uv.reshape(-1))
             # # mesh_params["bsdf"] = {
             # #     "type": "diffuse",
             # #     "reflectance": {
@@ -493,7 +495,7 @@ class ProjectorScene:
             )
             facing_camera = normal_cam[2][0] < 0
             if inside and facing_camera:
-                params["geometry.vertex_positions"] = dr.ravel(
+                params["geometry.vertex_positions"] = drjit.ravel(
                     np.array(world_space_corners).T
                 )
                 params.update()
