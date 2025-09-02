@@ -209,7 +209,7 @@ class ProjectorScene:
         }
         # post process scene dict to add projector texture
         if type(proj_texture) == np.ndarray:
-            scene_dict["proj_texture"]["data"] = proj_texture
+            scene_dict["proj_texture"]["data"] = proj_texture  # mi.TensorXf(proj_texture)
         else:
             raise TypeError("proj_texture must be a numpy array.")
             # can't enter here, but if we were to use a file path, we would do:
@@ -1402,13 +1402,13 @@ class DeBruijn:
     a class that handles encoding and decoding De Bruijn patterns
     """
 
-    def __init__(self):
+    def __init__(self, n=3, symbol_size=16):
         # Parameters
         self.alphabet = [0.5, 1.0]  # Two levels per channel
-        self.n = 3  # Order of De Bruijn sequences
-        self.symbol_size = 16  # Size of each symbol/block in pixels
+        self.n = n  # Order of De Bruijn sequences
+        self.symbol_size = symbol_size  # Size of each symbol/block in pixels
         self.color_table = self.generate_color_alphabet()
-        self.k = int(np.cbrt(len(color_table)))
+        self.k = int(np.cbrt(len(self.color_table)))
 
     # Generate color alphabet: 3^2 = 9 colors (e.g., (R, G), (G, B), etc.)
     def generate_color_alphabet(self):
@@ -1424,8 +1424,8 @@ class DeBruijn:
         sequence = []
 
         def db(t, p):
-            if t > n:
-                if n % p == 0:
+            if t > self.n:
+                if self.n % p == 0:
                     sequence.extend(a[1 : p + 1])
             else:
                 a[t] = a[t - p]
@@ -1438,15 +1438,15 @@ class DeBruijn:
         return sequence
 
     # Combine horizontal and vertical sequences into a 2D pattern
-    def generate_2d_pattern(self, row_indices, col_indices, color_table):
+    def generate_2d_pattern(self, row_indices, col_indices):
         H, W = len(row_indices), len(col_indices)
-        pattern = np.zeros((H * symbol_size, W * symbol_size, 3))
+        pattern = np.zeros((H * self.symbol_size, W * self.symbol_size, 3))
 
         for i, r_idx in enumerate(row_indices):
             for j, c_idx in enumerate(col_indices):
-                color_idx = (r_idx * len(color_table) + c_idx) % len(color_table)
-                color = color_table[color_idx]
-                y0, y1 = i * symbol_size, (i + 1) * symbol_size
-                x0, x1 = j * symbol_size, (j + 1) * symbol_size
+                color_idx = (r_idx * len(self.color_table) + c_idx) % len(self.color_table)
+                color = self.color_table[color_idx]
+                y0, y1 = i * self.symbol_size, (i + 1) * self.symbol_size
+                x0, x1 = j * self.symbol_size, (j + 1) * self.symbol_size
                 pattern[y0:y1, x0:x1, :] = color
         return pattern
