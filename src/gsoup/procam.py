@@ -209,7 +209,9 @@ class ProjectorScene:
         }
         # post process scene dict to add projector texture
         if type(proj_texture) == np.ndarray:
-            scene_dict["proj_texture"]["data"] = proj_texture  # mi.TensorXf(proj_texture)
+            scene_dict["proj_texture"][
+                "data"
+            ] = proj_texture  # mi.TensorXf(proj_texture)
         else:
             raise TypeError("proj_texture must be a numpy array.")
             # can't enter here, but if we were to use a file path, we would do:
@@ -1444,7 +1446,9 @@ class DeBruijn:
 
         for i, r_idx in enumerate(row_indices):
             for j, c_idx in enumerate(col_indices):
-                color_idx = (r_idx * len(self.color_table) + c_idx) % len(self.color_table)
+                color_idx = (r_idx * len(self.color_table) + c_idx) % len(
+                    self.color_table
+                )
                 color = self.color_table[color_idx]
                 y0, y1 = i * self.symbol_size, (i + 1) * self.symbol_size
                 x0, x1 = j * self.symbol_size, (j + 1) * self.symbol_size
