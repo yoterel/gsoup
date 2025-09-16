@@ -1,4 +1,5 @@
 import numpy as np
+import math
 import cv2
 from .gsoup_io import (
     save_image,
@@ -1244,17 +1245,12 @@ class GrayCode:
     """
 
     def encode1d(self, length):
-        total_images = len(bin(length - 1)[2:])
-
-        def xn_to_gray(n, x):
-            # infer a coordinate gray code from its position x and index n (the index of the image out of total_images)
-            # gray code is obtained by xoring the bits of x with itself shifted, and selecting the n-th bit
-            return (x ^ (x >> 1)) & (1 << (total_images - 1 - n)) != 0
-
-        imgs_code = 255 * np.fromfunction(
-            xn_to_gray, (total_images, length), dtype=int
-        ).astype(np.uint8)
-        return imgs_code
+        total_bits = math.ceil(math.log2(length))  # how many bits are needed to represent the length
+        x = np.arange(length, dtype=int)               # [0, 1, 2, ..., length-1]
+        gray = x ^ (x >> 1)                            # Gray code of each x
+        shifts = np.arange(total_bits-1, -1, -1)[:, None]  # [[MSB], ..., [LSB]]
+        bits = ((gray >> shifts) & 1).astype(np.uint8) # represent as binary with shape (total_bits, length) -> a binary number per pixel
+        return bits * 255
 
     def encode(self, proj_wh, flipped_patterns=True):
         """
@@ -1304,19 +1300,15 @@ class GrayCode:
         return binary, foreground
 
     def decode1d(self, gc_imgs):
-        # gray code to binary
-        n, h, w = gc_imgs.shape
-        binary_imgs = gc_imgs.copy()
-        for i in range(1, n):  # xor with previous image except MSB
-            binary_imgs[i, :, :] = np.bitwise_xor(
-                binary_imgs[i, :, :], binary_imgs[i - 1, :, :]
-            )
-        # decode binary
-        cofficient = np.fromfunction(
-            lambda i, y, x: 2 ** (n - 1 - i), (n, h, w), dtype=int
-        )
-        img_index = np.sum(binary_imgs * cofficient, axis=0)
-        return img_index
+        # gc_imgs: shape (n, h, w), are boolean images
+        n = gc_imgs.shape[0]
+        # gray -> binary via cumulative xor along bit axis (MSB->LSB)
+        binary = np.bitwise_xor.accumulate(gc_imgs, axis=0)
+        # build 1D weights and broadcast (MSB weight = 2**(n-1))
+        weights = (1 << np.arange(n - 1, -1, -1, dtype=np.uint64))[:, None, None]
+        # multiply and sum to get final index image
+        result = np.sum(binary * weights, axis=0)       # shape (h, w)
+        return result
 
     def decode(
         self,
@@ -1361,7 +1353,9 @@ class GrayCode:
         imgs_binary = imgs_binary[:, :, :, 0]
         fg = fg[:, :, 0]
         x = self.decode1d(imgs_binary[: b // 2])
+        fg &= x < proj_wh[0]  # mask out invalid x coordinates (the amount of bits we used is equal or larger than the width)
         y = self.decode1d(imgs_binary[b // 2 :])
+        fg &= y < proj_wh[1]  # mask out invalid y coordinates (the amount of bits we used is equal or larger than the height)
         if mode == "ij":
             forward_map = np.concatenate((y[..., None], x[..., None]), axis=-1)
         elif mode == "xy":
