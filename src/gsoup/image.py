@@ -684,23 +684,25 @@ def crop_to_square(images):
 
 def pad_to_res(images, res_h, res_w, bg_color=None):
     """
-    pads a batch of numpy images to a specific resolution
-    :param image: numpy image b x h x w x c
+    pads a batch of images to a specific resolution. images will be centered in the output image.
+    :param image: batch of np arrays (b, h, w, c) or torch tensors (b, c, h, w)
     :param res_h: height of the output image
     :param res_w: width of the output image
     :param bg_color: background color sized (c,) (defaults to black)
-    :return: padded image b x res_h x res_w x c
+    :return: padded image (b, res_h, res_w, c) or (b, c, res_h, res_w)
     """
-    if bg_color is None:
-        if is_np(images):
-            bg_color = np.zeros(images.shape[-1], dtype=images.dtype)
-        else:
-            bg_color = torch.zeros(
-                images.shape[-1], dtype=images.dtype, device=images.device
-            )
     if images.ndim != 4:
         raise ValueError("image must be a 4D array")
-    b, h, w, c = images.shape
+    if is_np(images):
+        was_numpy = True
+        images = to_torch(images).permute(0, 3, 1, 2)
+    else:
+        was_numpy = False
+    if bg_color is None:
+        bg_color = torch.zeros(
+            images.shape[1], dtype=images.dtype, device=images.device
+        )
+    b, c, h, w = images.shape
     if h > res_h or w > res_w:
         raise ValueError("images dimensions is larger than the output resolution")
     if h == res_h and w == res_w:
@@ -709,17 +711,14 @@ def pad_to_res(images, res_h, res_w, bg_color=None):
         raise ValueError(
             "background color must have the same number of channels as the image"
         )
-    bg_color = bg_color[None, None, None, :]
-    if is_np(images):
-        output = np.zeros((b, res_h, res_w, c), dtype=images.dtype)
-    else:
-        output = torch.zeros(
-            (b, res_h, res_w, c), dtype=images.dtype, device=images.device
-        )
+    bg_color = bg_color[None, :, None, None]
+    output = torch.zeros((b, c, res_h, res_w), dtype=images.dtype, device=images.device)
     output[:, :, :, :] = bg_color
     corner_left = (res_w - w) // 2
     corner_top = (res_h - h) // 2
-    output[:, corner_top : corner_top + h, corner_left : corner_left + w, :] = images
+    output[:, :, corner_top : corner_top + h, corner_left : corner_left + w] = images
+    if was_numpy:
+        output = to_np(output.permute(0, 2, 3, 1))
     return output
 
 
@@ -830,7 +829,15 @@ def srgb_to_linear(srgb):
     return np.where(srgb <= 0.04045, linear0, linear1)
 
 
-def inset(base_image, inset_image, corner="bottom_right", percent=0.2, margin=0.02):
+def inset(
+    base_image,
+    inset_image,
+    corner="bottom_right",
+    percent=0.2,
+    margin=0.02,
+    pad=0,
+    pad_color=None,
+):
     """
     Embeds an inset image into a base image at one of the corners.
 
@@ -839,16 +846,16 @@ def inset(base_image, inset_image, corner="bottom_right", percent=0.2, margin=0.
     :param corner: one of "top_left", "top_right", "bottom_left", "bottom_right"
     :param percent: size of inset as a percentage of base image's longest dimension (0.0 to 1.0)
     :param margin: margin from corner as a percentage of base image's longest dimension (0.0 to 1.0)
+    :param pad: pad the base image with a specific color
+    :param pad_color: color to pad with
     :return: base image with inset embedded, same type and shape as base_image
     """
     if corner not in ["top_left", "top_right", "bottom_left", "bottom_right"]:
         raise ValueError(
             "corner must be one of 'top_left', 'top_right', 'bottom_left', 'bottom_right'"
         )
-
     if percent <= 0.0 or percent > 1.0:
         raise ValueError("percent must be between 0.0 and 1.0")
-
     if margin < 0.0 or margin >= 1.0:
         raise ValueError("margin must be between 0.0 and 1.0")
 
@@ -870,7 +877,13 @@ def inset(base_image, inset_image, corner="bottom_right", percent=0.2, margin=0.
         )  # (b, h, w, c) -> (b, c, h, w)
     # Use broadcasting to handle different batch sizes
     base_image, inset_image = broadcast_batch(base_image, inset_image)
-
+    if pad > 0:
+        inset_image = pad_to_res(
+            inset_image,
+            inset_image.shape[2] + pad * 2,
+            inset_image.shape[3] + pad * 2,
+            pad_color,
+        )
     # Get dimensions
     base_h, base_w = base_image.shape[2:]
     inset_h, inset_w = inset_image.shape[2:]
