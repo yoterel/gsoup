@@ -1296,7 +1296,9 @@ class GrayCode:
         if not 0 <= bg_threshold <= 255:
             raise ValueError("bg_threshold must be between 0 and 255")
         patterns, bw = captures[:-2], captures[-2:]
-        foreground = np.abs(bw[0].astype(np.int32) - bw[1].astype(np.int32)) > bg_threshold
+        foreground = (
+            np.abs(bw[0].astype(np.int32) - bw[1].astype(np.int32)) > bg_threshold
+        )
         if flipped_patterns:
             orig, flipped = (
                 patterns[: len(patterns) // 2],
