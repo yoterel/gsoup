@@ -706,9 +706,7 @@ def pad_to_res(images, res_h, res_w, bg_color=None):
             "background color must have the same number of channels as the image"
         )
     bg_color = bg_color[None, :, None, None]
-    output = torch.zeros(
-        (b, c, res_h, res_w), dtype=images.dtype, device=images.device
-    )
+    output = torch.zeros((b, c, res_h, res_w), dtype=images.dtype, device=images.device)
     output[:, :, :, :] = bg_color
     corner_left = (res_w - w) // 2
     corner_top = (res_h - h) // 2
@@ -825,7 +823,15 @@ def srgb_to_linear(srgb):
     return np.where(srgb <= 0.04045, linear0, linear1)
 
 
-def inset(base_image, inset_image, corner="bottom_right", percent=0.2, margin=0.02, pad=0, pad_color=None):
+def inset(
+    base_image,
+    inset_image,
+    corner="bottom_right",
+    percent=0.2,
+    margin=0.02,
+    pad=0,
+    pad_color=None,
+):
     """
     Embeds an inset image into a base image at one of the corners.
 
@@ -867,7 +873,10 @@ def inset(base_image, inset_image, corner="bottom_right", percent=0.2, margin=0.
     base_image, inset_image = broadcast_batch(base_image, inset_image)
     if pad > 0:
         inset_image = pad_to_res(
-            inset_image, inset_image.shape[2] + pad * 2, inset_image.shape[3] + pad * 2, pad_color
+            inset_image,
+            inset_image.shape[2] + pad * 2,
+            inset_image.shape[3] + pad * 2,
+            pad_color,
         )
     # Get dimensions
     base_h, base_w = base_image.shape[2:]
