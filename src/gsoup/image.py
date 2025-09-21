@@ -20,9 +20,9 @@ from pathlib import Path
 def add_alpha(images, alphas):
     """
     adds an alpha channel to a batch of images
-    :param images: numpy image b x h x w x 3 or h x w x 3
-    :param alpha: alpha channel b x h x w x 1 or h x w x 1
-    :return: numpy image b x h x w x (c+1) or h x w x (c+1)
+    :param images: numpy image (b, h, w, 3) or (h, w, 3)
+    :param alpha: alpha channel (b, h, w, 1) or (h, w, 1)
+    :return: numpy image (b, h, w, c+1) or (h, w, c+1)
     """
     if images.shape[-1] != 3:
         raise ValueError("images must have 3 channels")
@@ -55,10 +55,10 @@ def alpha_compose(images, backgrounds=None, bg_color=None):
     composes a single or batch of RGBA images into a single or batch of RGB images.
     if backgrounds is provided, will blend them with the images, otherwise will blend with bg_color.
     if no backgrounds or bg_color is provided, the background is assumed to be black.
-    :param image: b x H x W x 4 or H x W x 4
-    :param background: b x H x W x 3 or H x W x 3
-    :param bg_color: 3 or b x 3 float32 array
-    :return: b x H x W x 3 or H x W x 3
+    :param image: (b, h, w, 4) or (h, w, 4)
+    :param background: (b, h, w, 3) or (h, w, 3)
+    :param bg_color: (3,) or (b, 3) float32 array
+    :return: (b, h, w, 3) or (h, w, 3)
     """
     if images.ndim != 3 and images.ndim != 4:
         raise ValueError("image must be 3 or 4 dimensional")
@@ -67,36 +67,42 @@ def alpha_compose(images, backgrounds=None, bg_color=None):
     if backgrounds is not None:
         if images.shape[:-1] != backgrounds.shape[:-1]:
             raise ValueError("backgrounds must have same shape as images")
+    was_float = True
     if is_np(images):
         if bg_color is None:
             bg_color = np.array([0.0, 0.0, 0.0]).astype(np.float32)
-        if images.dtype != np.float32:
+        if images.dtype != np.float32 and images.dtype != np.float64:
             images = to_float(images)
+            was_float = False
     else:
         if bg_color is None:
             bg_color = torch.tensor(
                 [0.0, 0.0, 0.0], dtype=images.dtype, device=images.device
             )
-        if images.dtype != torch.float32:
+        if images.dtype != torch.float32 and images.dtype != torch.float64:
             images = to_float(images)
+            was_float = False
     if backgrounds is not None:
         if backgrounds.dtype != np.float32:
             backgrounds = to_float(backgrounds)
         bg_color = backgrounds
     alpha = images[..., 3:4]
     rgb = images[..., :3]
-    return alpha * rgb + (1 - alpha) * bg_color
+    result = alpha * rgb + (1 - alpha) * bg_color
+    if not was_float:
+        result = to_8b(result)
+    return result
 
 
 def draw_text_on_image(images, text_per_image, loc=(0, 0), size=48, color=None):
     """
-    writes text on images given as np array (b x H x W x 3)
-    :param images: (b x H x W x 3) numpy array
+    writes text on images given as np array (b, h, w, 3)
+    :param images: (b, h, w, 3) numpy array
     :param text_per_image: string, list of strings or np array of strings
     :param loc: a tuple xy of anchor coordinates for the text (anchor is left-top of text)
     :param size: size of font
     :param color: (1,) or (3,) or (4,) or (b, 1) or (b, 3) or (b, 4) np array representing the color of the text (+alpha), will default to white if Nonne
-    :return: new (b x H x W x 3) numpy array with text written
+    :return: new (b, h, w, 3) numpy array with text written
     """
     is_numpy = is_np(images)
     if not is_numpy:
@@ -141,18 +147,18 @@ def draw_gizmo_on_image(np_images, w2c, opengl=False, scale=0.05):
     """
     adds a gizmo to a batch of np images.
     note: will broadcast np_images and w2c against eachother.
-    :param np_images: b x H x W x 3
-    :param w2c: b x 3 x 4 w2c transforms (opencv conventions)
+    :param np_images: (b, h, w, 3)
+    :param w2c: (b, 3, 4) w2c transforms (opencv conventions)
     :param opengl: if True, the w2c transforms are assumed to be in OpenGL conventions, else OpenCV conventions
     for opengl, w2c should be a bx4x4 matrix converting from world to *CLIP* space.
     :param scale: scale of the gizmo
-    :return: b x H x W x 3
+    :return: (b, h, w, 3)
     """
     new_images = []
     if np_images.ndim != 4:
-        raise ValueError("np_images must be b x H x W x 3")
+        raise ValueError("np_images must be (b, h, w, 3)")
     if w2c.ndim != 3:
-        raise ValueError("KRt must be b x 3 x 4")
+        raise ValueError("KRt must be (b, 3, 4)")
     np_images, w2c = broadcast_batch(np_images, w2c)
     for i, np_image in enumerate(np_images):
         pil_image = Image.fromarray(to_8b(np_image))
@@ -190,14 +196,14 @@ def merge_figures_with_line(
     line_color=[255, 255, 255, 255],
 ):
     """
-    merges two np images (H x W x 3) with a white line in between
-    :param img1: (H x W x 3) numpy array
-    :param img2: (H x W x 3) numpy array
+    merges two np images (h, w, 3) with a white line in between
+    :param img1: (h, w, 3) numpy array
+    :param img2: (h, w, 3) numpy array
     :param lower_intersection: lower intersection of the line with the images
     :param angle: angle of the line
     :param line_width: width of the line
     :param line_color: color of the line
-    :return: new (H x W x 3) numpy array with line in between
+    :return: new (h, w, 3) numpy array with line in between
     """
     if img1.dtype != np.uint8:
         line_color = np.array(line_color) / 255
@@ -225,7 +231,7 @@ def generate_voronoi_diagram(height, width, num_cells=1000, bg_color="white", ds
     :param num_cells: number of cells
     :param bg_color: background color
     :param dst: if not None, the image is written to this path
-    :return: (H x W x 3) numpy array
+    :return: (h, w, 3) numpy array
     """
     nx = np.random.rand(num_cells) * width
     ny = np.random.rand(num_cells) * height
@@ -258,7 +264,7 @@ def generate_dot_pattern(
     :param radius: radius of the circles in pixels
     :param spacing: spacing between the circles in pixels
     :param dst: if not None, the image is written to this path
-    :return: (H x W x 3) numpy array (uint8)
+    :return: (h, w, 3) numpy array (uint8)
     """
     img = Image.new("RGB", (width, height), background)
     img1 = ImageDraw.Draw(img)
@@ -340,7 +346,7 @@ def generate_stripe_pattern(
     :param thickness: thickness of the stripes
     :param spacing: spacing between the stripes
     :param dst: if not None, the image is written to this path
-    :return: (H x W x 3) numpy array (uint8)
+    :return: (h, w, 3) numpy array (uint8)
     """
     img = Image.new("RGB", (width, height), background)
     img1 = ImageDraw.Draw(img)
@@ -411,7 +417,7 @@ def generate_lollipop_pattern(height, width, background="black", n=15, m=8, dst=
     :param n: number of circles in the pattern
     :param m: number of lines in the pattern
     :param dst: if not None, the image is written to this path
-    :return: (H x W x 3) numpy array (uint8)
+    :return: (h, w, 3) numpy array (uint8)
     """
     spacing_x = width // (2 * n)
     spacing_y = height // (2 * n)
@@ -480,7 +486,7 @@ def generate_gray_gradient(
     :param vertical: if True, the gradient is vertical
     :param flip: if True, the gradient is flipped
     :param bins: number of bins
-    :return: (H x W x 3) uint8 numpy array
+    :return: (h, w, 3) uint8 numpy array
     """
     bins = np.clip(bins, 1, 256)
     colors = np.linspace(0, 255, num=bins).astype(np.uint8)
@@ -763,7 +769,7 @@ def mask_regions(images, start_h, end_h, start_w, end_w):
 def adjust_contrast_brightness(img, alpha, beta=None):
     """
     adjusts image contrast and brightness using naive gain and bias factors
-    :param img: input image numpy array (n x h x w x 3), float values between 0 and 1
+    :param img: input image numpy array ((n, h, w, 3)), float values between 0 and 1
     :param alpha: gain factor ("contrast") between 0 and inf
     :param beta: bias factor ("brightness") between -inf and inf (but typically between -1 and 1)
     :return: the new image
@@ -781,7 +787,7 @@ def adjust_contrast_brightness(img, alpha, beta=None):
 def change_brightness(input_img, brightness=0):
     """
     changes brightness of an image or batch of images
-    :param input_img a numpy or torch tensor of float values between 0 and 1 (n x h x w x 3)
+    :param input_img a numpy or torch tensor of float values between 0 and 1 ((n, h, w, 3))
     :param brightness a number between -255 to 255 (0=no change)
     :return the new image
     """
@@ -924,8 +930,8 @@ def inset(base_image, inset_image, corner="bottom_right", percent=0.2, margin=0.
 def compute_color_distance(image1, image2, bin_per_dim=10):
     """
     computes a naive "color distance" between two images by binning the colors and computing the wasserstein distance per channel
-    :param image1: numpy image h x w x 3
-    :param image2: numpy image h x w x 3
+    :param image1: numpy image (h, w, 3)
+    :param image2: numpy image (h, w, 3)
     :return: the sum (over channels) of the wasserstein distances
     """
     if image1.shape != image2.shape:

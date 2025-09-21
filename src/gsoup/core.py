@@ -305,6 +305,20 @@ def swap_columns(x, col1_index, col2_index):
     return x
 
 
+def to_gray(x, keep_channels=False):
+    """
+    see color_to_gray
+    """
+    return color_to_gray(x, keep_channels)
+
+
+def rgb_to_gray(x, keep_channels=False):
+    """
+    see color_to_gray
+    """
+    return color_to_gray(x, keep_channels)
+
+
 def color_to_gray(x, keep_channels=False):
     """
     convert image to gray scale by averaging over channels
