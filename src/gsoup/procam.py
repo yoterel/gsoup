@@ -1267,7 +1267,7 @@ class GrayCode:
         encode projector's width and height into gray code patterns
         :param proj_wh: projector's (width, height) in pixels as a tuple
         :param flipped_patterns: if True, flipped patterns are also generated for better binarization
-        :return: a 3D numpy array of shape (total_images, height, width) where total_images is the number of gray code patterns
+        :return: numpy array of shape (total_images, height, width, 1) where total_images is the number of gray code patterns
         """
         width, height = proj_wh
         codes_width_1d = self.encode1d(width)[:, None, :]
