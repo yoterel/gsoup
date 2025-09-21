@@ -13,6 +13,8 @@ from .core import (
     to_8b,
     to_float,
     color_to_gray,
+    rgb_to_gray,
+    to_gray,
     broadcast_batch,
     repeat,
     map_range,
