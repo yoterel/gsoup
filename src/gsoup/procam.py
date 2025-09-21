@@ -9,7 +9,7 @@ from .gsoup_io import (
     write_exr,
 )
 from .transforms import compose_rt
-from .core import to_8b, to_hom, swap_columns, make_monotonic, to_float
+from .core import to_8b, to_hom, swap_columns, make_monotonic, to_float, rgb_to_gray
 from .image import (
     change_brightness,
     add_alpha,
@@ -1287,10 +1287,10 @@ class GrayCode:
         :return: a 4D numpy binary array for decoding (total_images, height, width, 1) where total_images is the number of gray code patterns
         and a binary foreground mask (height, width, 1)
         """
-        if not -255 <= bg_threshold <= 255:
-            raise ValueError("bg_threshold must be between -255 and 255")
+        if not 0 <= bg_threshold <= 255:
+            raise ValueError("bg_threshold must be between 0 and 255")
         patterns, bw = captures[:-2], captures[-2:]
-        foreground = bw[0].astype(np.int32) - bw[1].astype(np.int32) > bg_threshold
+        foreground = np.abs(bw[0].astype(np.int32) - bw[1].astype(np.int32)) > bg_threshold
         if flipped_patterns:
             orig, flipped = (
                 patterns[: len(patterns) // 2],
@@ -1352,14 +1352,18 @@ class GrayCode:
         if len(encoded) != len(captures):
             raise ValueError("captures must have length of {}".format(len(encoded)))
         if c != 1:  # naively convert to grayscale
-            captures = captures.mean(axis=-1, keepdims=True).round().astype(np.uint8)
+            captures = rgb_to_gray(captures, keep_channels=True)
         imgs_binary, fg = self.binarize(captures, flipped_patterns, bg_threshold)
         imgs_binary = imgs_binary[:, :, :, 0]
         fg = fg[:, :, 0]
         x = self.decode1d(imgs_binary[: b // 2])
-        fg &= x < proj_wh[0]  # mask out invalid x coordinates (the amount of bits we used is equal or larger than the width)
+        maskx = x < proj_wh[0]
+        x[~maskx] = 0
+        fg &= maskx  # mask out invalid x coordinates (the amount of bits we used is equal or larger than the width)
         y = self.decode1d(imgs_binary[b // 2 :])
-        fg &= y < proj_wh[1]  # mask out invalid y coordinates (the amount of bits we used is equal or larger than the height)
+        masky = y < proj_wh[1]
+        y[~masky] = 0
+        fg &= masky  # mask out invalid y coordinates (the amount of bits we used is equal or larger than the height)
         if mode == "ij":
             forward_map = np.concatenate((y[..., None], x[..., None]), axis=-1)
         elif mode == "xy":
