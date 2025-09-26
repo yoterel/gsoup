@@ -702,6 +702,8 @@ def pad_to_res(images, res_h, res_w, bg_color=None):
         bg_color = torch.zeros(
             images.shape[1], dtype=images.dtype, device=images.device
         )
+    if is_np(bg_color):
+        bg_color = to_torch(bg_color, device=images.device, dtype=images.dtype)
     b, c, h, w = images.shape
     if h > res_h or w > res_w:
         raise ValueError("images dimensions is larger than the output resolution")
@@ -846,7 +848,7 @@ def inset(
     :param corner: one of "top_left", "top_right", "bottom_left", "bottom_right"
     :param percent: size of inset as a percentage of base image's longest dimension (0.0 to 1.0)
     :param margin: margin from corner as a percentage of base image's longest dimension (0.0 to 1.0)
-    :param pad: pad the base image with a specific color
+    :param pad: pad the base image this number of pixels
     :param pad_color: color to pad with
     :return: base image with inset embedded, same type and shape as base_image
     """
@@ -878,6 +880,7 @@ def inset(
     # Use broadcasting to handle different batch sizes
     base_image, inset_image = broadcast_batch(base_image, inset_image)
     if pad > 0:
+        pad = int(pad)
         inset_image = pad_to_res(
             inset_image,
             inset_image.shape[2] + pad * 2,

@@ -65,19 +65,14 @@ def simulate_procam_calibration(orig_patterns, proj_wh, cam_wh):
     ### end simulate procam ###
     return np.array(captures)
 
-
-if __name__ == "__main__":
-    print("Geometric Calibration + Reconstruction Example")
-    # instantiate a gray code object
+def mitsuba_simulation():
+    ###################
     gray = gsoup.GrayCode()
     # set projector resolution
     proj_wh = (400, 400)
-    # set decoding mode (rows first or columns first)
-    mode = "ij"  # "ij" is rows first, "xy" is columns first
     # generate the gray code patterns for structured light projection
     orig_patterns = gray.encode(proj_wh)[0:1]
-    ###################
-    ### let's calibrate the procam pair. this requires capturing a checkerboard with the camera and projecting structured light patterns with the projector.
+
     n_sessions = 10
     # simulate calibration sessions
     for i in range(n_sessions):
@@ -127,18 +122,31 @@ if __name__ == "__main__":
         captured_patterns,
         "resource/geometric_calibration/correspondence_captured",
     )
-    # commented out: here we used blender to do this.
+
+if __name__ == "__main__":
+    print("Geometric Calibration + Reconstruction Example")
+    ### let's calibrate the procam pair. this requires capturing a checkerboard with the camera and projecting structured light patterns with the projector.
+    # instantiate a gray code object
+    gray = gsoup.GrayCode()
+    # set projector resolution
+    proj_wh = (800, 800)
+    # set decoding mode (rows first or columns first)
+    mode = "ij"  # "ij" is rows first, "xy" is columns first
+    # generate the gray code patterns for structured light projection
+    orig_patterns = gray.encode(proj_wh)
+    ### now you need to save to disk and project the patterns ###
+    # e.g. gsoup.save_images(orig_patterns, "geometric_calibration/patterns")
+    # here we used blender to do this.
     # load simulated captured images
-    # captured_patterns = gsoup.load_images(
-    #     Path("tests/tests_resource/correspondence_blender"),
-    # )
+    captured_patterns = gsoup.load_images(
+        Path("tests/tests_resource/correspondence_blender"),
+    )
     # get camera resolution
     cam_wh = (
         captured_patterns[0].shape[1],
         captured_patterns[0].shape[0],
     )
     # finally, decode the captured images
-    # TODO: seperate direct and indirect light, and use only direct channel for better inlier detection
     # the result is a dense map from camera pixels to projector pixels and a foreground mask
     forward_map, fg = gray.decode(
         captured_patterns,
@@ -152,18 +160,18 @@ if __name__ == "__main__":
     # commented out: using blender.
     # first, we need the camera extrinsics. Usually you will set this as identity (camera is at the origin).
     # but this scene was simulated in blender with a different known camera transform, so we will use that transform here.
-    # blend_to_cv = np.array([[1.0, 0, 0, 0], [0, -1, 0, 0], [0, 0, -1, 0], [0, 0, 0, 1]])
-    # cam_transform = np.array([[0, 0, 1, 1], [1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 0, 1.0]])
-    # cam_transform = cam_transform @ blend_to_cv
-    ### gt blender information: ###
-    # cam_int = np.array([[800, 0, 400.0], [0.0, 800, 400], [0, 0, 1]])
-    # proj_int = np.array([[800, 0, 400.0], [0.0, 800, 400], [0, 0, 1]])
-    # proj_transform = np.array([[-0.12403473, -0.23891242,  0.96308672,  0.8 ],
-    #                             [ 0.99227786, -0.02986405,  0.12038584,  0.1],
-    #                             [ 0.        ,  0.97058171,  0.24077168,  0.2],
-    #                             [ 0.        ,  0.        ,  0.        ,  1. ]])
-    # proj_transform = proj_transform @ blend_to_cv
-    # cam_dist = None
+    blend_to_cv = np.array([[1.0, 0, 0, 0], [0, -1, 0, 0], [0, 0, -1, 0], [0, 0, 0, 1]])
+    cam_transform = np.array([[0, 0, 1, 1], [1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 0, 1.0]])
+    cam_transform = cam_transform @ blend_to_cv
+    ## gt blender information: ###
+    cam_int = np.array([[800, 0, 400.0], [0.0, 800, 400], [0, 0, 1]])
+    proj_int = np.array([[800, 0, 400.0], [0.0, 800, 400], [0, 0, 1]])
+    proj_transform = np.array([[-0.12403473, -0.23891242,  0.96308672,  0.8 ],
+                                [ 0.99227786, -0.02986405,  0.12038584,  0.1],
+                                [ 0.        ,  0.97058171,  0.24077168,  0.2],
+                                [ 0.        ,  0.        ,  0.        ,  1. ]])
+    proj_transform = proj_transform @ blend_to_cv
+    cam_dist = None
     ### end gt blenderinfo. ###
     # reconstruct a point cloud of scene
     pc = gsoup.reconstruct_pointcloud(
