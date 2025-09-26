@@ -159,7 +159,6 @@ if __name__ == "__main__":
     )
     ###################
     ### now we can reconstruct the scene in 3D using triangulation.
-    # commented out: using blender.
     # first, we need the camera extrinsics. Usually you will set this as identity (camera is at the origin).
     # but this scene was simulated in blender with a different known camera transform, so we will use that transform here.
     blend_to_cv = np.array([[1.0, 0, 0, 0], [0, -1, 0, 0], [0, 0, -1, 0], [0, 0, 0, 1]])
