@@ -269,10 +269,10 @@ def test_image():
     assert (checkboard_RGBA == checkboard_RGBA2).all()
     checkboard_RGB_batch = np.tile(checkboard[None, ...], (10, 1, 1, 3))
     checkboard_RGBA_batch = gsoup.add_alpha(checkboard_RGB_batch, checkboard[None, ...])
-    checkboard_RGB = gsoup.alpha_compose(checkboard_RGBA, ~checkboard_RGBA[..., :3])
+    checkboard_RGB = gsoup.alpha_compose(gsoup.to_float(checkboard_RGBA), gsoup.to_float(~checkboard_RGBA[..., :3]))
     assert (checkboard_RGB == 1.0).all()
     checkboard_RGB = gsoup.alpha_compose(
-        checkboard_RGBA, bg_color=np.array([0.0, 0.0, 1.0])
+        gsoup.to_float(checkboard_RGBA), bg_color=np.array([0.0, 0.0, 1.0])
     )
     assert (checkboard_RGB[..., -1] == 1.0).all()
     lollipop_path = Path("resource/lollipop.png")
