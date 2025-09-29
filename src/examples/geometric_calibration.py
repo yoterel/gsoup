@@ -65,6 +65,7 @@ def simulate_procam_calibration(orig_patterns, proj_wh, cam_wh):
     ### end simulate procam ###
     return np.array(captures)
 
+
 def mitsuba_simulation():
     ###################
     gray = gsoup.GrayCode()
@@ -123,6 +124,7 @@ def mitsuba_simulation():
         "resource/geometric_calibration/correspondence_captured",
     )
 
+
 if __name__ == "__main__":
     print("Geometric Calibration + Reconstruction Example")
     ### let's calibrate the procam pair. this requires capturing a checkerboard with the camera and projecting structured light patterns with the projector.
@@ -157,7 +159,6 @@ if __name__ == "__main__":
     )
     ###################
     ### now we can reconstruct the scene in 3D using triangulation.
-    # commented out: using blender.
     # first, we need the camera extrinsics. Usually you will set this as identity (camera is at the origin).
     # but this scene was simulated in blender with a different known camera transform, so we will use that transform here.
     blend_to_cv = np.array([[1.0, 0, 0, 0], [0, -1, 0, 0], [0, 0, -1, 0], [0, 0, 0, 1]])
@@ -166,10 +167,14 @@ if __name__ == "__main__":
     ## gt blender information: ###
     cam_int = np.array([[800, 0, 400.0], [0.0, 800, 400], [0, 0, 1]])
     proj_int = np.array([[800, 0, 400.0], [0.0, 800, 400], [0, 0, 1]])
-    proj_transform = np.array([[-0.12403473, -0.23891242,  0.96308672,  0.8 ],
-                                [ 0.99227786, -0.02986405,  0.12038584,  0.1],
-                                [ 0.        ,  0.97058171,  0.24077168,  0.2],
-                                [ 0.        ,  0.        ,  0.        ,  1. ]])
+    proj_transform = np.array(
+        [
+            [-0.12403473, -0.23891242, 0.96308672, 0.8],
+            [0.99227786, -0.02986405, 0.12038584, 0.1],
+            [0.0, 0.97058171, 0.24077168, 0.2],
+            [0.0, 0.0, 0.0, 1.0],
+        ]
+    )
     proj_transform = proj_transform @ blend_to_cv
     cam_dist = None
     ### end gt blenderinfo. ###
