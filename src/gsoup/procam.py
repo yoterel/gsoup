@@ -872,7 +872,7 @@ def calibrate_procam(
     debug=False,
 ):
     """
-    calibrates a projection-camera pair using local homographies
+    calibrates a projector-camera pair using local homographies
     based on "Simple, accurate, and robust projector-camera calibration".
     note1: the calibration poses some reasonable constraints on the projector-camera pair:
     1) projector is assumed to have no distortion, and a square pixel aspect ratio.
@@ -953,9 +953,10 @@ def calibrate_procam(
     proj_corners_list = []
     for dname, gc_filenames in zip(dirnames, gc_fname_lists):
         if verbose:
-            print("processing: {}".format(dname))
+            print(f"processing: {dname}")
         if len(gc_filenames) != len(patterns):
-            raise ValueError("invalid number of images in " + dname)
+            print(f"invalid number of images in {dname}, skipping")
+            continue
         imgs = load_images(gc_filenames, as_grayscale=True)
         forward_map = graycode.decode(
             imgs,
@@ -971,9 +972,8 @@ def calibrate_procam(
         imgs = imgs[:-2]
         res, cam_corners = cv2.findChessboardCorners(white_img, chess_shape)
         if not res:
-            raise RuntimeError(
-                "chessboard was not found in {}".format(gc_filenames[-2])
-            )
+            print(f"chessboard was not found in {gc_filenames[-2]}, skipping")
+            continue
         cam_objps_list.append(objps)
         cam_corners_list.append(cam_corners)
         proj_objps = []
@@ -995,11 +995,7 @@ def calibrate_procam(
                         dst_points.append(np.array(proj_pix))
             if len(src_points) < patch_size_half**2:
                 if verbose:
-                    print(
-                        "corner {}, {} was skiped because too few decoded pixels found (check your images and thresholds)".format(
-                            c_x, c_y
-                        )
-                    )
+                    print(f"corner {c_x}, {c_y} was skiped because too few decoded pixels found (check your images and thresholds)")
                 continue
             h_mat, inliers = cv2.findHomography(
                 np.array(src_points), np.array(dst_points)

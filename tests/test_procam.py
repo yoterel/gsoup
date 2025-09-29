@@ -142,7 +142,7 @@ def test_procam():
         chess_block_size=0.0185,
         output_dir="resource/calibration",
         projector_orientation="none",
-        debug=False,
+        debug=True,
     )
     cam_int, cam_dist, proj_int, proj_dist, proj_transform = (
         result["cam_intrinsics"],
