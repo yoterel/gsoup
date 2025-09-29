@@ -995,7 +995,9 @@ def calibrate_procam(
                         dst_points.append(np.array(proj_pix))
             if len(src_points) < patch_size_half**2:
                 if verbose:
-                    print(f"corner {c_x}, {c_y} was skiped because too few decoded pixels found (check your images and thresholds)")
+                    print(
+                        f"corner {c_x}, {c_y} was skiped because too few decoded pixels found (check your images and thresholds)"
+                    )
                 continue
             h_mat, inliers = cv2.findHomography(
                 np.array(src_points), np.array(dst_points)
