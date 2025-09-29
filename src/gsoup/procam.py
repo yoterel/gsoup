@@ -1365,10 +1365,14 @@ class GrayCode:
         bg = bg[:, :, 0]
         x = self.decode1d(imgs_binary[: b // 2])
         maskx = x < proj_wh[0]
-        x[~maskx] = -1  # mask out invalid x coordinates (the amount of bits we used is equal or larger than the width)
+        x[~maskx] = (
+            -1
+        )  # mask out invalid x coordinates (the amount of bits we used is equal or larger than the width)
         y = self.decode1d(imgs_binary[b // 2 :])
         masky = y < proj_wh[1]
-        y[~masky] = -1  # mask out invalid y coordinates (the amount of bits we used is equal or larger than the height)
+        y[~masky] = (
+            -1
+        )  # mask out invalid y coordinates (the amount of bits we used is equal or larger than the height)
         x[bg] = -1
         y[bg] = -1
         if mode == "ij":
@@ -1384,10 +1388,14 @@ class GrayCode:
                 save_images(imgs_binary[..., None], Path(output_dir, "imgs_binary"))
                 # save_image(fg, Path(output_dir, "foreground.png"))
                 if mode == "ij":
-                    composed_normalized = forward_map / np.array([proj_wh[1], proj_wh[0]])
+                    composed_normalized = forward_map / np.array(
+                        [proj_wh[1], proj_wh[0]]
+                    )
                     composed_normalized[..., [0, 1]] = composed_normalized[..., [1, 0]]
                 elif mode == "xy":
-                    composed_normalized = forward_map / np.array([proj_wh[0], proj_wh[1]])
+                    composed_normalized = forward_map / np.array(
+                        [proj_wh[0], proj_wh[1]]
+                    )
                 composed_normalized[forward_map < 0] == 0
                 composed_normalized_8b = to_8b(composed_normalized)
                 composed_normalized_8b_3c = np.concatenate(
