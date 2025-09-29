@@ -59,11 +59,11 @@ def test_procam():
     gray = gsoup.GrayCode()
     patterns = gray.encode((128, 128))
     mode = "ij"
-    forward_map, fg = gray.decode(
+    forward_map = gray.decode(
         patterns, (128, 128), output_dir=Path("resource/pix2pix"), mode=mode, debug=True
     )
     backward_map = gsoup.compute_backward_map(
-        (128, 128), forward_map, fg, output_dir=Path("resource/pix2pix"), debug=True
+        (128, 128), forward_map, output_dir=Path("resource/pix2pix"), debug=True
     )
     desired = gsoup.generate_lollipop_pattern(128, 128)
     warp_image = gsoup.warp_image(
@@ -93,13 +93,12 @@ def test_procam():
     patterns = gsoup.load_images(Path("tests/tests_resource/correspondence_blender"))
     cam_wh = (patterns[0].shape[1], patterns[0].shape[0])
     proj_wh = (800, 800)
-    forward_map, fg = gray.decode(
+    forward_map = gray.decode(
         patterns, (800, 800), output_dir="resource/forward", debug=True, mode=mode
     )
     backward_map = gsoup.compute_backward_map(
         (800, 800),
         forward_map,
-        fg,
         mode=mode,
         output_dir="resource/backward_not_interp",
         debug=True,
@@ -108,7 +107,6 @@ def test_procam():
     backward_map = gsoup.compute_backward_map(
         (800, 800),
         forward_map,
-        fg,
         mode=mode,
         output_dir="resource/backward_interp",
         debug=True,
@@ -144,7 +142,7 @@ def test_procam():
         chess_block_size=0.0185,
         output_dir="resource/calibration",
         projector_orientation="none",
-        debug=True,
+        debug=False,
     )
     cam_int, cam_dist, proj_int, proj_dist, proj_transform = (
         result["cam_intrinsics"],
@@ -158,7 +156,6 @@ def test_procam():
     # calibration_static_view(cam_transform, proj_transform, (800, 800), (800, 800), cam_int, cam_dist, proj_int, forward_map, fg, mode)
     pc = gsoup.reconstruct_pointcloud(
         forward_map,
-        fg,
         cam_transform,
         proj_transform,
         cam_int,

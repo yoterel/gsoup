@@ -184,18 +184,28 @@ def to_numpy(arr: torch.Tensor):
     return to_np(arr)
 
 
-def to_torch(arr: np.array, device="cpu", dtype=None):
+def to_torch(arr: np.array, device="cpu", dtype=None, permute_channels=False):
     """
     converts a numpy array to a torch tensor
     :param arr: numpy array
-    :param dtype: dtype of the tensor
     :param device: device to put the tensor on
+    :param dtype: dtype of the tensor
+    :param permute_channels: if True, permutes the channels order
     :return: torch tensor
     """
     if dtype is None:
-        return torch.tensor(arr, device=device)
+        tensor = torch.tensor(arr, device=device)
     else:
-        return torch.tensor(arr, dtype=dtype, device=device)
+        tensor = torch.tensor(arr, dtype=dtype, device=device)
+    if permute_channels:
+        if tensor.ndim == 3:
+            return tensor.permute(2, 0, 1)  # (h, w, c) -> (c, h, w)
+        elif tensor.ndim == 4:
+            return tensor.permute(0, 3, 1, 2)  # (n, h, w, c) -> (n, c, h, w)
+        else:
+            raise ValueError("tensor must be 3 or 4 dimensional")
+    else:
+        return tensor
 
 
 def to_8b(x, clip=True):

@@ -726,7 +726,7 @@ def blend_intensity_multi_projectors(forward_maps, fgs, proj_whs, mode="ij"):
 def warp_image(backward_map, desired_image, cam_wh=None, mode="xy", output_path=None):
     """
     given a 2D dense map of corresponding pixels between projector and camera, computes a warped image such that if projected, the desired image appears when observed using camera
-    :param backward_map: 2D dense mapping between pixels from projector 2 camera (proj_h x proj_w x 2) uint32
+    :param backward_map: 2D dense mapping between pixels from projector 2 camera (proj_h x proj_w x 2) int64, where -1 indicates a background pixel
     :param desired_image: path to desired image from camera, or float np array channels last (cam_h x cam_w x 3) uint8
     :param cam_wh: device1 (width, height) as tuple, if not supplied assumes desired_image is in the correct dimensions in relation to backward_map
     :param mode: "xy" or "ij" depending on the last channel of backward_map
@@ -761,7 +761,6 @@ def warp_image(backward_map, desired_image, cam_wh=None, mode="xy", output_path=
 def compute_backward_map(
     proj_wh,
     forward_map,
-    foreground,
     mode="ij",
     interpolate=True,
     output_dir=None,
@@ -770,7 +769,7 @@ def compute_backward_map(
     """
     computes the inverse map of forward_map by piece-wise interpolating a triangulated version of it (see GrayCode.decode to understand forward_map)
     :param proj_wh: projector (width, height) as a tuple
-    :param forward_map: forward map as a numpy array of shape (height, width, 2) of type int32
+    :param forward_map: forward map as a numpy array of shape (height, width, 2) of type int64, where -1 indicates a background pixel
     :param foreground: a boolean mask of shape (height, width) where True indicates a valid pixel in forward_map
     :param interpolate: if False, output will not be interpolated (will have holes...)
     :param mode: the last channel order of forward_map. either "xy" (width first) or "ij" (height first).
@@ -782,8 +781,9 @@ def compute_backward_map(
     if output_dir is not None:
         output_dir = Path(output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
-    data = np.argwhere(foreground)  # always ij
-    points = forward_map[foreground]
+    fg = np.all(forward_map >= 0, axis=-1)
+    data = np.argwhere(fg)  # always ij
+    points = forward_map[fg]
     if interpolate:
         interp = LinearNDInterpolator(points, data, fill_value=0.0)
         X, Y = np.meshgrid(np.arange(proj_wh[0]), np.arange(proj_wh[1]))
@@ -957,7 +957,7 @@ def calibrate_procam(
         if len(gc_filenames) != len(patterns):
             raise ValueError("invalid number of images in " + dname)
         imgs = load_images(gc_filenames, as_grayscale=True)
-        forwardmap, fg = graycode.decode(
+        forward_map = graycode.decode(
             imgs,
             proj_wh,
             mode="xy",
@@ -965,6 +965,7 @@ def calibrate_procam(
             output_dir=output_dir,
             debug=debug,
         )
+        fg = np.all(forward_map >= 0, axis=-1)
         black_img = imgs[-1]
         white_img = imgs[-2]
         imgs = imgs[:-2]
@@ -989,7 +990,7 @@ def calibrate_procam(
                     x = c_x + dx
                     y = c_y + dy
                     if fg[y, x]:
-                        proj_pix = forwardmap[y, x]
+                        proj_pix = forward_map[y, x]
                         src_points.append((x, y))
                         dst_points.append(np.array(proj_pix))
             if len(src_points) < patch_size_half**2:
@@ -1172,7 +1173,6 @@ def calibrate_procam(
 
 def reconstruct_pointcloud(
     forward_map,
-    fg,
     cam_transform,
     proj_transform,
     cam_int,
@@ -1196,6 +1196,7 @@ def reconstruct_pointcloud(
     :param debug: if True, will return debug information
     :return: a 3D point cloud of the scene (Nx3)
     """
+    fg = np.all(forward_map >= 0, axis=-1)
     cam_pixels = swap_columns(np.argwhere(fg), 0, 1)
     # todo: account for distortion if supplied
     # undistorted_cam_points =  cv2.undistortPoints(cam_points, cam_int, cam_dist, P=proj_transform[0]).squeeze()  # equivalent to not setting P and doing K @ points outside
@@ -1291,14 +1292,12 @@ class GrayCode:
         :param flipped_patterns: if true, patterns also contain their flipped version for better binarization
         :param bg_threshold: if the difference between the pixel in the white&black images is greater than this, pixel is foreground
         :return: a 4D numpy binary array for decoding (total_images, height, width, 1) where total_images is the number of gray code patterns
-        and a binary foreground mask (height, width, 1)
+        and a binary background mask (height, width, 1)
         """
         if not 0 <= bg_threshold <= 255:
             raise ValueError("bg_threshold must be between 0 and 255")
         patterns, bw = captures[:-2], captures[-2:]
-        foreground = (
-            np.abs(bw[0].astype(np.int32) - bw[1].astype(np.int32)) > bg_threshold
-        )
+        bg = np.abs(bw[0].astype(np.int32) - bw[1].astype(np.int32)) <= bg_threshold
         if flipped_patterns:
             orig, flipped = (
                 patterns[: len(patterns) // 2],
@@ -1309,7 +1308,7 @@ class GrayCode:
             # foreground = foreground & np.all(valid, axis=0)  # only pixels that are valid in all images are foreground
         else:  # slightly more naive thresholding
             binary = patterns >= 0.5 * (bw[1] + bw[0])
-        return binary, foreground
+        return binary, bg
 
     def decode1d(self, gc_imgs):
         # gc_imgs: shape (n, h, w), are boolean images
@@ -1317,7 +1316,7 @@ class GrayCode:
         # gray -> binary via cumulative xor along bit axis (MSB->LSB)
         binary = np.bitwise_xor.accumulate(gc_imgs, axis=0)
         # build 1D weights and broadcast (MSB weight = 2**(n-1))
-        weights = (1 << np.arange(n - 1, -1, -1, dtype=np.uint64))[:, None, None]
+        weights = (1 << np.arange(n - 1, -1, -1, dtype=np.int64))[:, None, None]
         # multiply and sum to get final index image
         result = np.sum(binary * weights, axis=0)  # shape (h, w)
         return result
@@ -1340,7 +1339,7 @@ class GrayCode:
         :param mode: "xy" or "ij" decides the order of last dimension coordinates in the output (ij -> height first, xy -> width first)
         :param output_dir: if not None, saves the decoded images to this directory
         :param debug: if True, visualizes the map in an image using the red and green channels where R=X, G=Y, B=0, X increases from left to right, Y increases from top to bottom
-        :return: a 2D numpy array of shape (height, width, 2) uint32 mapping from camera pixels to projector pixels
+        :return: a 2D numpy array of shape (height, width, 2) int64 mapping from camera pixels to projector pixels (-1 for background)
         and a foreground mask (height, width) of booleans
         """
         if captures.ndim != 4:
@@ -1361,17 +1360,17 @@ class GrayCode:
             raise ValueError("captures must have length of {}".format(len(encoded)))
         if c != 1:  # naively convert to grayscale
             captures = rgb_to_gray(captures, keep_channels=True)
-        imgs_binary, fg = self.binarize(captures, flipped_patterns, bg_threshold)
+        imgs_binary, bg = self.binarize(captures, flipped_patterns, bg_threshold)
         imgs_binary = imgs_binary[:, :, :, 0]
-        fg = fg[:, :, 0]
+        bg = bg[:, :, 0]
         x = self.decode1d(imgs_binary[: b // 2])
         maskx = x < proj_wh[0]
-        x[~maskx] = 0
-        fg &= maskx  # mask out invalid x coordinates (the amount of bits we used is equal or larger than the width)
+        x[~maskx] = -1  # mask out invalid x coordinates (the amount of bits we used is equal or larger than the width)
         y = self.decode1d(imgs_binary[b // 2 :])
         masky = y < proj_wh[1]
-        y[~masky] = 0
-        fg &= masky  # mask out invalid y coordinates (the amount of bits we used is equal or larger than the height)
+        y[~masky] = -1  # mask out invalid y coordinates (the amount of bits we used is equal or larger than the height)
+        x[bg] = -1
+        y[bg] = -1
         if mode == "ij":
             forward_map = np.concatenate((y[..., None], x[..., None]), axis=-1)
         elif mode == "xy":
@@ -1380,16 +1379,16 @@ class GrayCode:
             raise ValueError("mode must be 'ij' or 'xy'")
         if output_dir is not None:
             np.save(Path(output_dir, "forward_map.npy"), forward_map)
-            np.save(Path(output_dir, "fg.npy"), fg)
+            # np.save(Path(output_dir, "fg.npy"), fg)
             if debug:
                 save_images(imgs_binary[..., None], Path(output_dir, "imgs_binary"))
-                save_image(fg, Path(output_dir, "foreground.png"))
-                composed = forward_map * fg[..., None]
+                # save_image(fg, Path(output_dir, "foreground.png"))
                 if mode == "ij":
-                    composed_normalized = composed / np.array([proj_wh[1], proj_wh[0]])
+                    composed_normalized = forward_map / np.array([proj_wh[1], proj_wh[0]])
                     composed_normalized[..., [0, 1]] = composed_normalized[..., [1, 0]]
                 elif mode == "xy":
-                    composed_normalized = composed / np.array([proj_wh[0], proj_wh[1]])
+                    composed_normalized = forward_map / np.array([proj_wh[0], proj_wh[1]])
+                composed_normalized[forward_map < 0] == 0
                 composed_normalized_8b = to_8b(composed_normalized)
                 composed_normalized_8b_3c = np.concatenate(
                     (
@@ -1401,7 +1400,7 @@ class GrayCode:
                 save_image(
                     composed_normalized_8b_3c, Path(output_dir, "forward_map.png")
                 )
-        return forward_map, fg
+        return forward_map
 
 
 class DeBruijn:
