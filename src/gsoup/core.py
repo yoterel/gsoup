@@ -16,6 +16,43 @@ def is_np(x):
     else:
         raise ValueError("input must be torch.Tensor or np.ndarray")
 
+def is_float(x):
+    """
+    checks if x is a float array
+    :param x: object to check
+    :return: True if x is a float array, False if x is not
+    """
+    if is_np(x):
+        return np.issubdtype(x.dtype, np.floating)
+    else:
+        return torch.is_floating_point(x)
+
+
+def permute_channel_dimension(x):
+    """
+    permutes the channels of a numpy array or torch tensor
+    :param x: numpy array or torch tensor of shape (h, w, c) or (c, h, w) or (b, h, w, c) or (b, c, h, w)
+    :return: x with permuted channels
+    note:
+    (h, w, c) -> (c, h, w)
+    (b, h, w, c) -> (b, c, h, w)
+    (c, h, w) -> (h, w, c)
+    (b, c, h, w) -> (b, h, w, c)
+    """
+    if not 2 < x.ndim <= 4:
+        raise ValueError("x must be 3 or 4 dimensional")
+    if x.ndim == 4:
+        axis1 = 1
+        axis2 = 3
+        axis3 = 2
+    else:
+        axis1 = 0
+        axis2 = 2
+        axis3 = 1
+    x = x.swapaxes(axis1, axis2)  # (h, w, c) -> (c, w, h), or (b, h, w, c) -> (b, c, w, h)
+    x = x.swapaxes(axis2, axis3)  # (c, w, h) -> (c, h, w), or (b, c, w, h) -> (b, c, h, w)
+    return x
+
 
 def to_hom(x):
     """
@@ -97,7 +134,7 @@ def repeat(x, n):
     if is_np(x):
         y = np.tile(x, n)
     else:
-        y = torch, repeat(x, *n)
+        y = torch.repeat(x, *n)
     return y
 
 
@@ -157,55 +194,52 @@ def to_34(mat: np.array):
         return mat[:-1, :]
 
 
-def to_np(arr: torch.Tensor):
+def to_np(x, permute_channels=False):
     """
-    converts a tensor to numpy array
-    :param arr: tensor
+    converts input to numpy array
+    :param x: tensor
     :return: numpy array
     """
-    if type(arr) == torch.Tensor:
-        return arr.detach().cpu().numpy()
-    elif type(arr) == np.ndarray:
-        return arr
-    elif type(arr) == Image.Image:
-        return np.array(arr)
-    elif type(arr) == list:
-        return np.array(arr)
+    if type(x) == torch.Tensor:
+        if permute_channels:
+            x = permute_channel_dimension(x)
+        return x.detach().cpu().numpy()
+    elif type(x) == np.ndarray:
+        return x
+    elif type(x) == Image.Image:
+        return np.array(x)
+    elif type(x) == list:
+        return np.array(x)
     else:
-        raise TypeError("cannot convert {} to numpy array".format(str(type(arr))))
+        raise TypeError("cannot convert {} to numpy array".format(str(type(x))))
 
 
-def to_numpy(arr: torch.Tensor):
+def to_numpy(x, permute_channels=False):
     """
-    converts a tensor to numpy array
-    :param arr: tensor
-    :return: numpy array
+    see to_np
     """
-    return to_np(arr)
+    return to_np(x, permute_channels)
 
 
-def to_torch(arr: np.array, device="cpu", dtype=None, permute_channels=False):
+def to_torch(x, device="cpu", dtype=None, permute_channels=False):
     """
     converts a numpy array to a torch tensor
-    :param arr: numpy array
+    :param x: numpy array
     :param device: device to put the tensor on
-    :param dtype: dtype of the tensor
+    :param dtype: dtype of the tensor, if None will be inferred from the input
     :param permute_channels: if True, permutes the channels order
     :return: torch tensor
     """
-    if dtype is None:
-        tensor = torch.tensor(arr, device=device)
-    else:
-        tensor = torch.tensor(arr, dtype=dtype, device=device)
-    if permute_channels:
-        if tensor.ndim == 3:
-            return tensor.permute(2, 0, 1)  # (h, w, c) -> (c, h, w)
-        elif tensor.ndim == 4:
-            return tensor.permute(0, 3, 1, 2)  # (n, h, w, c) -> (n, c, h, w)
+    if is_np(x):
+        if dtype is None:
+            tensor = torch.tensor(x, device=device)
         else:
-            raise ValueError("tensor must be 3 or 4 dimensional")
-    else:
+            tensor = torch.tensor(x, dtype=dtype, device=device)
+        if permute_channels:
+            tensor = permute_channel_dimension(tensor)
         return tensor
+    else:
+        return x
 
 
 def to_8b(x, clip=True):
@@ -216,7 +250,7 @@ def to_8b(x, clip=True):
     :return: 8 bit array
     """
     if is_np(x):
-        if x.dtype == np.float16 or x.dtype == np.float32 or x.dtype == np.float64:
+        if is_float(x):
             if clip:
                 x = np.clip(x, 0, 1)
             return (255 * x).round().astype(np.uint8)
@@ -224,8 +258,10 @@ def to_8b(x, clip=True):
             return x.astype(np.uint8) * 255
         elif x.dtype == np.uint8:
             return x
+        else:
+            raise ValueError("unsupported dtype")
     else:
-        if x.dtype == torch.float32 or x.dtype == torch.float64:
+        if is_float(x):
             if clip:
                 x = torch.clamp(x, 0, 1)
             return (255 * x).round().type(torch.uint8)
@@ -233,6 +269,8 @@ def to_8b(x, clip=True):
             return x.type(torch.uint8) * 255
         elif x.dtype == torch.uint8:
             return x
+        else:
+            raise ValueError("unsupported dtype")
 
 
 def to_float(x, clip=True):
@@ -245,39 +283,44 @@ def to_float(x, clip=True):
     if is_np(x):
         if x.dtype == np.uint8:
             return x.astype(np.float32) / 255
-        elif x.dtype == np.float32:
+        elif x.dtype == bool:
+            return x.astype(np.float32)
+        elif is_float(x):
             if clip:
                 x = np.clip(x, 0, 1)
             return x
-        elif x.dtype == bool:
-            return x.astype(np.float32)
         else:
             raise ValueError("unsupported dtype")
     else:
         if x.dtype == torch.uint8:
             return x.to(torch.float32) / 255
-        elif x.dtype == torch.float32:
+        elif x.dtype == torch.bool:
+            return x.to(torch.float32)
+        elif is_float(x):
             if clip:
                 x = torch.clamp(x, 0, 1)
             return x
-        elif x.dtype == torch.bool:
-            return x.to(torch.float32)
         else:
             raise ValueError("unsupported dtype")
 
 
-def to_PIL(x: np.array):
+def to_PIL(x):
     """
-    convert a numpy float array to a PIL image
-    :param x: array
+    convert a numpy array or torch tensor to a PIL image
+    :param x: (h, w, 3) or (h, w) float numpy array or torch tensor
     :return: PIL image
     """
-    if x.ndim == 3:
-        return Image.fromarray(to_8b(x))
-    elif x.ndim == 2:
-        return Image.fromarray(to_8b(x[:, :, None]), mode="L")
+    if is_float(x):
+        if not is_np(x):
+             x = to_np(x, permute_channels=True)
+        if x.ndim == 3:
+            return Image.fromarray(to_8b(x))
+        elif x.ndim == 2:
+            return Image.fromarray(to_8b(x[:, :, None]), mode="L")
+        else:
+            raise ValueError("unsupported array dimensions")
     else:
-        raise ValueError("unsupported array dimensions")
+        raise ValueError("unsupported dtype")
 
 
 def map_range(x, in_min, in_max, out_min, out_max):
@@ -306,7 +349,7 @@ def map_to_01(x):
 def swap_columns(x, col1_index, col2_index):
     """
     swaps two columns of a numpy array inplace
-    :param x: array N x C
+    :param x: array (..., c)
     :param col1_index: index of the first column
     :param col2_index: index of the second column
     :return: array with swapped columns
@@ -342,7 +385,7 @@ def color_to_gray(x, keep_channels=False):
     c = x.shape[-1]
     orig_dtype = x.dtype
     if is_np(x):
-        if x.dtype == np.float32 or x.dtype == np.float64:
+        if is_float(x):
             x = x.mean(axis=-1, keepdims=True)
         else:
             x = x.astype(np.float32).mean(axis=-1, keepdims=True)
@@ -353,7 +396,7 @@ def color_to_gray(x, keep_channels=False):
             else:
                 x = np.tile(x, (1, 1, 1, c))
     else:
-        if x.dtype == torch.float32 or x.dtype == torch.float64:
+        if is_float(x):
             x = x.mean(dim=-1, keepdim=True)
         else:
             x = x.to(torch.float32).mean(dim=-1, keepdim=True)

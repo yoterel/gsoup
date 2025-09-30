@@ -7,7 +7,6 @@ from .geometry_basic import get_edges, edge_contraction
 def compute_incident_triangles(f):
     """
     compute the incident triangles per vertex
-    :param v: vertices of the mesh
     :param f: faces of the mesh
     :return: list of lists of incident triangles per vertex
     """

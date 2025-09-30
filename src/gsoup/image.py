@@ -12,6 +12,7 @@ from .core import (
     is_np,
     to_torch,
     to_np,
+    is_float,
 )
 from .structures import get_gizmo_coords
 from pathlib import Path
@@ -767,68 +768,63 @@ def mask_regions(images, start_h, end_h, start_w, end_w):
     return output
 
 
-def adjust_contrast_brightness(img, alpha, beta=None):
+def adjust_contrast_brightness(img, alpha=1.0, beta=0.0):
     """
     adjusts image contrast and brightness using naive gain and bias factors
     :param img: input image numpy array ((n, h, w, 3)), float values between 0 and 1
-    :param alpha: gain factor ("contrast") between 0 and inf
-    :param beta: bias factor ("brightness") between -inf and inf (but typically between -1 and 1)
+    :param alpha: gain factor ("contrast") range is [0.0, inf]
+    :param beta: bias factor ("brightness") range is [-1.0, 1.0]
     :return: the new image
     """
-    if img.dtype != np.float32:
-        raise ValueError("img must be a float32 numpy array (0-1)")
-    if beta is None:  # if beta is not provided, set to factor of alpha
-        beta = 0.5 - alpha / 2
-    new_img = img * alpha + beta
-    new_img[new_img < 0] = 0
-    new_img[new_img > 1] = 1
-    return new_img.astype(np.uint8)
-
-
-def change_brightness(input_img, brightness=0):
-    """
-    changes brightness of an image or batch of images
-    :param input_img a numpy or torch tensor of float values between 0 and 1 ((n, h, w, 3))
-    :param brightness a number between -255 to 255 (0=no change)
-    :return the new image
-    """
-    if input_img.dtype != np.float32 and input_img.dtype != torch.float32:
-        raise ValueError("input_img must be a float32 array (0-1)")
-    if brightness != 0:
-        if brightness > 0:
-            shadow = brightness
-            highlight = 255
-        else:
-            shadow = 0
-            highlight = 255 + brightness
-        alpha_b = (highlight - shadow) / 255
-        gamma_b = shadow / 255
+    if not is_float(img):
+        raise ValueError("img must be a float array")
     else:
-        alpha_b = 1
-        gamma_b = 0
-    return input_img * alpha_b + gamma_b
+        new_img = img * alpha + beta
+        if is_np(new_img):
+            new_img = np.clip(new_img, 0.0, 1.0)
+        else:
+            new_img = torch.clamp(new_img, 0.0, 1.0)
+        return new_img
 
 
 def linear_to_srgb(linear):
     """
     converts linear RGB to sRGB, see https://en.wikipedia.org/wiki/SRGB.
     note: linear is expected to be in the range [0, 1]
+    supports both numpy arrays and torch tensors
     """
-    eps = np.finfo(np.float32).eps
-    srgb0 = 323 / 25 * linear
-    srgb1 = (211 * np.maximum(eps, linear) ** (5 / 12) - 11) / 200
-    return np.where(linear <= 0.0031308, srgb0, srgb1)
+    if is_np(linear):
+        eps = np.finfo(np.float32).eps
+        srgb0 = 323 / 25 * linear
+        srgb1 = (211 * np.maximum(eps, linear) ** (5 / 12) - 11) / 200
+        return np.where(linear <= 0.0031308, srgb0, srgb1)
+    else:
+        eps = torch.finfo(torch.float32).eps
+        # broadcast eps to the same shape as linear
+        eps = torch.full(linear.shape, eps, device=linear.device)
+        srgb0 = 323 / 25 * linear
+        srgb1 = (211 * torch.maximum(eps, linear) ** (5 / 12) - 11) / 200
+        return torch.where(linear <= 0.0031308, srgb0, srgb1)
 
 
 def srgb_to_linear(srgb):
     """
     converts sRGB to linear RGB, see https://en.wikipedia.org/wiki/SRGB.
     note: srgb is expected to be in the range [0, 1]
+    supports both numpy arrays and torch tensors
     """
-    eps = np.finfo(np.float32).eps
-    linear0 = 25 / 323 * srgb
-    linear1 = np.maximum(eps, ((200 * srgb + 11) / (211))) ** (12 / 5)
-    return np.where(srgb <= 0.04045, linear0, linear1)
+    if is_np(srgb):
+        eps = np.finfo(np.float32).eps
+        linear0 = 25 / 323 * srgb
+        linear1 = np.maximum(eps, ((200 * srgb + 11) / (211))) ** (12 / 5)
+        return np.where(srgb <= 0.04045, linear0, linear1)
+    else:
+        eps = torch.finfo(torch.float32).eps
+        # broadcast eps to the same shape as srgb
+        eps = torch.full(srgb.shape, eps, device=srgb.device)
+        linear0 = 25 / 323 * srgb
+        linear1 = torch.maximum(eps, ((200 * srgb + 11) / (211))) ** (12 / 5)
+        return torch.where(srgb <= 0.04045, linear0, linear1)
 
 
 def inset(

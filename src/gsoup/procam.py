@@ -11,7 +11,7 @@ from .gsoup_io import (
 from .transforms import compose_rt
 from .core import to_8b, to_hom, swap_columns, make_monotonic, to_float, rgb_to_gray
 from .image import (
-    change_brightness,
+    adjust_contrast_brightness,
     add_alpha,
     resize,
     tonemap_reinhard,
@@ -817,7 +817,7 @@ def naive_color_compensate(
     all_black_image,
     cam_width,
     cam_height,
-    brightness_decrease=-127,
+    brightness_decrease=-0.5,
     projector_gamma=2.2,
     output_path=None,
     debug=False,
@@ -841,7 +841,7 @@ def naive_color_compensate(
     target_image = load_image(
         target_image, as_float=True, resize_wh=(cam_width, cam_height)
     )[..., :3]
-    target_image = change_brightness(target_image, brightness_decrease)
+    target_image = adjust_contrast_brightness(target_image, 1.0, brightness_decrease)
     if debug:
         save_image(target_image, Path(output_path.parent, "decrease_brightness.png"))
     all_white_image = load_image(

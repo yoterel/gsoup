@@ -20,7 +20,7 @@ def is_on_segment(p, a, b, collinear=False):
         cross_prod = np.cross(ap, ab)
         collinear = cross_prod < 1e-6  # tolerance
     else:
-        colinear = np.full(len(p), True)
+        collinear = np.full(len(p), True)
     # Check if p lies between a and b using dot product.
     dot = np.sum(ap * ab, axis=1)
     ab_squared_norm = np.sum(ab * ab, axis=1)
@@ -590,8 +590,8 @@ def merge_meshes(v1, f1, v2=None, f2=None):
 
 def find_princple_componenets(v: torch.Tensor):
     """
-    finds the principle components of a points nx3
-    :param v: nx3 torch tensor of points
+    finds the principle components of a points (n, 3)
+    :param v: (n, 3) torch tensor of points
     :return: the principle components (column major)
     """
     if type(v) == torch.Tensor:
@@ -613,8 +613,8 @@ def find_princple_componenets(v: torch.Tensor):
 def remove_unreferenced_vertices(v, f):
     """
     removes unreferenced vertices from a mesh
-    :param v: Vx3 np array of vertices
-    :param f: Fx3 np array of faces
+    :param v: (V, 3) np array of vertices
+    :param f: (F, 3)) np array of faces
     :return: the new vertices and faces, and a map from new to old indices (-1 if unreferenced)
     """
     referenced = np.zeros((v.shape[0]), dtype=bool)
@@ -628,9 +628,9 @@ def remove_unreferenced_vertices(v, f):
 
 def get_edges(f: np.ndarray):
     """
-    given a numpy array of faces of a triangular mesh F x 3, returns a numpy array of edges
-    :param f: F x 3 numpy array of faces
-    :return: E x 2 numpy array of edges
+    given a numpy array of faces of a triangular mesh (F, 3), returns a numpy array of edges
+    :param f: (F, 3) numpy array of faces
+    :return: (E, 2) numpy array of edges
     """
     e1 = np.concatenate((f[:, 0:1], f[:, 1:2]), axis=1)
     e2 = np.concatenate((f[:, 1:2], f[:, 2:3]), axis=1)
@@ -644,8 +644,8 @@ def get_edges(f: np.ndarray):
 def edge_contraction(v, f, edge_to_contract, new_v_location):
     """
     contracts an edge in a mesh and moves the vertex to a new location
-    :param v: V x 3 numpy array of vertices
-    :param f: F x 3 numpy array of faces
+    :param v: (V, 3) numpy array of vertices
+    :param f: (F, 3) numpy array of faces
     :param edge_to_contract: 2, numpy array of the edge to contract
     :param new_v_location: 3, numpy array of the new vertex location
     :return: the contracted mesh
@@ -667,8 +667,8 @@ def edge_contraction(v, f, edge_to_contract, new_v_location):
 def clean_infinite_vertices(v, f):
     """
     removes vertices that are infinite / nan, and all their incident faces
-    :param v: V x 3 numpy array of vertices
-    :param f: F x 3 numpy array of faces
+    :param v: (V, 3) numpy array of vertices
+    :param f: (F, 3) numpy array of faces
     :return: the cleaned mesh
     """
     finite_mask = np.isfinite(v).any(axis=-1)  # finite mask

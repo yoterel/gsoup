@@ -2,6 +2,7 @@ __version__ = "0.2.9"
 
 from .core import (
     is_np,
+    is_float,
     to_hom,
     homogenize,
     compose_rt,
@@ -123,7 +124,6 @@ from .image import (
     resize,
     resize_images_naive,
     adjust_contrast_brightness,
-    change_brightness,
     linear_to_srgb,
     srgb_to_linear,
     pad_to_res,
