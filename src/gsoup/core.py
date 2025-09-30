@@ -16,6 +16,7 @@ def is_np(x):
     else:
         raise ValueError("input must be torch.Tensor or np.ndarray")
 
+
 def is_float(x):
     """
     checks if x is a float array
@@ -49,8 +50,12 @@ def permute_channel_dimension(x):
         axis1 = 0
         axis2 = 2
         axis3 = 1
-    x = x.swapaxes(axis1, axis2)  # (h, w, c) -> (c, w, h), or (b, h, w, c) -> (b, c, w, h)
-    x = x.swapaxes(axis2, axis3)  # (c, w, h) -> (c, h, w), or (b, c, w, h) -> (b, c, h, w)
+    x = x.swapaxes(
+        axis1, axis2
+    )  # (h, w, c) -> (c, w, h), or (b, h, w, c) -> (b, c, w, h)
+    x = x.swapaxes(
+        axis2, axis3
+    )  # (c, w, h) -> (c, h, w), or (b, c, w, h) -> (b, c, h, w)
     return x
 
 
@@ -312,7 +317,7 @@ def to_PIL(x):
     """
     if is_float(x):
         if not is_np(x):
-             x = to_np(x, permute_channels=True)
+            x = to_np(x, permute_channels=True)
         if x.ndim == 3:
             return Image.fromarray(to_8b(x))
         elif x.ndim == 2:
