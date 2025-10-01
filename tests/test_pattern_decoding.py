@@ -187,20 +187,20 @@ class TestPhaseShifting:
 
     def setup_method(self):
         """Set up test fixtures."""
-        self.phase_shifting = PhaseShifting(num_phases=4, frequency_x=8, frequency_y=6)
+        self.phase_shifting = PhaseShifting(num_phases=4, cycles_x=8, cycles_y=6)
         self.proj_wh = (64, 48)  # Small resolution for testing
 
     def test_initialization(self):
         """Test PhaseShifting class initialization."""
         assert self.phase_shifting.num_phases == 4
-        assert self.phase_shifting.frequency_x == 8
-        assert self.phase_shifting.frequency_y == 6
+        assert self.phase_shifting.cycles_x == 8
+        assert self.phase_shifting.cycles_y == 6
 
-        # Test with default frequencies
+        # Test with default cycle counts
         ps_default = PhaseShifting(num_phases=3)
         assert ps_default.num_phases == 3
-        assert ps_default.frequency_x is None
-        assert ps_default.frequency_y is None
+        assert ps_default.cycles_x is None
+        assert ps_default.cycles_y is None
 
     def test_encode(self):
         """Test pattern encoding."""
@@ -261,17 +261,17 @@ class TestPhaseShifting:
         """Test phase unwrapping."""
         # Test with known phase values
         wrapped_phase = np.pi / 4  # 45 degrees
-        frequency = 8
+        cycles = 8
         image_size = 64
 
-        coords = self.phase_shifting.unwrap_phase(wrapped_phase, frequency, image_size)
+        coords = self.phase_shifting.unwrap_phase(wrapped_phase, cycles, image_size)
 
         # Should return reasonable coordinate
         assert 0 <= coords <= image_size
 
         # Test with array input
         wrapped_phases = np.array([0, np.pi / 2, np.pi, 3 * np.pi / 2])
-        coords = self.phase_shifting.unwrap_phase(wrapped_phases, frequency, image_size)
+        coords = self.phase_shifting.unwrap_phase(wrapped_phases, cycles, image_size)
         assert coords.shape == wrapped_phases.shape
 
     def test_decode_synthetic(self):
@@ -472,7 +472,7 @@ def test_integration_example():
 
     # Example usage of PhaseShifting
     print("\n=== PhaseShifting Example ===")
-    phase_shifting = PhaseShifting(num_phases=4, frequency_x=16, frequency_y=12)
+    phase_shifting = PhaseShifting(num_phases=4, cycles_x=16, cycles_y=12)
 
     # Generate patterns
     patterns = phase_shifting.encode(proj_wh, include_reference=True)

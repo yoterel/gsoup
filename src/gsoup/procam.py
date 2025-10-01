@@ -1742,16 +1742,16 @@ class PhaseShifting:
     Based on "Phase-shifting for structured light scanning".
     """
 
-    def __init__(self, num_phases=4, frequency_x=None, frequency_y=None):
+    def __init__(self, num_phases=4, cycles_x=None, cycles_y=None):
         """
         Initialize phase-shifting pattern generator.
         :param num_phases: number of phase shifts (typically 3-5)
-        :param frequency_x: spatial frequency in x-direction (cycles per image width)
-        :param frequency_y: spatial frequency in y-direction (cycles per image height)
+        :param cycles_x: number of cycles across image width
+        :param cycles_y: number of cycles across image height
         """
         self.num_phases = num_phases
-        self.frequency_x = frequency_x
-        self.frequency_y = frequency_y
+        self.cycles_x = cycles_x
+        self.cycles_y = cycles_y
 
     def encode(self, proj_wh, include_reference=True):
         """
@@ -1762,11 +1762,11 @@ class PhaseShifting:
         """
         width, height = proj_wh
 
-        # Set default frequencies if not provided
-        if self.frequency_x is None:
-            self.frequency_x = width // 8  # 8 cycles across width
-        if self.frequency_y is None:
-            self.frequency_y = height // 8  # 8 cycles across height
+        # Set default cycle counts if not provided
+        if self.cycles_x is None:
+            self.cycles_x = width // 8  # 8 cycles across width
+        if self.cycles_y is None:
+            self.cycles_y = height // 8  # 8 cycles across height
 
         patterns = []
 
@@ -1776,7 +1776,7 @@ class PhaseShifting:
             phase = 2 * np.pi * phase_idx / self.num_phases
             # Create sinusoidal pattern: I = A + B * cos(2πfx + φ)
             pattern_x = 128 + 127 * np.cos(
-                2 * np.pi * self.frequency_x * x_coords / width + phase
+                2 * np.pi * self.cycles_x * x_coords / width + phase
             )
             pattern_x = np.clip(pattern_x, 0, 255).astype(np.uint8)
 
@@ -1790,7 +1790,7 @@ class PhaseShifting:
             phase = 2 * np.pi * phase_idx / self.num_phases
             # Create sinusoidal pattern: I = A + B * cos(2πfy + φ)
             pattern_y = 128 + 127 * np.cos(
-                2 * np.pi * self.frequency_y * y_coords / height + phase
+                2 * np.pi * self.cycles_y * y_coords / height + phase
             )
             pattern_y = np.clip(pattern_y, 0, 255).astype(np.uint8)
 
@@ -1848,21 +1848,21 @@ class PhaseShifting:
 
         return phase
 
-    def unwrap_phase(self, wrapped_phase, frequency, image_size):
+    def unwrap_phase(self, wrapped_phase, cycles, image_size):
         """
         Unwrap phase to get absolute coordinates.
         :param wrapped_phase: wrapped phase values (-π to π)
-        :param frequency: spatial frequency used in encoding
+        :param cycles: number of cycles across image dimension
         :param image_size: size of the image dimension
         :return: unwrapped coordinates
         """
         # Convert phase to coordinates
-        # phase = 2π * frequency * coord / image_size
-        # coord = phase * image_size / (2π * frequency)
-        coordinates = wrapped_phase * image_size / (2 * np.pi * frequency)
+        # phase = 2π * cycles * coord / image_size
+        # coord = phase * image_size / (2π * cycles)
+        coordinates = wrapped_phase * image_size / (2 * np.pi * cycles)
 
         # Handle phase wrapping by finding the correct cycle
-        cycle_length = image_size / frequency
+        cycle_length = image_size / cycles
         coordinates = np.mod(coordinates, cycle_length)
 
         return coordinates
@@ -1944,8 +1944,8 @@ class PhaseShifting:
                     )
 
         # Unwrap phases to get coordinates
-        x_coords = self.unwrap_phase(x_phase, self.frequency_x, width)
-        y_coords = self.unwrap_phase(y_phase, self.frequency_y, height)
+        x_coords = self.unwrap_phase(x_phase, self.cycles_x, width)
+        y_coords = self.unwrap_phase(y_phase, self.cycles_y, height)
 
         # Convert to integer coordinates and clamp to valid range
         x_coords = np.clip(np.round(x_coords), 0, width - 1).astype(np.uint32)

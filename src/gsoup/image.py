@@ -544,7 +544,7 @@ def image_grid(images, rows, cols, pad=0, pad_color=None):
             images, images.shape[1] + pad * 2, images.shape[2] + pad * 2, pad_color
         )
     tmp = images.reshape(rows, cols, images.shape[1], images.shape[2], -1)
-    if type(tmp) == torch.Tensor:
+    if type(tmp) == torch.Tensor:  # todo, treat torch as (b, c, h, w)
         result = tmp.permute(0, 2, 1, 3, 4).reshape(
             rows * images.shape[1], cols * images.shape[2], -1
         )
@@ -593,7 +593,7 @@ def resize(images, H, W, mode="bilinear"):
 def resize_images_naive(images, H, W, channels_last=True, mode="mean"):
     """
     resize images to output_size, but only if the output size has a common divisor of the input size
-    :param images: numpy array of images (N x H x W x C)
+    :param images: numpy array of images (b, h, w, c)
     :param H: output height size that has a common divisor with the input height size
     :param W: output width size that has a common divisor with the input width size
     :param channels_last: if True, the images are provided in channels last format (and so will the output)
@@ -651,45 +651,70 @@ def pad_to_square(images, color=None):
     """
     pads a batch of images to a square shape
     note: smaller dimension is padded
-    :param image: numpy image b x h x w x c
-    :param color: color to pad with
+    :param images: numpy image (b, h, w, c) or torch tensor (b, c, h, w)
+    :param color: pad color of size (c,) with same dtype as images (defaults to black if None)
     :return: padded image
     """
     if images.ndim != 4:
-        raise ValueError("image must be a 4D array")
-    diff = images.shape[1] - images.shape[2]
-    if diff == 0:
-        return images
-    if diff > 0:
-        return pad_to_res(images, images.shape[1], images.shape[1], color)
+        raise ValueError("images must be a 4D array")
+    
+    if is_np(images):
+        # numpy format: (b, h, w, c)
+        h, w = images.shape[1], images.shape[2]
+        max_dim = max(h, w)
+        if h == w:
+            return images
+        return pad_to_res(images, max_dim, max_dim, color)
     else:
-        return pad_to_res(images, images.shape[2], images.shape[2], color)
+        # torch format: (b, c, h, w)
+        h, w = images.shape[2], images.shape[3]
+        max_dim = max(h, w)
+        if h == w:
+            return images
+        return pad_to_res(images, max_dim, max_dim, color)
 
 
 def crop_to_square(images):
     """
     crops a batch of images to a square shape
     note: bigger dimension is cropped
-    :param img: numpy image h x w x c
+    :param images: numpy image (b, h, w, c) or torch tensor (b, c, h, w)
     :return: the cropped square image
     """
     if images.ndim != 4:
-        raise ValueError("image must be a 4D array")
-    if images.shape[1] > images.shape[2]:
-        s = int((images.shape[1] - images.shape[2]) / 2)
-        return images[s : (s + images.shape[2])]
+        raise ValueError("images must be a 4D array")
+    
+    if is_np(images):
+        # numpy format: (b, h, w, c)
+        h, w = images.shape[1], images.shape[2]
+        if h == w:
+            return images
+        if h > w:
+            s = int((h - w) / 2)
+            return images[:, s : (s + w), :, :]
+        else:
+            s = int((w - h) / 2)
+            return images[:, :, s : (s + h), :]
     else:
-        s = int((images.shape[2] - images.shape[1]) / 2)
-        return images[:, :, s : (s + images.shape[1])]
+        # torch format: (b, c, h, w)
+        h, w = images.shape[2], images.shape[3]
+        if h == w:
+            return images
+        if h > w:
+            s = int((h - w) / 2)
+            return images[:, :, s : (s + w), :]
+        else:
+            s = int((w - h) / 2)
+            return images[:, :, :, s : (s + h)]
 
 
 def pad_to_res(images, res_h, res_w, bg_color=None):
     """
     pads a batch of images to a specific resolution. images will be centered in the output image.
-    :param image: batch of np arrays (b, h, w, c) or torch tensors (b, c, h, w)
+    :param images: batch of np arrays (b, h, w, c) or torch tensors (b, c, h, w)
     :param res_h: height of the output image
     :param res_w: width of the output image
-    :param bg_color: background color sized (c,) (defaults to black)
+    :param bg_color: background color of size (c,) with same dtype as images (defaults to black if None)
     :return: padded image (b, res_h, res_w, c) or (b, c, res_h, res_w)
     """
     if images.ndim != 4:
@@ -727,11 +752,11 @@ def pad_to_res(images, res_h, res_w, bg_color=None):
 
 def crop_center(images, dst_h, dst_w):
     """
-    crops a batch of images to a specific resolution, but the crop comes from the center of the image
-    :param image: numpy (or torch) array b x h x w x c
+    crops a batch of images to a specific resolution, where the crop comes from the center of the image
+    :param image: numpy (or torch) array (b, h, w, c)
     :param dst_h: height of the output image
     :param dst_w: width of the output image
-    :return: cropped image b x dst_h x dst_w x c
+    :return: cropped image (b, dst_h, dst_w, c)
     """
     if images.ndim != 4:
         raise ValueError("image must be a 4D array")
@@ -751,7 +776,7 @@ def crop_center(images, dst_h, dst_w):
 def mask_regions(images, start_h, end_h, start_w, end_w):
     """
     masks a batch of numpy image with black background outside of region of interest (roi)
-    :param image: numpy image b x h x w x c
+    :param image: numpy image (b, h, w, c)
     :param start_h: where does the roi height start
     :param end_h: where does the roi height end
     :param start_w: where does the roi width start
@@ -771,7 +796,7 @@ def mask_regions(images, start_h, end_h, start_w, end_w):
 def adjust_contrast_brightness(img, alpha=1.0, beta=0.0):
     """
     adjusts image contrast and brightness using naive gain and bias factors
-    :param img: input image numpy array ((n, h, w, 3)), float values between 0 and 1
+    :param img: input image numpy array (n, h, w, 3), float values between 0 and 1
     :param alpha: gain factor ("contrast") range is [0.0, inf]
     :param beta: bias factor ("brightness") range is [-1.0, 1.0]
     :return: the new image
@@ -857,7 +882,7 @@ def inset(
     if margin < 0.0 or margin >= 1.0:
         raise ValueError("margin must be between 0.0 and 1.0")
 
-    # Ensure inputs are 4D (batched)
+    # ensure inputs are 4D (batched)
     if base_image.ndim != 4:
         raise ValueError("base_image must be 4D (b x h x w x c)")
     if inset_image.ndim != 4:
@@ -873,7 +898,7 @@ def inset(
         inset_image = to_torch(inset_image).permute(
             0, 3, 1, 2
         )  # (b, h, w, c) -> (b, c, h, w)
-    # Use broadcasting to handle different batch sizes
+    # use broadcasting to handle different batch sizes
     base_image, inset_image = broadcast_batch(base_image, inset_image)
     if pad > 0:
         pad = int(pad)
@@ -883,15 +908,15 @@ def inset(
             inset_image.shape[3] + pad * 2,
             pad_color,
         )
-    # Get dimensions
+    # get dimensions
     base_h, base_w = base_image.shape[2:]
     inset_h, inset_w = inset_image.shape[2:]
 
-    # Calculate inset size based on longest dimension of base image
+    # calculate inset size based on longest dimension of base image
     max_base_dim = max(base_h, base_w)
     inset_size = int(max_base_dim * percent)
 
-    # Resize inset image to fit within the calculated size while maintaining aspect ratio
+    # resize inset image to fit within the calculated size while maintaining aspect ratio
     if inset_h > inset_w:
         new_inset_h = inset_size
         new_inset_w = int(inset_size * inset_w / inset_h)
@@ -899,13 +924,13 @@ def inset(
         new_inset_w = inset_size
         new_inset_h = int(inset_size * inset_h / inset_w)
 
-    # Resize inset image - resize function expects 4D input
+    # resize inset image - resize function expects 4D input
     resized_inset = resize(inset_image, new_inset_h, new_inset_w, mode="bilinear")
 
-    # Calculate margin in pixels
+    # calculate margin in pixels
     margin_pixels = int(max_base_dim * margin)
 
-    # Calculate inset position
+    # calculate inset position
     if corner == "top_left":
         start_h = margin_pixels
         start_w = margin_pixels
@@ -919,17 +944,17 @@ def inset(
         start_h = base_h - margin_pixels - new_inset_h
         start_w = base_w - margin_pixels - new_inset_w
 
-    # Ensure inset fits within base image bounds
+    # ensure inset fits within base image bounds
     start_h = max(0, min(start_h, base_h - new_inset_h))
     start_w = max(0, min(start_w, base_w - new_inset_w))
 
-    # Create output image (copy base image)
+    # create output image (copy base image)
     if is_np(base_image):
         result = base_image.copy()
     else:
         result = base_image.clone()
 
-    # Embed inset image
+    # embed inset image
     end_h = start_h + new_inset_h
     end_w = start_w + new_inset_w
     result[:, :, start_h:end_h, start_w:end_w] = resized_inset
