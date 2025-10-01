@@ -1427,20 +1427,8 @@ class PhaseShifting:
         self.cycles_x = cycles_x
         self.cycles_y = cycles_y
 
-    def encode(self, proj_wh, include_reference=True):
-        """
-        Encode projector coordinates into phase-shifting sinusoidal patterns.
-        :param proj_wh: projector's (width, height) in pixels as a tuple
-        :param include_reference: if True, includes white and black reference images
-        :return: a 3D numpy array of shape (total_images, height, width, 1) for grayscale patterns
-        """
+    def encode_internal(self, proj_wh, cycles_x, cycles_y, num_temporal_phases, include_reference):
         width, height = proj_wh
-
-        # Set default cycle counts if not provided
-        if self.cycles_x is None:
-            self.cycles_x = width // 8  # 8 cycles across width
-        if self.cycles_y is None:
-            self.cycles_y = height // 8  # 8 cycles across height
 
         patterns = []
 
@@ -1448,9 +1436,9 @@ class PhaseShifting:
         x_coords = np.arange(width, dtype=np.float32)
         DC = 128
         A = 127
-        spatial_phase = 2 * np.pi * self.cycles_x * x_coords / width
-        for phase_idx in range(self.num_temporal_phases):
-            temporal_phase = 2 * np.pi * phase_idx / self.num_temporal_phases
+        spatial_phase = 2 * np.pi * cycles_x * x_coords / width
+        for phase_idx in range(num_temporal_phases):
+            temporal_phase = 2 * np.pi * phase_idx / num_temporal_phases
             # Create sinusoidal pattern: I = A + B * cos(2πfx + φ)
             pattern_x = DC + A * np.cos(spatial_phase + temporal_phase)
             pattern_x = np.clip(pattern_x, 0, 255).astype(np.uint8)
@@ -1461,9 +1449,9 @@ class PhaseShifting:
 
         # Generate y-direction phase-shifting patterns
         y_coords = np.arange(height, dtype=np.float32)
-        spatial_phase_y = 2 * np.pi * self.cycles_y * y_coords / height
-        for phase_idx in range(self.num_temporal_phases):
-            temporal_phase = 2 * np.pi * phase_idx / self.num_temporal_phases
+        spatial_phase_y = 2 * np.pi * cycles_y * y_coords / height
+        for phase_idx in range(num_temporal_phases):
+            temporal_phase = 2 * np.pi * phase_idx / num_temporal_phases
             # Create sinusoidal pattern: I = A + B * cos(2πfy + φ)
             pattern_y = DC + A * np.cos(spatial_phase_y + temporal_phase)
             pattern_y = np.clip(pattern_y, 0, 255).astype(np.uint8)
@@ -1479,6 +1467,23 @@ class PhaseShifting:
             patterns.extend([white_img, black_img])
 
         return np.array(patterns)
+
+    def encode(self, proj_wh):
+        """
+        Encode projector coordinates into phase-shifting sinusoidal patterns.
+        :param proj_wh: projector's (width, height) in pixels as a tuple
+        :return: a 3D numpy array of shape (total_images, height, width, 1) for grayscale patterns
+        """
+        width, height = proj_wh
+        # Set default cycle counts if not provided
+        if self.cycles_x is None:
+            self.cycles_x = width // 8  # 8 cycles across width
+        if self.cycles_y is None:
+            self.cycles_y = height // 8  # 8 cycles across height
+        lowfreq_patterns = self.encode_internal(proj_wh, 1, 1, self.num_temporal_phases, False)
+        highfreq_patterns = self.encode_internal(proj_wh, self.cycles_x, self.cycles_y, self.num_temporal_phases, True)
+        all_patterns = np.concatenate([lowfreq_patterns, highfreq_patterns], axis=0)
+        return all_patterns
 
     def compute_spatial_phase(self, intensity_values, num_temporal_phases):
         """
@@ -1540,54 +1545,8 @@ class PhaseShifting:
         coordinates = np.mod(coordinates, cycle_length)
         return coordinates
 
-    def decode(
-        self,
-        captures,
-        proj_wh,
-        bg_threshold=10,
-        mode="ij",
-        output_dir=None,
-        debug=False,
-    ):
-        """
-        Decode captured phase-shifting patterns to extract forward mapping.
-        :param captures: a 4D numpy array of shape (n, height, width, 1) of captured grayscale images
-        :param proj_wh: projector's (width, height) in pixels as a tuple
-        :param bg_threshold: threshold for background detection
-        :param mode: "xy" or "ij" decides coordinate order in output
-        :param output_dir: if not None, saves debug results
-        :param debug: if True, saves debug visualizations
-        :return: forward_map (height, width, 2) int64, negative values for invalid coordinates
-        """
-        if captures.ndim != 4:
-            raise ValueError("captures must be a 4D numpy array")
-        if captures.shape[-1] != 1:
-            raise ValueError("captures must have 1 grayscale channel")
-        if captures.dtype != np.uint8:
-            raise ValueError("captures must be uint8")
-
-        if output_dir is not None:
-            output_dir = Path(output_dir)
-            output_dir.mkdir(parents=True, exist_ok=True)
-
+    def decode_lowfreq(self, captures, proj_wh,foreground, mode, output_dir, debug):
         width, height = proj_wh
-        n_images = len(captures)
-
-        # Expected number of images: x_patterns, y_patterns, white, black
-        expected_images = 2 * self.num_temporal_phases + 2
-        if n_images != expected_images:
-            raise ValueError(
-                f"captures must have {expected_images} images, got {n_images}"
-            )
-
-        # Extract reference images for background detection
-        white_img = captures[-2]  # Second to last
-        black_img = captures[-1]  # Last image
-
-        # Create foreground mask based on white-black difference
-        intensity_diff = white_img.astype(np.float32) - black_img.astype(np.float32)
-        foreground = intensity_diff[..., 0] > bg_threshold
-
         # Extract x-direction patterns (first num_phases images)
         x_patterns = captures[:self.num_temporal_phases, :, :, 0]  # (n_phases, h, w)
 
@@ -1644,7 +1603,7 @@ class PhaseShifting:
         # )
 
         if output_dir is not None:
-            np.save(Path(output_dir, "forward_map.npy"), forward_map)
+            np.save(Path(output_dir, "forward_map_coarse.npy"), forward_map)
             # np.save(Path(output_dir, "fg.npy"), foreground)
 
             if debug:
@@ -1655,8 +1614,8 @@ class PhaseShifting:
                 y_phase_normalized = ((y_phase + np.pi) / (2 * np.pi) * 255).astype(
                     np.uint8
                 )
-                save_image(x_phase_normalized, Path(output_dir, "x_phase.png"))
-                save_image(y_phase_normalized, Path(output_dir, "y_phase.png"))
+                save_image(x_phase_normalized, Path(output_dir, "x_phase_coarse.png"))
+                save_image(y_phase_normalized, Path(output_dir, "y_phase_coarse.png"))
                 # save_image(foreground, Path(output_dir, "foreground.png"))
 
                 # Create visualization of forward map
@@ -1676,7 +1635,116 @@ class PhaseShifting:
                     axis=-1,
                 )
                 save_image(
-                    composed_normalized_8b_3c, Path(output_dir, "forward_map.png")
+                    composed_normalized_8b_3c, Path(output_dir, "forward_map_coarse.png")
                 )
 
         return forward_map
+
+    def decode_highfreq(self, captures, proj_wh,foreground, coarse_forwardmap, mode, output_dir, debug):
+        width, height = proj_wh
+        # Extract x-direction patterns (first num_phases images)
+        x_patterns = captures[:self.num_temporal_phases, :, :, 0]  # (n_phases, h, w)
+
+        # Extract y-direction patterns (next num_phases images)
+        y_patterns = captures[self.num_temporal_phases:2*self.num_temporal_phases, :, :, 0]  # (n_phases, h, w)
+
+        # Compute phase for x-direction
+        x_phase = np.zeros((height, width), dtype=np.float32)
+        for y in range(height):
+            for x in range(width):
+                if foreground[y, x]:
+                    intensity_values = x_patterns[:, y, x]  # (n_phases,)
+                    x_phase[y, x] = self.compute_spatial_phase(
+                        intensity_values, self.num_temporal_phases
+                    )
+
+        # Compute phase for y-direction
+        y_phase = np.zeros((height, width), dtype=np.float32)
+        for y in range(height):
+            for x in range(width):
+                if foreground[y, x]:
+                    intensity_values = y_patterns[:, y, x]
+                    y_phase[y, x] = self.compute_spatial_phase(
+                        intensity_values, self.num_temporal_phases
+                    )
+
+        # Unwrap phases to get coordinates
+        x_coords = self.unwrap_spatial_phase(x_phase, self.cycles_x, width)
+        y_coords = self.unwrap_spatial_phase(y_phase, self.cycles_y, height)
+
+        # Convert to integer coordinates and clamp to valid range
+        x_coords = np.clip(np.round(x_coords), 0, width - 1).astype(np.uint64)
+        y_coords = np.clip(np.round(y_coords), 0, height - 1).astype(np.uint64)
+
+        # Create forward mapping
+        forward_map = np.zeros((height, width, 2), dtype=np.int64)
+        forward_map[..., 0] = x_coords
+        forward_map[..., 1] = y_coords
+
+        # Apply coordinate mode
+        if mode == "ij":
+            forward_map = forward_map[..., [1, 0]]  # Swap to (y, x) order
+        elif mode == "xy":
+            forward_map = forward_map  # Already in (x, y) order
+        else:
+            raise ValueError("mode must be 'ij' or 'xy'")
+        # set negative values where foreground is false
+        forward_map[~foreground] = -1
+        forward_map[forward_map[..., 0] >= width] = -1
+        forward_map[forward_map[..., 1] >= height] = -1
+
+        if output_dir is not None:
+            np.save(Path(output_dir, "forward_map_fine.npy"), forward_map)
+        return forward_map
+
+    def decode(
+        self,
+        captures,
+        proj_wh,
+        bg_threshold=10,
+        mode="ij",
+        output_dir=None,
+        debug=False,
+    ):
+        """
+        Decode captured phase-shifting patterns to extract forward mapping.
+        :param captures: a 4D numpy array of shape (n, height, width, 1) of captured grayscale images
+        :param proj_wh: projector's (width, height) in pixels as a tuple
+        :param bg_threshold: threshold for background detection
+        :param mode: "xy" or "ij" decides coordinate order in output
+        :param output_dir: if not None, saves debug results
+        :param debug: if True, saves debug visualizations
+        :return: forward_map (height, width, 2) int64, negative values for invalid coordinates
+        """
+        if captures.ndim != 4:
+            raise ValueError("captures must be a 4D numpy array")
+        if captures.shape[-1] != 1:
+            raise ValueError("captures must have 1 grayscale channel")
+        if captures.dtype != np.uint8:
+            raise ValueError("captures must be uint8")
+
+        if output_dir is not None:
+            output_dir = Path(output_dir)
+            output_dir.mkdir(parents=True, exist_ok=True)
+
+        
+        n_images = len(captures)
+
+        # Expected images: x_patterns_lowfreq, y_patterns_lowfreq, x_patterns_highfreq, y_patterns_highfreq, white, black
+        expected_images = 4 * self.num_temporal_phases + 2
+        if n_images != expected_images:
+            raise ValueError(
+                f"captures must have {expected_images} images, got {n_images}"
+            )
+
+        # Extract reference images for background detection
+        white_img = captures[-2]  # Second to last
+        black_img = captures[-1]  # Last image
+
+        # Create foreground mask based on white-black difference
+        intensity_diff = white_img.astype(np.float32) - black_img.astype(np.float32)
+        foreground = intensity_diff[..., 0] > bg_threshold
+
+        coarse_forwardmap = self.decode_lowfreq(captures[:2*self.num_temporal_phases], foreground, mode, output_dir, debug)
+        fine_forwardmap = self.decode_highfreq(captures[2*self.num_temporal_phases:4*self.num_temporal_phases], foreground, coarse_forwardmap, mode, output_dir, debug)
+        return fine_forwardmap
