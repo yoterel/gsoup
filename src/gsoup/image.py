@@ -657,7 +657,7 @@ def pad_to_square(images, color=None):
     """
     if images.ndim != 4:
         raise ValueError("images must be a 4D array")
-    
+
     if is_np(images):
         # numpy format: (b, h, w, c)
         h, w = images.shape[1], images.shape[2]
@@ -683,7 +683,7 @@ def crop_to_square(images):
     """
     if images.ndim != 4:
         raise ValueError("images must be a 4D array")
-    
+
     if is_np(images):
         # numpy format: (b, h, w, c)
         h, w = images.shape[1], images.shape[2]

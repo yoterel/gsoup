@@ -1589,10 +1589,12 @@ class PhaseShifting:
         foreground = intensity_diff[..., 0] > bg_threshold
 
         # Extract x-direction patterns (first num_phases images)
-        x_patterns = captures[:self.num_temporal_phases, :, :, 0]  # (n_phases, h, w)
+        x_patterns = captures[: self.num_temporal_phases, :, :, 0]  # (n_phases, h, w)
 
         # Extract y-direction patterns (next num_phases images)
-        y_patterns = captures[self.num_temporal_phases:2*self.num_temporal_phases, :, :, 0]  # (n_phases, h, w)
+        y_patterns = captures[
+            self.num_temporal_phases : 2 * self.num_temporal_phases, :, :, 0
+        ]  # (n_phases, h, w)
 
         # Compute phase for x-direction
         x_phase = np.zeros((height, width), dtype=np.float32)

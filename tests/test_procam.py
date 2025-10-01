@@ -54,6 +54,7 @@ def test_synthetic_projector():
     #     np.array([[1, 0, 0, 0], [0, -1, 0, 0], [0, 0, -1, 0], [0, 0, 0, 1]])
     # )  # this is the projector to world transform, it is identity in this case
 
+
 def test_calibration_and_reconstruction():
     #### calibration ###
     # calibration_dir = Path("resource/calibration")
@@ -144,6 +145,7 @@ def test_calibration_and_reconstruction():
         mode=mode,
     )
     gsoup.save_pointcloud(pc, "resource/points.ply")
+
 
 def test_warping():
     gray = gsoup.GrayCode()
