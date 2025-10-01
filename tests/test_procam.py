@@ -54,50 +54,30 @@ def test_synthetic_projector():
     #     np.array([[1, 0, 0, 0], [0, -1, 0, 0], [0, 0, -1, 0], [0, 0, 0, 1]])
     # )  # this is the projector to world transform, it is identity in this case
 
-
-def test_procam():
-    gray = gsoup.GrayCode()
-    patterns = gray.encode((128, 128))
-    mode = "ij"
-    forward_map = gray.decode(
-        patterns, (128, 128), output_dir=Path("resource/pix2pix"), mode=mode, debug=True
-    )
-    backward_map = gsoup.compute_backward_map(
-        (128, 128), forward_map, output_dir=Path("resource/pix2pix"), debug=True
-    )
-    desired = gsoup.generate_lollipop_pattern(128, 128)
-    warp_image = gsoup.warp_image(
-        backward_map,
-        desired,
-        cam_wh=(forward_map.shape[1], forward_map.shape[0]),
-        mode=mode,
-        output_path=Path("resource/warp.png"),
-    )
-    assert warp_image.shape == (128, 128, 3)
-    assert warp_image.dtype == np.uint8
-    assert (
-        np.mean(np.abs(desired - warp_image)) < 10
-    )  # identity correspondence & warp should be very similar
+def test_calibration_and_reconstruction():
+    #### calibration ###
     # calibration_dir = Path("resource/calibration")
     # calibration_dir.mkdir(exist_ok=True, parents=True)
-    checkerboard = gsoup.generate_checkerboard(128, 128, 16)
+    # checkerboard = gsoup.generate_checkerboard(128, 128, 16)
     # T = gsoup.random_perspective()
     # T_opencv = T[:2, :]
     # img_transformed = cv2.warpPerspective(checkerboard, T, (128, 128))
     # captures = np.bitwise_and(patterns==255, checkerboard[None, ...]==1.0)
     # gsoup.save_images(captures, Path(calibration_dir, "0"))
     # gsoup.save_images(captures, Path(calibration_dir, "1"))
-    gsoup.save_image(checkerboard, Path("resource/checkerboard.png"))
+    # gsoup.save_image(checkerboard, Path("resource/checkerboard.png"))
     #############
     # patterns = gray.encode((800, 800))
+    gray = gsoup.GrayCode()
+    mode = "ij"
     patterns = gsoup.load_images(Path("tests/tests_resource/correspondence_blender"))
     cam_wh = (patterns[0].shape[1], patterns[0].shape[0])
     proj_wh = (800, 800)
     forward_map = gray.decode(
-        patterns, (800, 800), output_dir="resource/forward", debug=True, mode=mode
+        patterns, proj_wh, output_dir="resource/forward", debug=True, mode=mode
     )
     backward_map = gsoup.compute_backward_map(
-        (800, 800),
+        proj_wh,
         forward_map,
         mode=mode,
         output_dir="resource/backward_not_interp",
@@ -105,7 +85,7 @@ def test_procam():
         interpolate=False,
     )
     backward_map = gsoup.compute_backward_map(
-        (800, 800),
+        proj_wh,
         forward_map,
         mode=mode,
         output_dir="resource/backward_interp",
@@ -164,3 +144,27 @@ def test_procam():
         mode=mode,
     )
     gsoup.save_pointcloud(pc, "resource/points.ply")
+
+def test_warping():
+    gray = gsoup.GrayCode()
+    patterns = gray.encode((128, 128))
+    mode = "ij"
+    forward_map = gray.decode(
+        patterns, (128, 128), output_dir=Path("resource/pix2pix"), mode=mode, debug=True
+    )  # computes an identity map ideally
+    backward_map = gsoup.compute_backward_map(
+        (128, 128), forward_map, output_dir=Path("resource/pix2pix"), debug=True
+    )  # also computes an identity map ideally
+    desired = gsoup.generate_lollipop_pattern(128, 128)
+    warp_image = gsoup.warp_image(
+        backward_map,
+        desired,
+        cam_wh=(forward_map.shape[1], forward_map.shape[0]),
+        mode=mode,
+        output_path=Path("resource/warp.png"),
+    )  # should be an identity warp
+    assert warp_image.shape == (128, 128, 3)
+    assert warp_image.dtype == np.uint8
+    assert (
+        np.mean(np.abs(desired - warp_image)) < 10
+    )  # identity correspondence & warp should be very similar

@@ -157,7 +157,7 @@ from .procam import (
     naive_color_compensate,
     reconstruct_pointcloud,
     GrayCode,
-    DeBruijn,
+    PhaseShifting,
     ProjectorScene,
     estimate_color_mixing_matrix,
     estimate_projector_inverse_response,
