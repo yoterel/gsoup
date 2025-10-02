@@ -10,6 +10,7 @@ import tempfile
 
 import gsoup
 
+
 class TestPhaseShifting:
     """Test suite for PhaseShifting class."""
 
@@ -83,7 +84,9 @@ class TestPhaseShifting:
 
         # Test error handling
         with pytest.raises(ValueError):
-            ps_4.compute_spatial_phase(np.array([100, 200]), 4)  # Wrong number of intensities
+            ps_4.compute_spatial_phase(
+                np.array([100, 200]), 4
+            )  # Wrong number of intensities
 
     def test_unwrap_phase(self):
         """Test phase unwrapping."""
@@ -92,14 +95,18 @@ class TestPhaseShifting:
         cycles = 8
         image_size = 64
 
-        coords = self.phase_shifting.unwrap_spatial_phase(wrapped_phase, cycles, image_size)
+        coords = self.phase_shifting.unwrap_spatial_phase(
+            wrapped_phase, cycles, image_size
+        )
 
         # Should return reasonable coordinate
         assert 0 <= coords <= image_size
 
         # Test with array input
         wrapped_phases = np.array([0, np.pi / 2, np.pi, 3 * np.pi / 2])
-        coords = self.phase_shifting.unwrap_spatial_phase(wrapped_phases, cycles, image_size)
+        coords = self.phase_shifting.unwrap_spatial_phase(
+            wrapped_phases, cycles, image_size
+        )
         assert coords.shape == wrapped_phases.shape
 
     def test_decode_synthetic(self):
@@ -148,13 +155,9 @@ class TestPhaseShifting:
         patterns = self.phase_shifting.encode(self.proj_wh)
         captures = patterns.copy()
 
-        forward_map_xy = self.phase_shifting.decode(
-            captures, self.proj_wh, mode="xy"
-        )
+        forward_map_xy = self.phase_shifting.decode(captures, self.proj_wh, mode="xy")
 
-        forward_map_ij = self.phase_shifting.decode(
-            captures, self.proj_wh, mode="ij"
-        )
+        forward_map_ij = self.phase_shifting.decode(captures, self.proj_wh, mode="ij")
 
         # Check that coordinate order is swapped
         np.testing.assert_array_equal(forward_map_xy[..., 0], forward_map_ij[..., 1])
@@ -205,9 +208,7 @@ class TestComparisonWithGrayCode:
             ps_count < gc_count
         ), f"PhaseShifting ({ps_count}) should require fewer patterns than GrayCode ({gc_count})"
 
-        print(
-            f"Pattern counts: GrayCode={gc_count}, PhaseShifting={ps_count}"
-        )
+        print(f"Pattern counts: GrayCode={gc_count}, PhaseShifting={ps_count}")
 
     def test_api_consistency(self):
         """Test that all methods have consistent APIs."""
