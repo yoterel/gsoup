@@ -32,11 +32,11 @@ class TestPhaseShifting:
 
     def test_encode(self):
         """Test pattern encoding."""
-        patterns = self.phase_shifting.encode(self.proj_wh, include_reference=True)
+        patterns = self.phase_shifting.encode(self.proj_wh)
 
         # Check output shape
         expected_images = (
-            2 * self.phase_shifting.num_temporal_phases + 2
+            4 * self.phase_shifting.num_temporal_phases + 2
         )  # x_patterns + y_patterns + white + black
         assert patterns.shape == (expected_images, self.proj_wh[1], self.proj_wh[0], 1)
         assert patterns.dtype == np.uint8
@@ -105,7 +105,7 @@ class TestPhaseShifting:
     def test_decode_synthetic(self):
         """Test decoding with synthetic data."""
         # Generate patterns
-        patterns = self.phase_shifting.encode(self.proj_wh, include_reference=True)
+        patterns = self.phase_shifting.encode(self.proj_wh)
 
         # Simulate perfect capture (no noise)
         captures = patterns.copy()
@@ -126,7 +126,7 @@ class TestPhaseShifting:
     def test_decode_with_noise(self):
         """Test decoding with added noise."""
         # Generate patterns
-        patterns = self.phase_shifting.encode(self.proj_wh, include_reference=True)
+        patterns = self.phase_shifting.encode(self.proj_wh)
 
         # Add noise to simulate real capture
         noise_level = 10
@@ -145,7 +145,7 @@ class TestPhaseShifting:
 
     def test_decode_mode_xy(self):
         """Test decoding with xy mode."""
-        patterns = self.phase_shifting.encode(self.proj_wh, include_reference=True)
+        patterns = self.phase_shifting.encode(self.proj_wh)
         captures = patterns.copy()
 
         forward_map_xy = self.phase_shifting.decode(
@@ -162,7 +162,7 @@ class TestPhaseShifting:
 
     def test_decode_output_dir(self):
         """Test decoding with output directory."""
-        patterns = self.phase_shifting.encode(self.proj_wh, include_reference=True)
+        patterns = self.phase_shifting.encode(self.proj_wh)
         captures = patterns.copy()
 
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -172,10 +172,14 @@ class TestPhaseShifting:
 
             # Check that files were saved
             temp_path = Path(temp_dir)
-            assert (temp_path / "forward_map.npy").exists()
-            assert (temp_path / "x_phase.png").exists()
-            assert (temp_path / "y_phase.png").exists()
-            assert (temp_path / "forward_map.png").exists()
+            assert (temp_path / "forward_map_coarse.npy").exists()
+            assert (temp_path / "forward_map_fine.npy").exists()
+            assert (temp_path / "x_phase_coarse.png").exists()
+            assert (temp_path / "y_phase_coarse.png").exists()
+            assert (temp_path / "x_phase_fine.png").exists()
+            assert (temp_path / "y_phase_fine.png").exists()
+            assert (temp_path / "forward_map_coarse.png").exists()
+            assert (temp_path / "forward_map_fine.png").exists()
 
 
 class TestComparisonWithGrayCode:
@@ -194,7 +198,7 @@ class TestComparisonWithGrayCode:
         gc_count = len(gc_patterns)
 
         # PhaseShifting patterns
-        ps_patterns = self.phase_shifting.encode(self.proj_wh, include_reference=True)
+        ps_patterns = self.phase_shifting.encode(self.proj_wh)
         ps_count = len(ps_patterns)
 
         assert (
@@ -230,8 +234,8 @@ class TestComparisonWithGrayCode:
     def test_decode_output_consistency(self):
         """Test that all decode methods return consistent output formats."""
         # Generate patterns
-        gc_patterns = self.graycode.encode(self.proj_wh, flipped_patterns=True)
-        ps_patterns = self.phase_shifting.encode(self.proj_wh, include_reference=True)
+        gc_patterns = self.graycode.encode(self.proj_wh)
+        ps_patterns = self.phase_shifting.encode(self.proj_wh)
 
         # Decode
         gc_map = self.graycode.decode(gc_patterns, self.proj_wh)
