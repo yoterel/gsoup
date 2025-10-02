@@ -1527,25 +1527,25 @@ class PhaseShifting:
 
         return spatial_phase
 
-    def unwrap_spatial_phase(self, wrapped_spatial_phase, cycles, image_size):
+    def unwrap_spatial_phase(self, wrapped_spatial_phase, cycles, image_size, bins=None):
         """
         Unwrap phase to get absolute coordinates.
         :param wrapped_spatial_phase: wrapped phase values (-π to π)
         :param cycles: number of cycles across image dimension
         :param image_size: size of the image dimension
+        :param bins: bins to use for unwrapping
         :return: unwrapped coordinates
         """
         # Convert phase to coordinates
         # spatial_phase = 2π * cycles * coord / image_size
         # coord = phase * image_size / (2π * cycles)
-        print("warning: current unwrapping only works up to cycle length")
         coordinates = wrapped_spatial_phase * image_size / (2 * np.pi * cycles)
         # Handle phase wrapping by finding the correct cycle
         cycle_length = image_size / cycles
         coordinates = np.mod(coordinates, cycle_length)
         return coordinates
 
-    def decode_lowfreq(self, captures, proj_wh,foreground, mode, output_dir, debug):
+    def decode_lowfreq(self, captures, proj_wh, foreground, mode, output_dir, debug):
         width, height = proj_wh
         # Extract x-direction patterns (first num_phases images)
         x_patterns = captures[:self.num_temporal_phases, :, :, 0]  # (n_phases, h, w)
@@ -1574,8 +1574,8 @@ class PhaseShifting:
                     )
 
         # Unwrap phases to get coordinates
-        x_coords = self.unwrap_spatial_phase(x_phase, self.cycles_x, width)
-        y_coords = self.unwrap_spatial_phase(y_phase, self.cycles_y, height)
+        x_coords = self.unwrap_spatial_phase(x_phase, 1, width)
+        y_coords = self.unwrap_spatial_phase(y_phase, 1, height)
 
         # Convert to integer coordinates and clamp to valid range
         x_coords = np.clip(np.round(x_coords), 0, width - 1).astype(np.uint64)
@@ -1586,6 +1586,10 @@ class PhaseShifting:
         forward_map[..., 0] = x_coords
         forward_map[..., 1] = y_coords
 
+        # set negative values where foreground is false
+        forward_map[~foreground] = -1
+        forward_map[forward_map[..., 0] >= width] = -1
+        forward_map[forward_map[..., 1] >= height] = -1
         # Apply coordinate mode
         if mode == "ij":
             forward_map = forward_map[..., [1, 0]]  # Swap to (y, x) order
@@ -1593,50 +1597,12 @@ class PhaseShifting:
             forward_map = forward_map  # Already in (x, y) order
         else:
             raise ValueError("mode must be 'ij' or 'xy'")
-        # set negative values where foreground is false
-        forward_map[~foreground] = -1
-        forward_map[forward_map[..., 0] >= width] = -1
-        forward_map[forward_map[..., 1] >= height] = -1
-        # Update foreground mask to only include valid decoded pixels
-        # foreground = (
-        #     foreground & (forward_map[..., 0] < width) & (forward_map[..., 1] < height)
-        # )
 
         if output_dir is not None:
             np.save(Path(output_dir, "forward_map_coarse.npy"), forward_map)
-            # np.save(Path(output_dir, "fg.npy"), foreground)
 
             if debug:
-                # Save phase maps
-                x_phase_normalized = ((x_phase + np.pi) / (2 * np.pi) * 255).astype(
-                    np.uint8
-                )
-                y_phase_normalized = ((y_phase + np.pi) / (2 * np.pi) * 255).astype(
-                    np.uint8
-                )
-                save_image(x_phase_normalized, Path(output_dir, "x_phase_coarse.png"))
-                save_image(y_phase_normalized, Path(output_dir, "y_phase_coarse.png"))
-                # save_image(foreground, Path(output_dir, "foreground.png"))
-
-                # Create visualization of forward map
-                composed = forward_map * foreground[..., None]
-                if mode == "ij":
-                    composed_normalized = composed / np.array([proj_wh[1], proj_wh[0]])
-                    composed_normalized[..., [0, 1]] = composed_normalized[..., [1, 0]]
-                elif mode == "xy":
-                    composed_normalized = composed / np.array([proj_wh[0], proj_wh[1]])
-
-                composed_normalized_8b = to_8b(composed_normalized)
-                composed_normalized_8b_3c = np.concatenate(
-                    (
-                        composed_normalized_8b,
-                        np.zeros_like(composed_normalized_8b[..., :1]),
-                    ),
-                    axis=-1,
-                )
-                save_image(
-                    composed_normalized_8b_3c, Path(output_dir, "forward_map_coarse.png")
-                )
+                self.save_debug_info(x_phase, y_phase, foreground, forward_map, proj_wh, mode, output_dir, "coarse")
 
         return forward_map
 
@@ -1676,11 +1642,43 @@ class PhaseShifting:
         x_coords = np.clip(np.round(x_coords), 0, width - 1).astype(np.uint64)
         y_coords = np.clip(np.round(y_coords), 0, height - 1).astype(np.uint64)
 
+        # Use coarse forward map to unwrap phases
+        if mode == "ij":
+            xbins = coarse_forwardmap[..., 1]
+            ybins = coarse_forwardmap[..., 0]
+        elif mode == "xy":
+            xbins = coarse_forwardmap[..., 0]
+            ybins = coarse_forwardmap[..., 1]
+        else:
+            raise ValueError("mode must be 'ij' or 'xy'")
+
+        # use the coarse bins to resolve phase wrapping (x_coords are "local" within a bin)
+        # Calculate cycle length for high frequency patterns
+        x_cycle_length = width / self.cycles_x
+        y_cycle_length = height / self.cycles_y
+        
+        # For each pixel, determine which cycle it should be in based on coarse map
+        # and adjust the high-frequency coordinates accordingly
+        for y in range(height):
+            for x in range(width):
+                if foreground[y, x] and xbins[y, x] >= 0 and ybins[y, x] >= 0:
+                    # Find which cycle the coarse bin corresponds to
+                    coarse_x_cycle = int(xbins[y, x] // x_cycle_length)
+                    coarse_y_cycle = int(ybins[y, x] // y_cycle_length)
+                    
+                    # Adjust high-frequency coordinates to be in the correct cycle
+                    x_coords[y, x] = coarse_x_cycle * x_cycle_length + (x_coords[y, x] % x_cycle_length)
+                    y_coords[y, x] = coarse_y_cycle * y_cycle_length + (y_coords[y, x] % y_cycle_length)
+
         # Create forward mapping
         forward_map = np.zeros((height, width, 2), dtype=np.int64)
         forward_map[..., 0] = x_coords
         forward_map[..., 1] = y_coords
 
+        # set negative values where foreground is false
+        forward_map[~foreground] = -1
+        forward_map[forward_map[..., 0] >= width] = -1
+        forward_map[forward_map[..., 1] >= height] = -1
         # Apply coordinate mode
         if mode == "ij":
             forward_map = forward_map[..., [1, 0]]  # Swap to (y, x) order
@@ -1688,14 +1686,42 @@ class PhaseShifting:
             forward_map = forward_map  # Already in (x, y) order
         else:
             raise ValueError("mode must be 'ij' or 'xy'")
-        # set negative values where foreground is false
-        forward_map[~foreground] = -1
-        forward_map[forward_map[..., 0] >= width] = -1
-        forward_map[forward_map[..., 1] >= height] = -1
 
         if output_dir is not None:
             np.save(Path(output_dir, "forward_map_fine.npy"), forward_map)
+            if debug:
+                self.save_debug_info(x_phase, y_phase, foreground, forward_map, proj_wh, mode, output_dir, "fine")
         return forward_map
+
+    def save_debug_info(self, x_phase, y_phase, foreground, forward_map, proj_wh, mode,output_dir, prefix):
+        # Save phase maps
+            x_phase_normalized = ((x_phase + np.pi) / (2 * np.pi) * 255).astype(
+                np.uint8
+            )
+            y_phase_normalized = ((y_phase + np.pi) / (2 * np.pi) * 255).astype(
+                np.uint8
+            )
+            save_image(x_phase_normalized, Path(output_dir, "x_phase_{}.png".format(prefix)))
+            save_image(y_phase_normalized, Path(output_dir, "y_phase_{}.png".format(prefix)))
+            # save_image(foreground, Path(output_dir, "foreground.png"))
+
+            # Create visualization of forward map
+            composed = forward_map * foreground[..., None]
+            if mode == "ij":
+                composed_normalized = composed / np.array([proj_wh[1], proj_wh[0]])
+                composed_normalized[..., [0, 1]] = composed_normalized[..., [1, 0]]
+            elif mode == "xy":
+                composed_normalized = composed / np.array([proj_wh[0], proj_wh[1]])
+
+            composed_normalized_8b = to_8b(composed_normalized)
+            composed_normalized_8b_3c = np.concatenate(
+                (
+                    composed_normalized_8b,
+                    np.zeros_like(composed_normalized_8b[..., :1]),
+                ),
+                axis=-1,
+            )
+            save_image(composed_normalized_8b_3c, Path(output_dir, "forward_map_{}.png".format(prefix)))
 
     def decode(
         self,
@@ -1745,6 +1771,6 @@ class PhaseShifting:
         intensity_diff = white_img.astype(np.float32) - black_img.astype(np.float32)
         foreground = intensity_diff[..., 0] > bg_threshold
 
-        coarse_forwardmap = self.decode_lowfreq(captures[:2*self.num_temporal_phases], foreground, mode, output_dir, debug)
-        fine_forwardmap = self.decode_highfreq(captures[2*self.num_temporal_phases:4*self.num_temporal_phases], foreground, coarse_forwardmap, mode, output_dir, debug)
+        coarse_forwardmap = self.decode_lowfreq(captures[:2*self.num_temporal_phases], proj_wh, foreground, mode, output_dir, debug)
+        fine_forwardmap = self.decode_highfreq(captures[2*self.num_temporal_phases:4*self.num_temporal_phases], proj_wh, foreground, coarse_forwardmap, mode, output_dir, debug)
         return fine_forwardmap
