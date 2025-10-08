@@ -98,7 +98,7 @@ def save_images(
     if np.isnan(images).any():
         raise ValueError("images must be finite")
     if extension != "tiff":
-        if (is_float(images) or images.dtype == bool):
+        if is_float(images) or images.dtype == bool:
             images = to_8b(images)
         if images.dtype != np.uint8:
             raise ValueError(
