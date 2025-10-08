@@ -2,7 +2,6 @@ import torch
 import numpy as np
 from PIL import Image
 
-
 def is_np(x):
     """
     checks if x is a numpy array or torch tensor (will raise an error if x is neither)
@@ -34,28 +33,19 @@ def permute_channel_dimension(x):
     permutes the channels of a numpy array or torch tensor
     :param x: numpy array or torch tensor of shape (h, w, c) or (c, h, w) or (b, h, w, c) or (b, c, h, w)
     :return: x with permuted channels
-    note:
-    (h, w, c) -> (c, h, w)
-    (b, h, w, c) -> (b, c, h, w)
-    (c, h, w) -> (h, w, c)
-    (b, c, h, w) -> (b, h, w, c)
     """
     if not 2 < x.ndim <= 4:
         raise ValueError("x must be 3 or 4 dimensional")
-    if x.ndim == 4:
-        axis1 = 1
-        axis2 = 3
-        axis3 = 2
+    if is_np(x):
+        if x.ndim == 3:
+            x = x.transpose(2, 0, 1)  # (h, w, c) -> (c, h, w)
+        elif x.ndim == 4:
+            x = x.transpose(0, 3, 1, 2)  # (b, h, w, c) -> (b, c, h, w)
     else:
-        axis1 = 0
-        axis2 = 2
-        axis3 = 1
-    x = x.swapaxes(
-        axis1, axis2
-    )  # (h, w, c) -> (c, w, h), or (b, h, w, c) -> (b, c, w, h)
-    x = x.swapaxes(
-        axis2, axis3
-    )  # (c, w, h) -> (c, h, w), or (b, c, w, h) -> (b, c, h, w)
+        if x.ndim == 3:
+            x = x.permute(1, 2, 0)  # (c, h, w) -> (h, w, c)
+        elif x.ndim == 4:
+            x = x.permute(0, 2, 3, 1)  # (b, c, h, w) -> (b, h, w, c)
     return x
 
 
@@ -203,6 +193,7 @@ def to_np(x, permute_channels=False):
     """
     converts input to numpy array
     :param x: tensor
+    :param permute_channels: if True and input is a torch tensor, permutes the channels order to channels last
     :return: numpy array
     """
     if type(x) == torch.Tensor:
@@ -236,13 +227,13 @@ def to_torch(x, device="cpu", dtype=None, permute_channels=False):
     :return: torch tensor
     """
     if is_np(x):
-        if dtype is None:
-            tensor = torch.tensor(x, device=device)
-        else:
-            tensor = torch.tensor(x, dtype=dtype, device=device)
         if permute_channels:
-            tensor = permute_channel_dimension(tensor)
-        return tensor
+            x = permute_channel_dimension(x)
+        if dtype is None:
+            x = torch.tensor(x, device=device)
+        else:
+            x = torch.tensor(x, dtype=dtype, device=device)
+        return x
     else:
         return x
 
@@ -338,17 +329,21 @@ def map_range(x, in_min, in_max, out_min, out_max):
     :param out_max: output range maximum
     :return: mapped input
     """
-    x_01 = (x - in_min) / (in_max - in_min)
+    x_01 = (x - in_min) / (in_max - in_min + 1e-6)
     return x_01 * (out_max - out_min) + out_min
 
 
-def map_to_01(x):
+def map_to_01(x, dims=None):
     """
     maps an input to [0,1]
     :param x: input
+    :param dim: the list of dimensions to map to [0,1]
     :return: mapped input
     """
-    return map_range(x, x.min(), x.max(), 0, 1)
+    if is_np(x):
+        return map_range(x, np.amin(x, axis=dims, keepdims=True), np.amax(x, axis=dims, keepdims=True), 0.0, 1.0)
+    else:
+        return map_range(x, x.amin(dim=dims, keepdim=True), x.amax(dim=dims, keepdim=True), 0.0, 1.0)
 
 
 def swap_columns(x, col1_index, col2_index):
@@ -416,7 +411,7 @@ def color_to_gray(x, keep_channels=False):
 
 def make_monotonic(y, increasing=True):
     """
-    Ensure a 1D array is monotonic increasing or decreasing.
+    ensure a 1D array is monotonic increasing or decreasing.
     :param y: np.ndarray of shape (N,) to be made monotonic.
     :param increasing: if True, enforce increasing monotonicity; if False, enforce decreasing.
     :return: np.ndarray of the same shape as y, made monotonic.

@@ -1,7 +1,7 @@
 import torch
 import numpy as np
 from pathlib import Path
-from .core import to_8b, to_np, to_float
+from .core import to_8b, to_np, to_float, is_float
 from .image import alpha_compose
 from PIL import Image
 import json
@@ -87,33 +87,29 @@ def save_images(
 ):
     """
     saves images as png
-    :param images: (b x H x W x C) np array, or list of (H X W X C)
+    :param images: (b, h, w, c) np array, list of (h, w, c) np array, or (b, c, h, w) torch tensor
     :param dst: path to save images to (will create folder if it does not exist)
     :param file_names: if provided, saves images with these names (list of length b)
     :param force_grayscale: if True, saves images as grayscale
     :param overwrite: if True, overwrites existing images
     :param extension: file extension to save images as
     """
-    images = to_np(images)
+    images = to_np(images, permute_channels=True)
     if np.isnan(images).any():
-        raise ValueError("Images must be finite")
+        raise ValueError("images must be finite")
     if extension != "tiff":
-        if (
-            images.dtype == np.float32
-            or images.dtype == np.float64
-            or images.dtype == bool
-        ):
+        if (is_float(images) or images.dtype == bool):
             images = to_8b(images)
         if images.dtype != np.uint8:
             raise ValueError(
-                "Images must be of type uint8 (or float32/64, which will be converted to uint8)"
+                "images must be of type uint8 (or float/bool type, which will be converted to uint8)"
             )
     if images.ndim != 4:
-        raise ValueError("Images must be of shape (b x H x W x C)")
+        raise ValueError("images must have 4 dimensions")
     if file_names:
         if images.shape[0] != len(file_names):
             raise ValueError(
-                "Number of images and length of file names list must match"
+                "number of images and length of file names list must match"
             )
         file_names = [Path(x).stem for x in file_names]  # remove suffix
     dst = Path(dst)

@@ -126,6 +126,7 @@ from .image import (
     adjust_contrast_brightness,
     linear_to_srgb,
     srgb_to_linear,
+    linear_to_luminance,
     pad_to_res,
     pad_to_square,
     crop_to_square,
@@ -134,6 +135,8 @@ from .image import (
     compute_color_distance,
     tonemap_reinhard,
     tonemap_tev,
+    patchify,
+    unpatchify,
 )
 
 from .video import (

@@ -1,5 +1,6 @@
 import numpy as np
 import torch
+import torch.nn.functional as F
 from PIL import Image, ImageDraw, ImageFont
 from scipy import interpolate, spatial
 from scipy.stats import wasserstein_distance
@@ -232,7 +233,7 @@ def generate_voronoi_diagram(height, width, num_cells=1000, bg_color="white", ds
     :param num_cells: number of cells
     :param bg_color: background color
     :param dst: if not None, the image is written to this path
-    :return: (h, w, 3) numpy array
+    :return: (h, w, 3) uint8 numpy array
     """
     nx = np.random.rand(num_cells) * width
     ny = np.random.rand(num_cells) * height
@@ -852,6 +853,33 @@ def srgb_to_linear(srgb):
         return torch.where(srgb <= 0.04045, linear0, linear1)
 
 
+def linear_to_luminance(linear_img, keep_channels=True):
+    """
+    convert linear RGB to luminance
+    linear_img: torch tensor (B, C, H, W) or numpy array (B, H, W, C) in linear RGB
+    keep_channels: if True, returns luminance with channel dimension (B, 1, H, W) / (B, H, W, 1), otherwise returns luminance without channel dimension (B, H, W)
+    Returns: luminance using the Rec. 709 weights for luminance
+    """
+    was_numpy = False
+    if is_np(linear_img):
+        was_numpy = True
+        linear_img = to_torch(linear_img, permute_channels=True)  # (B, H, W, C) -> (B, C, H, W)
+    if linear_img.ndim != 4:
+        raise ValueError("image must be 4D")
+    b, c, h, w = linear_img.shape
+    r, g, b = linear_img[:, 0], linear_img[:, 1], linear_img[:, 2]
+    L = 0.2126 * r + 0.7152 * g + 0.0722 * b  # (B, H, W)
+    L = L.unsqueeze(1)  # (B, H, W) -> (B, 1, H, W)
+    if was_numpy:
+        L = to_np(L, permute_channels=True)  # (B, 1, H, W) -> (B, H, W, 1)
+        if not keep_channels:
+            L = L.squeeze(-1)  # (B, H, W, 1) -> (B, H, W)
+    else:
+        if not keep_channels:
+            L = L.squeeze(1)  # (B, 1, H, W) -> (B, H, W)
+    return L
+
+
 def inset(
     base_image,
     inset_image,
@@ -1048,3 +1076,43 @@ def tonemap_tev(
     else:
         raise TypeError("hdr_image must be either a numpy array or torch tensor")
     return image
+
+def patchify(x: torch.Tensor, patch_size: int) -> torch.Tensor:
+    """
+    patchify using unfold.
+    :param x: (b, c, h, w)
+    :param patch_size: int
+    :return: patches: (b, num_patches, c, ph, pw)
+    """
+    b, c, h, w = x.shape
+    if h % patch_size != 0 or w % patch_size != 0:
+        raise ValueError("current patchify/unpatchify does not support overlapping patches")
+
+    # unfold: (b, c*ph*pw, num_patches)
+    patches = F.unfold(x, kernel_size=patch_size, stride=patch_size)
+
+    # reshape to (b, num_patches, c, ph, pw)
+    patches = patches.transpose(1, 2).reshape(b, -1, c, patch_size, patch_size)
+    return patches
+
+
+def unpatchify(patches: torch.Tensor, patch_size: int, h: int, w: int) -> torch.Tensor:
+    """
+    Reconstruct image from unfold-style patches.
+    Args:
+        patches: (b, num_patches, c, ph, pw)
+        patch_size: int
+        h, w: original image size
+    Returns:
+        x: (b, c, h, w)
+    """
+    b, num_patches, c, ph, pw = patches.shape
+    if ph != patch_size or pw != patch_size:
+        raise ValueError("current patchify/unpatchify does not support overlapping patches")
+
+    # back to (b, c*ph*pw, num_patches)
+    patches = patches.reshape(b, num_patches, -1).transpose(1, 2)
+
+    # fold: put patches back
+    x = F.fold(patches, output_size=(h, w), kernel_size=patch_size, stride=patch_size)
+    return x
