@@ -100,7 +100,9 @@ from .gsoup_io import (
     save_pointclouds,
     load_pointcloud,
     read_exr,
+    read_exrs,
     write_exr,
+    write_exrs,
 )
 
 from .image import (

@@ -1123,6 +1123,20 @@ def save_meshes(vertices, faces, path, file_names: list = []):
             save_mesh(v, f, path / "{:05d}.obj".format(i))
 
 
+def write_exrs(images, file_paths=None, compression="ZIP", compression_level=6):
+    """
+    write a list of images or numpy arrays (b, h, w, c)to a list of exr files
+    :param images: list of (h, w, c) numpy arrays or (b, h, w, c) numpy array
+    :param file_paths: list of paths to exr files or None to generate file names automatically
+    :param compression: which compression type to use (we just expose NONE, ZIPS, ZIP and PIZ)
+    :param compression_level: what level of compression to use if suportted by compression algorithm
+    :note see https://openexr.com/en/latest/ReadingAndWritingImageFiles.html#compression
+    """
+    if file_paths is None:
+        file_paths = [f"{i:05d}.exr" for i in range(images.shape[0])]
+    for image, file_path in zip(images, file_paths):
+        write_exr(image, file_path, compression, compression_level)
+
 def write_exr(image, file_path, compression="ZIP", compression_level=6):
     """
     saves a RGB image to disk as exr (without losing precision).
@@ -1148,17 +1162,25 @@ def write_exr(image, file_path, compression="ZIP", compression_level=6):
         raise NotImplementedError
     my_path = Path(file_path)
     if not my_path.parent.exists():
-        parent_path.mkdir(parents=True, exist_ok=True)
+        my_path.parent.mkdir(parents=True, exist_ok=True)
     with OpenEXR.File(header, channels) as outputFile:
         outputFile.write(str(my_path))
 
+def read_exrs(file_paths):
+    """
+    read a list of exr files into a numpy array (b, h, w, c)
+    :param file_paths: list of paths to exr files
+    :return: (b, h, w, c) float16/float32 numpy array
+    """
+    images = [read_exr(file_path) for file_path in file_paths]
+    return np.stack(images, axis=0)
 
 def read_exr(file_path):
     """
-    read exr into a numpy array (h, w, 3)
-    note: assumes channels names in the exr are named "R" "G" and "B".
+    read exr into a numpy array (h, w, c)
+    note: assumes channels names in the exr are named "R" "G" and "B", or a single channel with arbitrary name.
     :param file_path: path to exr file
-    :return (h, w, 3) float16/float32 numpy array representing the image
+    :return (h, w, c) float16/float32 numpy array representing the image
     """
     typemap = {"UINT": np.uint32, "HALF": np.float16, "FLOAT": np.float32}
     # open the input file
@@ -1176,7 +1198,10 @@ def read_exr(file_path):
         arr = np.frombuffer(bytestring, dtype=np_type).reshape(h, w, 1)
         arr_maps[ch_name] = arr
     # stack into matrix
-    image = np.concatenate([arr_maps["R"], arr_maps["G"], arr_maps["B"]], axis=-1)
+    if "R" in arr_maps and "G" in arr_maps and "B" in arr_maps:
+        image = np.concatenate([arr_maps["R"], arr_maps["G"], arr_maps["B"]], axis=-1)
+    else:
+        image = next(iter(arr_maps.values()))  # (h, w, 1)
     ####################################################
     # FLOAT = Imath.PixelType(Imath.PixelType.FLOAT)
     # R = np.frombuffer(exr.channel("R", FLOAT), dtype=np.float32).reshape((h, w, 1))
