@@ -1137,6 +1137,7 @@ def write_exrs(images, file_paths=None, compression="ZIP", compression_level=6):
     for image, file_path in zip(images, file_paths):
         write_exr(image, file_path, compression, compression_level)
 
+
 def write_exr(image, file_path, compression="ZIP", compression_level=6):
     """
     saves a RGB image to disk as exr (without losing precision).
@@ -1166,6 +1167,7 @@ def write_exr(image, file_path, compression="ZIP", compression_level=6):
     with OpenEXR.File(header, channels) as outputFile:
         outputFile.write(str(my_path))
 
+
 def read_exrs(file_paths):
     """
     read a list of exr files into a numpy array (b, h, w, c)
@@ -1174,6 +1176,7 @@ def read_exrs(file_paths):
     """
     images = [read_exr(file_path) for file_path in file_paths]
     return np.stack(images, axis=0)
+
 
 def read_exr(file_path):
     """
