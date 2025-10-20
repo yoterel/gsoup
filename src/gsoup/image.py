@@ -20,11 +20,17 @@ from pathlib import Path
 
 
 def add_alpha(images, alphas):
-    """
-    adds an alpha channel to a batch of images
-    :param images: numpy image (b, h, w, 3) or (h, w, 3)
-    :param alpha: alpha channel (b, h, w, 1) or (h, w, 1)
-    :return: numpy image (b, h, w, c+1) or (h, w, c+1)
+    """Adds an alpha channel to a batch of images.
+    
+    Args:
+        images: Numpy image array of shape (b, h, w, 3) or (h, w, 3).
+        alphas: Alpha channel array of shape (b, h, w, 1) or (h, w, 1).
+    
+    Returns:
+        Numpy image array of shape (b, h, w, c+1) or (h, w, c+1) with alpha channel added.
+    
+    Raises:
+        ValueError: If images don't have 3 channels or if dimensions don't match.
     """
     if images.shape[-1] != 3:
         raise ValueError("images must have 3 channels")
@@ -53,14 +59,23 @@ def add_alpha(images, alphas):
 
 
 def alpha_compose(images, backgrounds=None, bg_color=None):
-    """
-    composes a single or batch of RGBA images into a single or batch of RGB images.
-    if backgrounds is provided, will blend them with the images, otherwise will blend with bg_color.
-    if no backgrounds or bg_color is provided, the background is assumed to be black.
-    :param image: (b, h, w, 4) or (h, w, 4)
-    :param background: (b, h, w, 3) or (h, w, 3)
-    :param bg_color: (3,) or (b, 3) float32 array
-    :return: (b, h, w, 3) or (h, w, 3)
+    """Composes RGBA images into RGB images using alpha blending.
+    
+    Composes a single or batch of RGBA images into RGB images. If backgrounds
+    is provided, will blend them with the images, otherwise will blend with
+    bg_color. If no backgrounds or bg_color is provided, the background is
+    assumed to be black.
+    
+    Args:
+        images: RGBA image array of shape (b, h, w, 4) or (h, w, 4).
+        backgrounds: Optional background image array of shape (b, h, w, 3) or (h, w, 3).
+        bg_color: Optional background color array of shape (3,) or (b, 3) float32.
+    
+    Returns:
+        RGB image array of shape (b, h, w, 3) or (h, w, 3).
+    
+    Raises:
+        ValueError: If images don't have 4 channels or if dimensions don't match.
     """
     if images.ndim != 3 and images.ndim != 4:
         raise ValueError("image must be 3 or 4 dimensional")
@@ -97,14 +112,21 @@ def alpha_compose(images, backgrounds=None, bg_color=None):
 
 
 def draw_text_on_image(images, text_per_image, loc=(0, 0), size=48, color=None):
-    """
-    writes text on images given as np array (b, h, w, 3)
-    :param images: (b, h, w, 3) numpy array
-    :param text_per_image: string, list of strings or np array of strings
-    :param loc: a tuple xy of anchor coordinates for the text (anchor is left-top of text)
-    :param size: size of font
-    :param color: (1,) or (3,) or (4,) or (b, 1) or (b, 3) or (b, 4) np array representing the color of the text (+alpha), will default to white if Nonne
-    :return: new (b, h, w, 3) numpy array with text written
+    """Draws text on images.
+    
+    Writes text on images given as numpy array. Supports both numpy and torch
+    tensors, with automatic conversion between formats.
+    
+    Args:
+        images: Image array of shape (b, h, w, 3) numpy array or torch tensor.
+        text_per_image: String, list of strings, or numpy array of strings.
+        loc: Tuple (x, y) of anchor coordinates for the text (anchor is left-top of text).
+        size: Font size in pixels.
+        color: Optional color array of shape (1,), (3,), (4,), (b, 1), (b, 3), or (b, 4)
+            representing the color of the text (+alpha). Defaults to white if None.
+    
+    Returns:
+        New image array of shape (b, h, w, 3) with text written, same type as input.
     """
     is_numpy = is_np(images)
     if not is_numpy:
@@ -146,15 +168,23 @@ def draw_text_on_image(images, text_per_image, loc=(0, 0), size=48, color=None):
 
 
 def draw_gizmo_on_image(np_images, w2c, opengl=False, scale=0.05):
-    """
-    adds a gizmo to a batch of np images.
-    note: will broadcast np_images and w2c against eachother.
-    :param np_images: (b, h, w, 3)
-    :param w2c: (b, 3, 4) w2c transforms (opencv conventions)
-    :param opengl: if True, the w2c transforms are assumed to be in OpenGL conventions, else OpenCV conventions
-    for opengl, w2c should be a bx4x4 matrix converting from world to *CLIP* space.
-    :param scale: scale of the gizmo
-    :return: (b, h, w, 3)
+    """Adds a coordinate gizmo to a batch of images.
+    
+    Draws a 3D coordinate gizmo (red=X, green=Y, blue=Z axes) on images.
+    Will broadcast np_images and w2c against each other.
+    
+    Args:
+        np_images: Image array of shape (b, h, w, 3).
+        w2c: World-to-camera transform matrices of shape (b, 3, 4) using OpenCV conventions.
+        opengl: If True, w2c transforms are assumed to be in OpenGL conventions.
+            For OpenGL, w2c should be a (b, 4, 4) matrix converting from world to CLIP space.
+        scale: Scale factor for the gizmo size.
+    
+    Returns:
+        Image array of shape (b, h, w, 3) with gizmo drawn.
+    
+    Raises:
+        ValueError: If np_images is not 4D or w2c is not 3D.
     """
     new_images = []
     if np_images.ndim != 4:
@@ -197,15 +227,21 @@ def merge_figures_with_line(
     line_width=5,
     line_color=[255, 255, 255, 255],
 ):
-    """
-    merges two np images (h, w, 3) with a white line in between
-    :param img1: (h, w, 3) numpy array
-    :param img2: (h, w, 3) numpy array
-    :param lower_intersection: lower intersection of the line with the images
-    :param angle: angle of the line
-    :param line_width: width of the line
-    :param line_color: color of the line
-    :return: new (h, w, 3) numpy array with line in between
+    """Merges two images with a diagonal line separating them.
+    
+    Combines two images by placing them on opposite sides of a diagonal line,
+    creating a split-screen effect.
+    
+    Args:
+        img1: First image array of shape (h, w, 3).
+        img2: Second image array of shape (h, w, 3).
+        lower_intersection: Lower intersection point of the line with the images (0.0 to 1.0).
+        angle: Angle of the diagonal line in radians.
+        line_width: Width of the separating line in pixels.
+        line_color: Color of the line as RGBA values.
+    
+    Returns:
+        New image array of shape (h, w, 3) with merged images and separating line.
     """
     if img1.dtype != np.uint8:
         line_color = np.array(line_color) / 255
@@ -226,14 +262,19 @@ def merge_figures_with_line(
 
 
 def generate_voronoi_diagram(height, width, num_cells=1000, bg_color="white", dst=None):
-    """
-    generate a voronoi diagram HxWx3 with random colored cells
-    :param height: height of the image
-    :param width: width of the image
-    :param num_cells: number of cells
-    :param bg_color: background color
-    :param dst: if not None, the image is written to this path
-    :return: (h, w, 3) uint8 numpy array
+    """Generates a Voronoi diagram with random colored cells.
+    
+    Creates a Voronoi diagram of specified dimensions with randomly colored cells.
+    
+    Args:
+        height: Height of the generated image.
+        width: Width of the generated image.
+        num_cells: Number of Voronoi cells to generate.
+        bg_color: Background color for the image.
+        dst: Optional path to save the image. If None, image is not saved.
+    
+    Returns:
+        Image array of shape (h, w, 3) as uint8 numpy array.
     """
     nx = np.random.rand(num_cells) * width
     ny = np.random.rand(num_cells) * height
@@ -258,15 +299,20 @@ def generate_voronoi_diagram(height, width, num_cells=1000, bg_color="white", ds
 def generate_dot_pattern(
     height, width, background="black", radius=5, spacing=50, dst=None
 ):
-    """
-    generates an image with colored circles in a grid
-    :param height: height of the image
-    :param width: width of the image
-    :param background: background color
-    :param radius: radius of the circles in pixels
-    :param spacing: spacing between the circles in pixels
-    :param dst: if not None, the image is written to this path
-    :return: (h, w, 3) numpy array (uint8)
+    """Generates an image with colored circles arranged in a grid pattern.
+    
+    Creates a pattern of randomly colored circles arranged in a regular grid.
+    
+    Args:
+        height: Height of the generated image.
+        width: Width of the generated image.
+        background: Background color for the image.
+        radius: Radius of the circles in pixels.
+        spacing: Spacing between circle centers in pixels.
+        dst: Optional path to save the image. If None, image is not saved.
+    
+    Returns:
+        Image array of shape (h, w, 3) as uint8 numpy array.
     """
     img = Image.new("RGB", (width, height), background)
     img1 = ImageDraw.Draw(img)
@@ -282,13 +328,21 @@ def generate_dot_pattern(
 
 
 def generate_random_block_mask(size, block_size, batch_size=1):
-    """
-    Generates a random binary mask matrix with the specified size and block size.
-
-    :param: size (int): Size of the square matrix (must be a power of 2).
-    :param: block_size (int): Size of the square blocks (must be a power of 2 and ≤ size).
-
-    :return: a binary np array of shape (size, size).
+    """Generates a random binary mask matrix with specified block structure.
+    
+    Creates a binary mask where blocks of specified size are randomly set to
+    True or False. Useful for creating structured random patterns.
+    
+    Args:
+        size: Size of the square matrix (must be a power of 2).
+        block_size: Size of the square blocks (must be a power of 2 and ≤ size).
+        batch_size: Number of masks to generate in batch.
+    
+    Returns:
+        Binary numpy array of shape (size, size) or (batch_size, size, size).
+    
+    Raises:
+        ValueError: If size or block_size are not powers of 2, or if block_size > size.
     """
     if not (size & (size - 1) == 0 and block_size & (block_size - 1) == 0):
         raise ValueError("Size and block_size must be powers of 2.")
@@ -312,13 +366,21 @@ def generate_random_block_mask(size, block_size, batch_size=1):
 
 
 def generate_checkerboard(h, w, blocksize):
-    """
-    generates a checkerboard pattern
-    note: if blocksize is not a divisor of w or h, the pattern will have extra "crops" at the edges
-    :param h: height of the image
-    :param w: width of the image
-    :param blocksize: size of the squares
-    :return: (H x W x 1) numpy array (bool)
+    """Generates a checkerboard pattern.
+    
+    Creates a binary checkerboard pattern with alternating black and white squares.
+    
+    Args:
+        h: Height of the image.
+        w: Width of the image.
+        blocksize: Size of each square in the checkerboard.
+    
+    Returns:
+        Binary image array of shape (h, w, 1) as boolean numpy array.
+    
+    Note:
+        If blocksize is not a divisor of w or h, the pattern will have extra
+        "crops" at the edges.
     """
     c0, c1 = 0, 1  # color of the squares, for binary these are just 0,1
     tile = (
@@ -339,16 +401,25 @@ def generate_stripe_pattern(
     spacing=50,
     dst=None,
 ):
-    """
-    generates an image with colored stripes in a certain direction
-    :param height: height of the image
-    :param width: width of the image
-    :param background: background color
-    :param direction: direction of the stripes ("vert", "hor", "both")
-    :param thickness: thickness of the stripes
-    :param spacing: spacing between the stripes
-    :param dst: if not None, the image is written to this path
-    :return: (h, w, 3) numpy array (uint8)
+    """Generates an image with colored stripes in specified direction.
+    
+    Creates a pattern of randomly colored stripes in vertical, horizontal,
+    or both directions.
+    
+    Args:
+        height: Height of the generated image.
+        width: Width of the generated image.
+        background: Background color for the image.
+        direction: Direction of stripes - "vert" (vertical), "hor" (horizontal), or "both".
+        thickness: Thickness of the stripes in pixels.
+        spacing: Spacing between stripes in pixels.
+        dst: Optional path to save the image. If None, image is not saved.
+    
+    Returns:
+        Image array of shape (h, w, 3) as uint8 numpy array.
+    
+    Raises:
+        ValueError: If direction is not one of "vert", "hor", or "both".
     """
     img = Image.new("RGB", (width, height), background)
     img1 = ImageDraw.Draw(img)
@@ -383,14 +454,19 @@ def generate_stripe_pattern(
 
 
 def generate_gaussian_image(height, width, center=(0, 0), sigma=(10, 10), theta=0):
-    """
-    generate an image of a gaussian
-    :param: height: the height of the image
-    :param: width: the width of the image
-    :param: center: the x,y center of the gaussian (default is upper left corner)
-    :param: theta: rotation of the gaussian
-    :param: sigma: the sx,sy stdev in the x and y acis before rotation
-    :return: the gaussian image
+    """Generates a 2D Gaussian image.
+    
+    Creates an image containing a 2D Gaussian function with specified parameters.
+    
+    Args:
+        height: Height of the generated image.
+        width: Width of the generated image.
+        center: Tuple (x, y) of the Gaussian center coordinates.
+        sigma: Tuple (sx, sy) of standard deviations in x and y axes before rotation.
+        theta: Rotation angle of the Gaussian in degrees.
+    
+    Returns:
+        Image array containing the Gaussian function values.
     """
     theta = 2 * np.pi * theta / 360
     x = np.arange(0, width, 1, np.float32)
@@ -411,15 +487,21 @@ def generate_gaussian_image(height, width, center=(0, 0), sigma=(10, 10), theta=
 
 
 def generate_lollipop_pattern(height, width, background="black", n=15, m=8, dst=None):
-    """
-    generates an image with a lollipop pattern
-    :param height: height of the image
-    :param width: width of the image
-    :param background: background color
-    :param n: number of circles in the pattern
-    :param m: number of lines in the pattern
-    :param dst: if not None, the image is written to this path
-    :return: (h, w, 3) numpy array (uint8)
+    """Generates an image with a lollipop pattern.
+    
+    Creates a pattern of concentric circles arranged in a radial pattern,
+    resembling lollipops.
+    
+    Args:
+        height: Height of the generated image.
+        width: Width of the generated image.
+        background: Background color for the image.
+        n: Number of circles in each radial pattern.
+        m: Number of radial lines/patterns.
+        dst: Optional path to save the image. If None, image is not saved.
+    
+    Returns:
+        Image array of shape (h, w, 3) as uint8 numpy array.
     """
     spacing_x = width // (2 * n)
     spacing_y = height // (2 * n)
@@ -446,14 +528,21 @@ def generate_lollipop_pattern(height, width, background="black", n=15, m=8, dst=
 def generate_concentric_circles(
     height, width, background="black", n=5, colors=None, dst=None
 ):
-    """
-    generates an image with colored concentric circles
-    :param height: height of the image
-    :param width: width of the image
-    :param background: background color (as int, tuple of ints or name accepted by PIL)
-    :param n: number of circles to draw
-    :param colors: if not None, list of n colors of the circles where each color is a list of 3 \in [0,255]
-    :param dst: if not None, the image is written to this path
+    """Generates an image with colored concentric circles.
+    
+    Creates a pattern of concentric circles with specified colors.
+    
+    Args:
+        height: Height of the generated image.
+        width: Width of the generated image.
+        background: Background color (as int, tuple of ints, or PIL color name).
+        n: Number of circles to draw.
+        colors: Optional list of n colors for the circles, where each color is
+            a list of 3 values in [0, 255]. If None, random colors are used.
+        dst: Optional path to save the image. If None, image is not saved.
+    
+    Returns:
+        Image array of shape (h, w, 3) as uint8 numpy array.
     """
     spacing_x = width // (2 * n)
     spacing_y = height // (2 * n)
@@ -480,15 +569,20 @@ def generate_concentric_circles(
 def generate_gray_gradient(
     height, width, grayscale=False, vertical=True, flip=False, bins=10
 ):
-    """
-    generate a gray gradient image HxWx3
-    :param height: height of the image
-    :param width: width of the image
-    :param grayscale: if True, the image is grayscale
-    :param vertical: if True, the gradient is vertical
-    :param flip: if True, the gradient is flipped
-    :param bins: number of bins
-    :return: (h, w, 3) uint8 numpy array
+    """Generates a gray gradient image.
+    
+    Creates a gradient image transitioning from black to white (or vice versa).
+    
+    Args:
+        height: Height of the generated image.
+        width: Width of the generated image.
+        grayscale: If True, returns single-channel grayscale image.
+        vertical: If True, gradient is vertical; if False, horizontal.
+        flip: If True, gradient direction is flipped.
+        bins: Number of discrete intensity levels in the gradient.
+    
+    Returns:
+        Image array of shape (h, w, 3) or (h, w, 1) as uint8 numpy array.
     """
     bins = np.clip(bins, 1, 256)
     colors = np.linspace(0, 255, num=bins).astype(np.uint8)
@@ -528,13 +622,24 @@ def grid_image(images, rows, cols, pad=0, pad_color=None):
 
 
 def image_grid(images, rows, cols, pad=0, pad_color=None):
-    """
-    :param images: (B, H, W, C) np.array or torch.tensor of images
-    :param rows: number of rows
-    :param cols: number of cols
-    :param pad: will pad images by this number of pixels with pad_color
-    :param pad_color: a (3,) np array representing the pad color. if not provided pad will be black. must be same dtype as images.
-    :return: grid image
+    """Arranges images in a grid layout.
+    
+    Takes a batch of images and arranges them in a grid with specified
+    number of rows and columns.
+    
+    Args:
+        images: Image array of shape (B, H, W, C) as numpy array or torch tensor.
+        rows: Number of rows in the grid.
+        cols: Number of columns in the grid.
+        pad: Number of pixels to pad around each image.
+        pad_color: Optional color array of shape (C,) for padding. If not provided,
+            padding will be black. Must be same dtype as images.
+    
+    Returns:
+        Grid image combining all input images.
+    
+    Raises:
+        ValueError: If images is not 4D or if number of images doesn't match rows * cols.
     """
     if images.ndim != 4:
         raise ValueError("images must be a 4D array")
@@ -557,13 +662,22 @@ def image_grid(images, rows, cols, pad=0, pad_color=None):
 
 
 def resize(images, H, W, mode="bilinear"):
-    """
-    wrapper around torch interpolate (https://pytorch.org/docs/stable/generated/torch.nn.functional.interpolate.html)
-    :param images: batch of np array (b, h, w, c) or torch tensors (b, c, h, w)
-    :param H: output height
-    :param W: output width
-    :param mode: pass through for torch ()
-    :return: same as input, with the new H and W
+    """Resizes images using PyTorch interpolation.
+    
+    Wrapper around torch.nn.functional.interpolate for resizing images.
+    Supports both numpy arrays and torch tensors with automatic conversion.
+    
+    Args:
+        images: Batch of images as numpy array (b, h, w, c) or torch tensor (b, c, h, w).
+        H: Output height.
+        W: Output width.
+        mode: Interpolation mode passed to torch.nn.functional.interpolate.
+    
+    Returns:
+        Resized images with same type as input and new dimensions (H, W).
+    
+    Raises:
+        ValueError: If images is not 4D.
     """
     if images.ndim != 4:
         raise ValueError("images must be a 4D array")
@@ -592,14 +706,25 @@ def resize(images, H, W, mode="bilinear"):
 
 
 def resize_images_naive(images, H, W, channels_last=True, mode="mean"):
-    """
-    resize images to output_size, but only if the output size has a common divisor of the input size
-    :param images: numpy array of images (b, h, w, c)
-    :param H: output height size that has a common divisor with the input height size
-    :param W: output width size that has a common divisor with the input width size
-    :param channels_last: if True, the images are provided in channels last format (and so will the output)
-    :param mode: one of "max", "mean"
-    :return: np array of resized images
+    """Resizes images using naive binning method.
+    
+    Resizes images by binning pixels, but only works when output size has
+    a common divisor with input size. More efficient than interpolation for
+    downsampling.
+    
+    Args:
+        images: Numpy array of images of shape (b, h, w, c).
+        H: Output height (must have common divisor with input height).
+        W: Output width (must have common divisor with input width).
+        channels_last: If True, images are in channels-last format (and output will be too).
+        mode: Resizing method - "max" for max pooling or "mean" for average pooling.
+    
+    Returns:
+        Numpy array of resized images.
+    
+    Raises:
+        ValueError: If images is not 4D, not square, or mode is invalid.
+        NotImplementedError: If channels_last is False.
     """
     if images.ndim != 4:
         raise ValueError("images must be a 4D array")
@@ -649,12 +774,21 @@ def resize_images_naive(images, H, W, channels_last=True, mode="mean"):
 
 
 def pad_to_square(images, color=None):
-    """
-    pads a batch of images to a square shape
-    note: smaller dimension is padded
-    :param images: numpy image (b, h, w, c) or torch tensor (b, c, h, w)
-    :param color: pad color of size (c,) with same dtype as images (defaults to black if None)
-    :return: padded image
+    """Pads images to square shape.
+    
+    Pads a batch of images to make them square by adding padding to the
+    smaller dimension.
+    
+    Args:
+        images: Image array as numpy array (b, h, w, c) or torch tensor (b, c, h, w).
+        color: Optional padding color of size (c,) with same dtype as images.
+            Defaults to black if None.
+    
+    Returns:
+        Padded square image with same type as input.
+    
+    Raises:
+        ValueError: If images is not 4D.
     """
     if images.ndim != 4:
         raise ValueError("images must be a 4D array")
@@ -676,11 +810,19 @@ def pad_to_square(images, color=None):
 
 
 def crop_to_square(images):
-    """
-    crops a batch of images to a square shape
-    note: bigger dimension is cropped
-    :param images: numpy image (b, h, w, c) or torch tensor (b, c, h, w)
-    :return: the cropped square image
+    """Crops images to square shape.
+    
+    Crops a batch of images to make them square by removing pixels from
+    the larger dimension.
+    
+    Args:
+        images: Image array as numpy array (b, h, w, c) or torch tensor (b, c, h, w).
+    
+    Returns:
+        Cropped square image with same type as input.
+    
+    Raises:
+        ValueError: If images is not 4D.
     """
     if images.ndim != 4:
         raise ValueError("images must be a 4D array")
@@ -710,13 +852,24 @@ def crop_to_square(images):
 
 
 def pad_to_res(images, res_h, res_w, bg_color=None):
-    """
-    pads a batch of images to a specific resolution. images will be centered in the output image.
-    :param images: batch of np arrays (b, h, w, c) or torch tensors (b, c, h, w)
-    :param res_h: height of the output image
-    :param res_w: width of the output image
-    :param bg_color: background color of size (c,) with same dtype as images (defaults to black if None)
-    :return: padded image (b, res_h, res_w, c) or (b, c, res_h, res_w)
+    """Pads images to specific resolution.
+    
+    Pads a batch of images to a specific resolution. Images will be centered
+    in the output image.
+    
+    Args:
+        images: Batch of images as numpy arrays (b, h, w, c) or torch tensors (b, c, h, w).
+        res_h: Height of the output image.
+        res_w: Width of the output image.
+        bg_color: Optional background color of size (c,) with same dtype as images.
+            Defaults to black if None.
+    
+    Returns:
+        Padded image of shape (b, res_h, res_w, c) or (b, c, res_h, res_w).
+    
+    Raises:
+        ValueError: If images is not 4D, images are larger than output resolution,
+            or bg_color has wrong number of channels.
     """
     if images.ndim != 4:
         raise ValueError("image must be a 4D array")
@@ -752,12 +905,21 @@ def pad_to_res(images, res_h, res_w, bg_color=None):
 
 
 def crop_center(images, dst_h, dst_w):
-    """
-    crops a batch of images to a specific resolution, where the crop comes from the center of the image
-    :param image: numpy (or torch) array (b, h, w, c)
-    :param dst_h: height of the output image
-    :param dst_w: width of the output image
-    :return: cropped image (b, dst_h, dst_w, c)
+    """Crops images from center to specific resolution.
+    
+    Crops a batch of images to a specific resolution by taking the center
+    portion of each image.
+    
+    Args:
+        images: Image array as numpy or torch array of shape (b, h, w, c).
+        dst_h: Height of the output image.
+        dst_w: Width of the output image.
+    
+    Returns:
+        Cropped image of shape (b, dst_h, dst_w, c).
+    
+    Raises:
+        ValueError: If images is not 4D or images are smaller than output resolution.
     """
     if images.ndim != 4:
         raise ValueError("image must be a 4D array")
@@ -775,14 +937,23 @@ def crop_center(images, dst_h, dst_w):
 
 
 def mask_regions(images, start_h, end_h, start_w, end_w):
-    """
-    masks a batch of numpy image with black background outside of region of interest (roi)
-    :param image: numpy image (b, h, w, c)
-    :param start_h: where does the roi height start
-    :param end_h: where does the roi height end
-    :param start_w: where does the roi width start
-    :param end_w: where does the roi width end
-    :return: masked image
+    """Masks images to show only region of interest.
+    
+    Masks a batch of images with black background outside the specified
+    region of interest (ROI).
+    
+    Args:
+        images: Image array of shape (b, h, w, c).
+        start_h: Starting row of the ROI.
+        end_h: Ending row of the ROI.
+        start_w: Starting column of the ROI.
+        end_w: Ending column of the ROI.
+    
+    Returns:
+        Masked image with same shape as input.
+    
+    Raises:
+        ValueError: If images is not 4D or ROI coordinates exceed image bounds.
     """
     if images.ndim != 4:
         raise ValueError("image must be a 4D array")
@@ -795,12 +966,21 @@ def mask_regions(images, start_h, end_h, start_w, end_w):
 
 
 def adjust_contrast_brightness(img, alpha=1.0, beta=0.0):
-    """
-    adjusts image contrast and brightness using naive gain and bias factors
-    :param img: input image numpy array (n, h, w, 3), float values between 0 and 1
-    :param alpha: gain factor ("contrast") range is [0.0, inf]
-    :param beta: bias factor ("brightness") range is [-1.0, 1.0]
-    :return: the new image
+    """Adjusts image contrast and brightness.
+    
+    Applies linear contrast and brightness adjustment using gain and bias factors.
+    Formula: new_img = img * alpha + beta
+    
+    Args:
+        img: Input image array of shape (n, h, w, 3) with float values between 0 and 1.
+        alpha: Gain factor for contrast adjustment. Range: [0.0, inf].
+        beta: Bias factor for brightness adjustment. Range: [-1.0, 1.0].
+    
+    Returns:
+        Adjusted image with same shape and type as input.
+    
+    Raises:
+        ValueError: If img is not a float array.
     """
     if not is_float(img):
         raise ValueError("img must be a float array")
@@ -814,10 +994,17 @@ def adjust_contrast_brightness(img, alpha=1.0, beta=0.0):
 
 
 def linear_to_srgb(linear):
-    """
-    converts linear RGB to sRGB, see https://en.wikipedia.org/wiki/SRGB.
-    note: linear is expected to be in the range [0, 1]
-    supports both numpy arrays and torch tensors
+    """Converts linear RGB to sRGB color space.
+    
+    Converts linear RGB values to sRGB color space using the standard
+    sRGB transfer function. See https://en.wikipedia.org/wiki/SRGB.
+    
+    Args:
+        linear: Linear RGB values in range [0, 1]. Supports both numpy arrays
+            and torch tensors.
+    
+    Returns:
+        sRGB values in range [0, 1] with same shape and type as input.
     """
     if is_np(linear):
         eps = np.finfo(np.float32).eps
@@ -834,10 +1021,17 @@ def linear_to_srgb(linear):
 
 
 def srgb_to_linear(srgb):
-    """
-    converts sRGB to linear RGB, see https://en.wikipedia.org/wiki/SRGB.
-    note: srgb is expected to be in the range [0, 1]
-    supports both numpy arrays and torch tensors
+    """Converts sRGB to linear RGB color space.
+    
+    Converts sRGB values to linear RGB color space using the inverse
+    sRGB transfer function. See https://en.wikipedia.org/wiki/SRGB.
+    
+    Args:
+        srgb: sRGB values in range [0, 1]. Supports both numpy arrays
+            and torch tensors.
+    
+    Returns:
+        Linear RGB values in range [0, 1] with same shape and type as input.
     """
     if is_np(srgb):
         eps = np.finfo(np.float32).eps
@@ -854,11 +1048,20 @@ def srgb_to_linear(srgb):
 
 
 def linear_to_luminance(linear_img, keep_channels=True):
-    """
-    convert linear RGB to luminance
-    linear_img: torch tensor (B, C, H, W) or numpy array (B, H, W, C) in linear RGB
-    keep_channels: if True, returns luminance with channel dimension (B, 1, H, W) / (B, H, W, 1), otherwise returns luminance without channel dimension (B, H, W)
-    Returns: luminance using the Rec. 709 weights for luminance
+    """Converts linear RGB to luminance.
+    
+    Converts linear RGB image to luminance using Rec. 709 weights.
+    
+    Args:
+        linear_img: Linear RGB image as torch tensor (B, C, H, W) or numpy array (B, H, W, C).
+        keep_channels: If True, returns luminance with channel dimension
+            (B, 1, H, W) or (B, H, W, 1). If False, returns without channel dimension (B, H, W).
+    
+    Returns:
+        Luminance values using Rec. 709 weights.
+    
+    Raises:
+        ValueError: If image is not 4D.
     """
     was_numpy = False
     if is_np(linear_img):
@@ -891,17 +1094,25 @@ def inset(
     pad=0,
     pad_color=None,
 ):
-    """
-    Embeds an inset image into a base image at one of the corners.
-
-    :param base_image: numpy array (b, h, w, c) or torch tensor (b, c, h, w)
-    :param inset_image: numpy array (b, h, w, c) or torch tensor (b, c, h, w)
-    :param corner: one of "top_left", "top_right", "bottom_left", "bottom_right"
-    :param percent: size of inset as a percentage of base image's longest dimension (0.0 to 1.0)
-    :param margin: margin from corner as a percentage of base image's longest dimension (0.0 to 1.0)
-    :param pad: pad the base image this number of pixels
-    :param pad_color: color to pad with
-    :return: base image with inset embedded, same type and shape as base_image
+    """Embeds an inset image into a base image at specified corner.
+    
+    Places a smaller version of the inset image into one of the corners
+    of the base image, maintaining aspect ratio.
+    
+    Args:
+        base_image: Base image as numpy array (b, h, w, c) or torch tensor (b, c, h, w).
+        inset_image: Image to embed as numpy array (b, h, w, c) or torch tensor (b, c, h, w).
+        corner: Corner position - "top_left", "top_right", "bottom_left", or "bottom_right".
+        percent: Size of inset as percentage of base image's longest dimension (0.0 to 1.0).
+        margin: Margin from corner as percentage of base image's longest dimension (0.0 to 1.0).
+        pad: Number of pixels to pad around the inset image.
+        pad_color: Color to use for padding.
+    
+    Returns:
+        Base image with inset embedded, same type and shape as base_image.
+    
+    Raises:
+        ValueError: If corner is invalid, percent is out of range, or margin is invalid.
     """
     if corner not in ["top_left", "top_right", "bottom_left", "bottom_right"]:
         raise ValueError(
@@ -995,11 +1206,21 @@ def inset(
 
 
 def compute_color_distance(image1, image2, bin_per_dim=10):
-    """
-    computes a naive "color distance" between two images by binning the colors and computing the wasserstein distance per channel
-    :param image1: numpy image (h, w, 3)
-    :param image2: numpy image (h, w, 3)
-    :return: the sum (over channels) of the wasserstein distances
+    """Computes color distance between two images.
+    
+    Computes a naive "color distance" between two images by binning the colors
+    and computing the Wasserstein distance per channel.
+    
+    Args:
+        image1: First image as numpy array of shape (h, w, 3).
+        image2: Second image as numpy array of shape (h, w, 3).
+        bin_per_dim: Number of bins per dimension for color histogram.
+    
+    Returns:
+        Sum of Wasserstein distances over all channels.
+    
+    Raises:
+        ValueError: If images have different shapes, are not 3D, or are not uint8.
     """
     if image1.shape != image2.shape:
         raise ValueError("images must have the same shape")
@@ -1030,12 +1251,21 @@ def compute_color_distance(image1, image2, bin_per_dim=10):
 
 
 def tonemap_reinhard(hdr_image, exposure=1.0, clip=True):
-    """
-    maps an input image [-inf, inf] to [0, 1] using Reinhard's tonemapping operator x / 1 + x
-    :param hdr_image: a numpy array or torch tensor (channels first or last, any float type)
-    :param exposure: an exposure factor e*x / 1 + e*x
-    :param clip: if true will clip result to [0.0, 1.0]
-    :return: the tonemapped image, with same dtype and shape
+    """Applies Reinhard tonemapping to HDR image.
+    
+    Maps an input HDR image from [-inf, inf] to [0, 1] using Reinhard's
+    tonemapping operator: x / (1 + x).
+    
+    Args:
+        hdr_image: HDR image as numpy array or torch tensor (any float type).
+        exposure: Exposure factor applied as e*x / (1 + e*x).
+        clip: If True, clips result to [0.0, 1.0].
+    
+    Returns:
+        Tonemapped image with same dtype and shape as input.
+    
+    Raises:
+        TypeError: If hdr_image is not numpy array or torch tensor.
     """
     image = exposure * hdr_image
     image = image / (image + 1.0)
@@ -1052,16 +1282,24 @@ def tonemap_reinhard(hdr_image, exposure=1.0, clip=True):
 def tonemap_tev(
     hdr_image, exposure=0.0, offset=0.0, gamma=2.2, only_preproc=False, clip=True
 ):
-    """
-    maps an input image [-inf, inf] to [0, 1] using non-linear gamma correction.
-    this slightly naive tonemapping was taken from https://github.com/Tom94/tev
-    :param hdr_image: a numpy array or torch tensor (channels first or last, any float type)
-    :param exposure: the image will be multiplied by 2*exposure prior to gamma correction
-    :param offset: will be added to image (after multiplied by exposure, but prior to gamma correction)
-    :param gamma: gamma to be used for non-linear correction
-    :param only_preproc: if true, will not run gamma correction but only use exposure and offset
-    :param clip: if true will clip result to [0.0, 1.0]
-    :return: the tonemapped image, with same dtype and shape
+    """Applies Tev-style tonemapping to HDR image.
+    
+    Maps an input HDR image from [-inf, inf] to [0, 1] using non-linear gamma
+    correction. This tonemapping was taken from https://github.com/Tom94/tev.
+    
+    Args:
+        hdr_image: HDR image as numpy array or torch tensor (any float type).
+        exposure: Image will be multiplied by 2^exposure prior to gamma correction.
+        offset: Value added to image after exposure multiplication but before gamma correction.
+        gamma: Gamma value for non-linear correction.
+        only_preproc: If True, only applies exposure and offset without gamma correction.
+        clip: If True, clips result to [0.0, 1.0].
+    
+    Returns:
+        Tonemapped image with same dtype and shape as input.
+    
+    Raises:
+        TypeError: If hdr_image is not numpy array or torch tensor.
     """
     if type(hdr_image) == np.ndarray:
         image = (hdr_image * np.power(2.0, exposure)) + offset
@@ -1081,11 +1319,19 @@ def tonemap_tev(
 
 
 def patchify(x: torch.Tensor, patch_size: int) -> torch.Tensor:
-    """
-    patchify using unfold.
-    :param x: (b, c, h, w)
-    :param patch_size: int
-    :return: patches: (b, num_patches, c, ph, pw)
+    """Converts image to patches using unfold operation.
+    
+    Splits an image into non-overlapping patches using PyTorch's unfold operation.
+    
+    Args:
+        x: Input image tensor of shape (b, c, h, w).
+        patch_size: Size of each patch (must divide h and w evenly).
+    
+    Returns:
+        Patches tensor of shape (b, num_patches, c, ph, pw).
+    
+    Raises:
+        ValueError: If patch_size doesn't divide image dimensions evenly.
     """
     b, c, h, w = x.shape
     if h % patch_size != 0 or w % patch_size != 0:
@@ -1102,14 +1348,21 @@ def patchify(x: torch.Tensor, patch_size: int) -> torch.Tensor:
 
 
 def unpatchify(patches: torch.Tensor, patch_size: int, h: int, w: int) -> torch.Tensor:
-    """
-    Reconstruct image from unfold-style patches.
+    """Reconstructs image from unfold-style patches.
+    
+    Reconstructs the original image from patches created by the patchify function.
+    
     Args:
-        patches: (b, num_patches, c, ph, pw)
-        patch_size: int
-        h, w: original image size
+        patches: Patches tensor of shape (b, num_patches, c, ph, pw).
+        patch_size: Size of each patch.
+        h: Original image height.
+        w: Original image width.
+    
     Returns:
-        x: (b, c, h, w)
+        Reconstructed image tensor of shape (b, c, h, w).
+    
+    Raises:
+        ValueError: If patch dimensions don't match patch_size.
     """
     b, num_patches, c, ph, pw = patches.shape
     if ph != patch_size or pw != patch_size:
