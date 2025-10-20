@@ -2,6 +2,7 @@ import torch
 import numpy as np
 from PIL import Image
 
+
 def is_np(x):
     """
     checks if x is a numpy array or torch tensor (will raise an error if x is neither)
@@ -341,9 +342,17 @@ def map_to_01(x, dims=None):
     :return: mapped input
     """
     if is_np(x):
-        return map_range(x, np.amin(x, axis=dims, keepdims=True), np.amax(x, axis=dims, keepdims=True), 0.0, 1.0)
+        return map_range(
+            x,
+            np.amin(x, axis=dims, keepdims=True),
+            np.amax(x, axis=dims, keepdims=True),
+            0.0,
+            1.0,
+        )
     else:
-        return map_range(x, x.amin(dim=dims, keepdim=True), x.amax(dim=dims, keepdim=True), 0.0, 1.0)
+        return map_range(
+            x, x.amin(dim=dims, keepdim=True), x.amax(dim=dims, keepdim=True), 0.0, 1.0
+        )
 
 
 def swap_columns(x, col1_index, col2_index):

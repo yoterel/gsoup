@@ -863,7 +863,9 @@ def linear_to_luminance(linear_img, keep_channels=True):
     was_numpy = False
     if is_np(linear_img):
         was_numpy = True
-        linear_img = to_torch(linear_img, permute_channels=True)  # (B, H, W, C) -> (B, C, H, W)
+        linear_img = to_torch(
+            linear_img, permute_channels=True
+        )  # (B, H, W, C) -> (B, C, H, W)
     if linear_img.ndim != 4:
         raise ValueError("image must be 4D")
     b, c, h, w = linear_img.shape
@@ -1077,6 +1079,7 @@ def tonemap_tev(
         raise TypeError("hdr_image must be either a numpy array or torch tensor")
     return image
 
+
 def patchify(x: torch.Tensor, patch_size: int) -> torch.Tensor:
     """
     patchify using unfold.
@@ -1086,7 +1089,9 @@ def patchify(x: torch.Tensor, patch_size: int) -> torch.Tensor:
     """
     b, c, h, w = x.shape
     if h % patch_size != 0 or w % patch_size != 0:
-        raise ValueError("current patchify/unpatchify does not support overlapping patches")
+        raise ValueError(
+            "current patchify/unpatchify does not support overlapping patches"
+        )
 
     # unfold: (b, c*ph*pw, num_patches)
     patches = F.unfold(x, kernel_size=patch_size, stride=patch_size)
@@ -1108,7 +1113,9 @@ def unpatchify(patches: torch.Tensor, patch_size: int, h: int, w: int) -> torch.
     """
     b, num_patches, c, ph, pw = patches.shape
     if ph != patch_size or pw != patch_size:
-        raise ValueError("current patchify/unpatchify does not support overlapping patches")
+        raise ValueError(
+            "current patchify/unpatchify does not support overlapping patches"
+        )
 
     # back to (b, c*ph*pw, num_patches)
     patches = patches.reshape(b, num_patches, -1).transpose(1, 2)
