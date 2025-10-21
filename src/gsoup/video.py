@@ -7,8 +7,14 @@ import time
 
 
 def get_ffmpeg_version(verbose=False):
-    """
-    :return: ffmpeg version
+    """Get the version of ffmpeg installed on the system.
+    
+    Args:
+        verbose (bool, optional): If True, prints warning messages when ffmpeg
+            is not found or version cannot be detected. Defaults to False.
+    
+    Returns:
+        str or None: The ffmpeg version string if found, None otherwise.
     """
     try:
         ffmpeg_output = subprocess.run(
@@ -31,19 +37,46 @@ get_ffmpeg_version(True)
 
 
 class FPS:
-    """
-    calculates current fps and returns it, see https://stackoverflow.com/a/54539292
-    example usage:
+    """Calculates and tracks frames per second (FPS) in real-time.
+    
+    This class maintains a rolling average of frame timestamps to calculate
+    the current FPS. Useful for performance monitoring in video processing
+    applications.
+    
+    Reference: https://stackoverflow.com/a/54539292
+    
+    Example:
         fps = FPS()
         while True:
-            # do something
-            print(fps())
+            # Process frame
+            current_fps = fps()
+            print(f"Current FPS: {current_fps}")
+    
+    Attributes:
+        frametimestamps (collections.deque): Circular buffer storing frame
+            timestamps for FPS calculation.
     """
 
     def __init__(self, avarageof=50):
+        """Initialize the FPS calculator.
+        
+        Args:
+            avarageof (int, optional): Number of recent frames to average
+                for FPS calculation. Defaults to 50.
+        """
         self.frametimestamps = collections.deque(maxlen=avarageof)
 
     def __call__(self):
+        """Calculate and return the current FPS.
+        
+        This method should be called once per frame to update the FPS
+        calculation. It adds the current timestamp and returns the
+        calculated FPS based on recent frame timestamps.
+        
+        Returns:
+            float: The current FPS value. Returns 0.0 if insufficient
+                data is available for calculation.
+        """
         self.frametimestamps.append(time.time())
         nominator = len(self.frametimestamps)
         denominator = self.frametimestamps[-1] - self.frametimestamps[0]
@@ -54,9 +87,28 @@ class FPS:
 
 
 def probe_video(video_path):
-    """
-    Probe the video using ffprobe to extract useful metadata.
-    Returns a dict with keys: width, height, frame_rate, codec, pix_fmt, bit_rate, nb_frames, duration.
+    """Extract video metadata using ffprobe.
+    
+    Uses ffprobe to analyze a video file and extract comprehensive metadata
+    including dimensions, frame rate, codec information, and other properties.
+    
+    Args:
+        video_path (str or Path): Path to the video file to analyze.
+    
+    Returns:
+        dict: Dictionary containing video metadata with the following keys:
+            - width (int): Video width in pixels
+            - height (int): Video height in pixels
+            - frame_rate (float): Frames per second
+            - codec (str): Video codec name
+            - pix_fmt (str): Pixel format
+            - bit_rate (str): Bit rate
+            - nb_frames (int): Total number of frames
+            - duration (str): Video duration in seconds
+    
+    Raises:
+        ValueError: If the video file cannot be processed or metadata
+            extraction fails.
     """
     video_path = Path(video_path)
     cmd = [
@@ -108,8 +160,17 @@ def probe_video(video_path):
 
 
 def get_frame_timestamps(video_path):
-    """
-    Get a list of timestamps (in seconds) for each frame in the video.
+    """Extract timestamps for each frame in a video.
+    
+    Uses ffprobe to get the precise timestamp for each frame in the video,
+    which can be useful for frame-accurate operations.
+    
+    Args:
+        video_path (str or Path): Path to the video file.
+    
+    Returns:
+        list[float]: List of timestamps in seconds for each frame.
+            Invalid or unparseable timestamps are skipped.
     """
     video_path = Path(video_path)
     cmd = [
@@ -139,6 +200,22 @@ def get_frame_timestamps(video_path):
 
 
 def load_video(video_path):
+    """Load an entire video file into memory as a numpy array.
+    
+    Reads a video file and converts it to a numpy array containing all
+    frames. This is memory-intensive for large videos but provides
+    fast random access to any frame.
+    
+    Args:
+        video_path (str or Path): Path to the video file to load.
+    
+    Returns:
+        np.ndarray: 4D array with shape (n_frames, height, width, 3)
+            containing RGB pixel data for all frames.
+    
+    Raises:
+        ValueError: If video dimensions cannot be determined.
+    """
     video_path = Path(video_path)
     info = probe_video(video_path)
     width = info["width"]
@@ -178,16 +255,26 @@ def save_video(
     pixel_format="yuv420p",
     verbose=False,
 ):
-    """
-    Write video frames to disk, only supports mp4 container.
-    Parameters:
-      frames: (n_frames, height, width, 3) np array or an iterable yielding such frames.
-      output_path: destination video file.
-      fps: frames per second.
-      bitrate: optional bitrate (e.g., "500k").
-      codec: video codec to use.
-      pixel_format: output pixel format.
-      :verbose: if True, show ffmpeg output.
+    """Save video frames to disk as an MP4 file.
+    
+    Writes a sequence of video frames to disk using ffmpeg. Only supports
+    MP4 container format. Can handle both numpy arrays and iterables of frames.
+    
+    Args:
+        frames (np.ndarray or iterable): Video frames to save. Can be:
+            - numpy array with shape (n_frames, height, width, 3)
+            - iterable yielding frames with shape (height, width, 3)
+        output_path (str or Path): Destination path for the output video file.
+            Must have .mp4 extension.
+        fps (float): Frames per second for the output video.
+        bitrate (str, optional): Video bitrate (e.g., "500k", "2M").
+            If None, uses default bitrate.
+        codec (str, optional): Video codec to use. Defaults to "libx264".
+        pixel_format (str, optional): Output pixel format. Defaults to "yuv420p".
+        verbose (bool, optional): If True, shows ffmpeg output. Defaults to False.
+    
+    Raises:
+        ValueError: If output_path does not have .mp4 extension.
     """
     output_path = Path(output_path)
     if output_path.suffix != ".mp4":
@@ -237,8 +324,21 @@ def save_video(
 def reverse_video(
     input_path, output_path, bitrate=None, codec="libx264", pixel_format="yuv420p"
 ):
-    """
-    Reverse a video on disk.
+    """Reverse a video file by playing frames in reverse order.
+    
+    Creates a new video file where all frames are played in reverse order
+    using ffmpeg's reverse filter.
+    
+    Args:
+        input_path (str or Path): Path to the input video file.
+        output_path (str or Path): Path for the reversed output video.
+        bitrate (str, optional): Video bitrate for the output (e.g., "500k").
+            If None, uses default bitrate.
+        codec (str, optional): Video codec to use. Defaults to "libx264".
+        pixel_format (str, optional): Output pixel format. Defaults to "yuv420p".
+    
+    Raises:
+        subprocess.CalledProcessError: If ffmpeg command fails.
     """
     input_path = Path(input_path)
     output_path = Path(output_path)
@@ -264,8 +364,20 @@ def reverse_video(
 def compress_video(
     input_path, output_path, bitrate, codec="libx264", pixel_format="yuv420p"
 ):
-    """
-    Compress a video by re-encoding it at the specified bitrate.
+    """Compress a video by re-encoding it at a specified bitrate.
+    
+    Re-encodes the input video with the specified bitrate to reduce file size.
+    This is useful for creating smaller versions of videos for web or storage.
+    
+    Args:
+        input_path (str or Path): Path to the input video file.
+        output_path (str or Path): Path for the compressed output video.
+        bitrate (str): Target bitrate for compression (e.g., "500k", "1M").
+        codec (str, optional): Video codec to use. Defaults to "libx264".
+        pixel_format (str, optional): Output pixel format. Defaults to "yuv420p".
+    
+    Raises:
+        subprocess.CalledProcessError: If ffmpeg command fails.
     """
     input_path = Path(input_path)
     output_path = Path(output_path)
@@ -298,9 +410,32 @@ def slice_video(
     to_numpy=True,
     output_path=None,
 ):
-    """
-    Slice a video by selecting frames between start_frame and stop_frame with a given stride.
-    Outputs a new video file.
+    """Extract a slice of frames from a video.
+    
+    Selects frames between start_frame and stop_frame with a given stride,
+    either returning them as a numpy array or saving to a new video file.
+    
+    Args:
+        input_path (str or Path): Path to the input video file.
+        start_frame (int): Starting frame index (inclusive).
+        stop_frame (int): Ending frame index (inclusive).
+        stride (int, optional): Frame stride (step size). Defaults to 1.
+        fps (float, optional): Output frame rate. If None, uses original FPS.
+        codec (str, optional): Video codec for output. Defaults to "libx264".
+        pixel_format (str, optional): Output pixel format. Defaults to "yuv420p".
+        bitrate (str, optional): Output bitrate (e.g., "500k").
+        to_numpy (bool, optional): If True, returns numpy array. If False,
+            saves to output_path. Defaults to True.
+        output_path (str or Path, optional): Output file path when to_numpy=False.
+    
+    Returns:
+        np.ndarray or None: If to_numpy=True, returns array with shape
+            (n_frames, height, width, 3). If to_numpy=False, returns None.
+    
+    Raises:
+        ValueError: If video dimensions cannot be determined or output_path
+            is required but not provided.
+        subprocess.CalledProcessError: If ffmpeg command fails.
     """
     input_path = Path(input_path)
     # Build a filter chain: select frames in range and skip by stride.
@@ -345,8 +480,21 @@ def slice_video(
 
 
 def get_single_frame(video_path, frame_index):
-    """
-    Extract a single frame from a video as a numpy array.
+    """Extract a single frame from a video as a numpy array.
+    
+    Efficiently extracts one specific frame from a video without loading
+    the entire video into memory.
+    
+    Args:
+        video_path (str or Path): Path to the video file.
+        frame_index (int): Index of the frame to extract (0-based).
+    
+    Returns:
+        np.ndarray: 3D array with shape (height, width, 3) containing
+            RGB pixel data for the specified frame.
+    
+    Raises:
+        ValueError: If video info is insufficient or frame extraction fails.
     """
     video_path = Path(video_path)
     info = probe_video(video_path)
@@ -389,8 +537,24 @@ def trim_video(
     codec="libx264",
     pixel_format="yuv420p",
 ):
-    """
-    Trim a video using frame indices.
+    """Trim a video to a specific range of frames.
+    
+    Creates a new video file containing only the frames between start_frame
+    and end_frame (inclusive). More efficient than loading entire video
+    for simple trimming operations.
+    
+    Args:
+        input_path (str or Path): Path to the input video file.
+        output_path (str or Path): Path for the trimmed output video.
+        start_frame (int): Starting frame index (inclusive).
+        end_frame (int): Ending frame index (inclusive).
+        bitrate (str, optional): Output bitrate (e.g., "500k").
+        codec (str, optional): Video codec for output. Defaults to "libx264".
+        pixel_format (str, optional): Output pixel format. Defaults to "yuv420p".
+    
+    Raises:
+        ValueError: If frame rate information is unavailable.
+        subprocess.CalledProcessError: If ffmpeg command fails.
     """
     input_path = Path(input_path)
     output_path = Path(output_path)
@@ -422,7 +586,32 @@ def trim_video(
 
 
 class VideoReader:
+    """Iterator for reading video frames one at a time.
+    
+    Provides a memory-efficient way to process video frames sequentially
+    without loading the entire video into memory. Uses ffmpeg to decode
+    frames on-demand.
+    
+    Example:
+        reader = VideoReader("video.mp4")
+        for frame in reader:
+            # Process each frame
+            process_frame(frame)
+    
+    Attributes:
+        filename (str): Path to the video file.
+        width (int): Video width in pixels.
+        height (int): Video height in pixels.
+        channels (int): Number of color channels (3 for RGB).
+        proc (subprocess.Popen): ffmpeg process for frame decoding.
+    """
+    
     def __init__(self, filename):
+        """Initialize the video reader.
+        
+        Args:
+            filename (str): Path to the video file to read.
+        """
         self.filename = filename
         info = probe_video(filename)
         self.width = info["width"]
@@ -436,9 +625,23 @@ class VideoReader:
         )
 
     def __iter__(self):
+        """Return iterator for video frames.
+        
+        Returns:
+            VideoReader: Self, as this class implements the iterator protocol.
+        """
         return self
 
     def __next__(self):
+        """Get the next frame from the video.
+        
+        Returns:
+            np.ndarray: 3D array with shape (height, width, channels)
+                containing RGB pixel data for the next frame.
+        
+        Raises:
+            StopIteration: When all frames have been read or video ends.
+        """
         frame_size = self.width * self.height * self.channels
         # Read enough bytes for one frame
         raw_frame = self.proc.stdout.read(frame_size)
