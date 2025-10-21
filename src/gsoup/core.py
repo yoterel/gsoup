@@ -5,13 +5,13 @@ from PIL import Image
 
 def is_np(x):
     """Checks if x is a numpy array or torch tensor.
-    
+
     Args:
         x: Object to check.
-        
+
     Returns:
         bool: True if x is a numpy array, False if x is a torch tensor.
-        
+
     Raises:
         ValueError: If x is neither a numpy array nor a torch tensor.
     """
@@ -25,10 +25,10 @@ def is_np(x):
 
 def is_float(x):
     """Checks if x is a float array.
-    
+
     Args:
         x: Object to check.
-        
+
     Returns:
         bool: True if x is a float array, False if x is not.
     """
@@ -40,13 +40,13 @@ def is_float(x):
 
 def permute_channel_dimension(x):
     """Permutes the channels of a numpy array or torch tensor.
-    
+
     Args:
         x: Numpy array or torch tensor of shape (h, w, c), (c, h, w), (b, h, w, c), or (b, c, h, w).
-        
+
     Returns:
         Array or tensor with permuted channels.
-        
+
     Raises:
         ValueError: If x is not 3 or 4 dimensional.
     """
@@ -67,12 +67,12 @@ def permute_channel_dimension(x):
 
 def to_hom(x):
     """Converts a vector to homogeneous coordinates.
-    
+
     Concatenates 1 along the last dimension.
-    
+
     Args:
         x: Numpy array or torch tensor of shape (..., c).
-        
+
     Returns:
         Numpy array or torch tensor of shape (..., c+1).
     """
@@ -92,11 +92,11 @@ def to_hom(x):
 
 def homogenize(x, keepdim=False):
     """Normalizes a homogeneous vector by dividing by the last coordinate.
-    
+
     Args:
         x: Homogeneous vector array.
         keepdim: If True, keeps the homogeneous dimension. Defaults to False.
-        
+
     Returns:
         Normalized vector array.
     """
@@ -108,11 +108,11 @@ def homogenize(x, keepdim=False):
 
 def normalize(x, eps=1e-7):
     """Normalizes a vector by dividing by its norm.
-    
+
     Args:
         x: Numpy array or torch tensor of shape (..., c).
         eps: Small epsilon value to avoid division by zero. Defaults to 1e-7.
-        
+
     Returns:
         Normalized array along the last dimension.
     """
@@ -124,15 +124,15 @@ def normalize(x, eps=1e-7):
 
 def broadcast_batch(*args):
     """Broadcasts a list of arrays to the same shape on the batch dimension.
-    
+
     Assumes first dimension is batch unless ndim = 1 for all inputs (but then does not broadcast).
-    
+
     Args:
         *args: List of arrays to broadcast.
-        
+
     Returns:
         List of arrays with the same shape.
-        
+
     Raises:
         ValueError: If cannot broadcast 1d and nd arrays.
     """
@@ -157,11 +157,11 @@ def broadcast_batch(*args):
 
 def repeat(x, n):
     """Repeats a numpy array or torch tensor.
-    
+
     Args:
         x: The input array or tensor.
         n: A tuple describing the repeat per dimension of x.
-        
+
     Returns:
         The repeated input.
     """
@@ -174,14 +174,14 @@ def repeat(x, n):
 
 def compose_rt(R: np.array, t: np.array, square=False):
     """Composes a rotation-translation matrix from rotation and translation.
-    
+
     Will broadcast upon batch dimension if necessary.
-    
+
     Args:
         R: Rotation matrix of shape (n, 3, 3).
         t: Translation vector of shape (n, 3).
         square: If True, output will be (n, 4, 4), otherwise (n, 3, 4). Defaults to False.
-        
+
     Returns:
         Composition of the rotation and translation.
     """
@@ -194,13 +194,13 @@ def compose_rt(R: np.array, t: np.array, square=False):
 
 def to_44(mat):
     """Converts a (3,4) to a (4,4) matrix by concatenating [0, 0, 0, 1].
-    
+
     Args:
         mat: Matrix of shape (n, 3, 4) where n can be any number including 0.
-        
+
     Returns:
         Matrix of shape (n, 4, 4).
-        
+
     Raises:
         ValueError: If mat is not (..., 3, 4) or (..., 4, 4).
     """
@@ -224,13 +224,13 @@ def to_44(mat):
 
 def to_34(mat: np.array):
     """Converts a (n, 4, 4) to a (n, 3, 4) matrix by removing the last row.
-    
+
     Args:
         mat: Matrix of shape (n, 4, 4).
-        
+
     Returns:
         Matrix of shape (n, 3, 4).
-        
+
     Raises:
         ValueError: If mat is not (..., 4, 4).
     """
@@ -246,14 +246,14 @@ def to_34(mat: np.array):
 
 def to_np(x, permute_channels=False):
     """Converts input to numpy array.
-    
+
     Args:
         x: Input tensor, array, PIL Image, or list.
         permute_channels: If True and input is a torch tensor, permutes the channels order to channels last. Defaults to False.
-        
+
     Returns:
         Numpy array.
-        
+
     Raises:
         TypeError: If input type cannot be converted to numpy array.
     """
@@ -273,13 +273,13 @@ def to_np(x, permute_channels=False):
 
 def to_numpy(x, permute_channels=False):
     """Converts input to numpy array.
-    
+
     See to_np for detailed documentation.
-    
+
     Args:
         x: Input tensor, array, PIL Image, or list.
         permute_channels: If True and input is a torch tensor, permutes the channels order to channels last. Defaults to False.
-        
+
     Returns:
         Numpy array.
     """
@@ -288,13 +288,13 @@ def to_numpy(x, permute_channels=False):
 
 def to_torch(x, device="cpu", dtype=None, permute_channels=False):
     """Converts a numpy array to a torch tensor.
-    
+
     Args:
         x: Numpy array to convert.
         device: Device to put the tensor on. Defaults to "cpu".
         dtype: Dtype of the tensor. If None, will be inferred from the input. Defaults to None.
         permute_channels: If True, permutes the channels order. Defaults to False.
-        
+
     Returns:
         Torch tensor.
     """
@@ -312,14 +312,14 @@ def to_torch(x, device="cpu", dtype=None, permute_channels=False):
 
 def to_8b(x, clip=True):
     """Converts an array to 8-bit format.
-    
+
     Args:
         x: Input array (float, double, bool, or uint8).
         clip: If True, clips values to [0,1]. Defaults to True.
-        
+
     Returns:
         8-bit array.
-        
+
     Raises:
         ValueError: If unsupported dtype.
     """
@@ -349,14 +349,14 @@ def to_8b(x, clip=True):
 
 def to_float(x, clip=True):
     """Converts an 8-bit or bool array to float.
-    
+
     Args:
         x: Input array (uint8, bool, or float).
         clip: If True, clips values to [0,1]. Defaults to True.
-        
+
     Returns:
         Float array.
-        
+
     Raises:
         ValueError: If unsupported dtype.
     """
@@ -386,13 +386,13 @@ def to_float(x, clip=True):
 
 def to_PIL(x):
     """Converts a numpy array or torch tensor to a PIL image.
-    
+
     Args:
         x: Float numpy array or torch tensor of shape (h, w, 3) or (h, w).
-        
+
     Returns:
         PIL image.
-        
+
     Raises:
         ValueError: If unsupported array dimensions or dtype.
     """
@@ -411,14 +411,14 @@ def to_PIL(x):
 
 def map_range(x, in_min, in_max, out_min, out_max):
     """Maps input from input range to output range.
-    
+
     Args:
         x: Input array.
         in_min: Input range minimum.
         in_max: Input range maximum.
         out_min: Output range minimum.
         out_max: Output range maximum.
-        
+
     Returns:
         Mapped input array.
     """
@@ -428,11 +428,11 @@ def map_range(x, in_min, in_max, out_min, out_max):
 
 def map_to_01(x, dims=None):
     """Maps an input to [0,1] range.
-    
+
     Args:
         x: Input array.
         dims: The list of dimensions to map to [0,1]. Defaults to None, which maps the entire array.
-        
+
     Returns:
         Mapped input array.
     """
@@ -452,12 +452,12 @@ def map_to_01(x, dims=None):
 
 def swap_columns(x, col1_index, col2_index):
     """Swaps two columns of a numpy array inplace.
-    
+
     Args:
         x: Array of shape (..., c).
         col1_index: Index of the first column.
         col2_index: Index of the second column.
-        
+
     Returns:
         Array with swapped columns.
     """
@@ -467,13 +467,13 @@ def swap_columns(x, col1_index, col2_index):
 
 def to_gray(x, keep_channels=False):
     """Converts image to grayscale.
-    
+
     See color_to_gray for detailed documentation.
-    
+
     Args:
         x: Input image array.
         keep_channels: If True, preserves channel dimension. Defaults to False.
-        
+
     Returns:
         Grayscale version of the input.
     """
@@ -482,13 +482,13 @@ def to_gray(x, keep_channels=False):
 
 def rgb_to_gray(x, keep_channels=False):
     """Converts RGB image to grayscale.
-    
+
     See color_to_gray for detailed documentation.
-    
+
     Args:
         x: Input RGB image array.
         keep_channels: If True, preserves channel dimension. Defaults to False.
-        
+
     Returns:
         Grayscale version of the input.
     """
@@ -497,14 +497,14 @@ def rgb_to_gray(x, keep_channels=False):
 
 def color_to_gray(x, keep_channels=False):
     """Converts image to grayscale by averaging over channels.
-    
+
     Args:
         x: Numpy array or torch tensor of shape (n, h, w, c) or (h, w, c) where c >= 1.
         keep_channels: If True, will preserve c by repeating the array after average. Defaults to False.
-        
+
     Returns:
         The grayscale version of x.
-        
+
     Raises:
         ValueError: If ndim of x is not 3 (h, w, c) or 4 (n, h, w, c).
     """
@@ -540,11 +540,11 @@ def color_to_gray(x, keep_channels=False):
 
 def make_monotonic(y, increasing=True):
     """Ensures a 1D array is monotonic increasing or decreasing.
-    
+
     Args:
         y: Numpy array of shape (N,) to be made monotonic.
         increasing: If True, enforce increasing monotonicity; if False, enforce decreasing. Defaults to True.
-        
+
     Returns:
         Numpy array of the same shape as y, made monotonic.
     """
