@@ -157,14 +157,22 @@ def to_34(mat: np.array):
         return mat[:-1, :]
 
 
-def to_np(arr: torch.Tensor):
+def to_np(arr: torch.Tensor, permute_channels=False):
     """
     converts a tensor to numpy array
     :param arr: tensor
     :return: numpy array
     """
     if type(arr) == torch.Tensor:
-        return arr.detach().cpu().numpy()
+        if permute_channels:
+            if arr.ndim == 3:
+                return arr.detach().cpu().numpy().permute(2, 0, 1)  # (h, w, c) -> (c, h, w)
+            elif arr.ndim == 4:
+                return arr.detach().cpu().numpy().permute(0, 3, 1, 2)  # (n, h, w, c) -> (n, c, h, w)
+            else:
+                raise ValueError("tensor must be 3 or 4 dimensional")
+        else:
+            return arr.detach().cpu().numpy()
     elif type(arr) == np.ndarray:
         return arr
     elif type(arr) == Image.Image:
@@ -175,13 +183,13 @@ def to_np(arr: torch.Tensor):
         raise TypeError("cannot convert {} to numpy array".format(str(type(arr))))
 
 
-def to_numpy(arr: torch.Tensor):
+def to_numpy(arr: torch.Tensor, permute_channels=False):
     """
     converts a tensor to numpy array
     :param arr: tensor
     :return: numpy array
     """
-    return to_np(arr)
+    return to_np(arr, permute_channels)
 
 
 def to_torch(arr: np.array, device="cpu", dtype=None, permute_channels=False):
