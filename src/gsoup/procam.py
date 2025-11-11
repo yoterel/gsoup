@@ -11,7 +11,7 @@ from .gsoup_io import (
 from .transforms import compose_rt
 from .core import to_8b, to_hom, swap_columns, make_monotonic, to_float, rgb_to_gray
 from .image import (
-    change_brightness,
+    adjust_contrast_brightness,
     add_alpha,
     resize,
     tonemap_reinhard,
@@ -817,7 +817,7 @@ def naive_color_compensate(
     all_black_image,
     cam_width,
     cam_height,
-    brightness_decrease=-127,
+    brightness_decrease=-0.5,
     projector_gamma=2.2,
     output_path=None,
     debug=False,
@@ -841,7 +841,7 @@ def naive_color_compensate(
     target_image = load_image(
         target_image, as_float=True, resize_wh=(cam_width, cam_height)
     )[..., :3]
-    target_image = change_brightness(target_image, brightness_decrease)
+    target_image = adjust_contrast_brightness(target_image, 1.0, brightness_decrease)
     if debug:
         save_image(target_image, Path(output_path.parent, "decrease_brightness.png"))
     all_white_image = load_image(
@@ -1409,332 +1409,6 @@ class GrayCode:
         return forward_map
 
 
-class DeBruijn:
-    """
-    A class that handles encoding and decoding De Bruijn color-coded patterns.
-    Uses color sequences to encode pixel coordinates in a single or few-shot approach.
-    Based on "De Bruijn sequences for structured light patterns".
-    """
-
-    def __init__(self, alphabet_size=4, sequence_length=3):
-        """
-        Initialize De Bruijn pattern generator.
-        :param alphabet_size: number of colors in the alphabet (default 4: R, G, B, W)
-        :param sequence_length: length of color sequences to encode coordinates
-        """
-        self.alphabet_size = alphabet_size
-        self.sequence_length = sequence_length
-        # Define color palette: R, G, B, W (White)
-        self.colors = np.array(
-            [
-                [255, 0, 0],  # Red
-                [0, 255, 0],  # Green
-                [0, 0, 255],  # Blue
-                [255, 255, 255],  # White
-            ],
-            dtype=np.uint8,
-        )
-
-    def generate_debruijn_sequence(self, n, k):
-        """
-        Generate a De Bruijn sequence of length k^n using alphabet of size k.
-        :param n: sequence length parameter
-        :param k: alphabet size
-        :return: De Bruijn sequence as numpy array
-        """
-        if n == 1:
-            return np.arange(k, dtype=np.uint8)
-
-        # Use iterative approach to build De Bruijn sequence
-        sequence = []
-        visited = set()
-
-        # Start with sequence of n-1 zeros
-        current = [0] * (n - 1)
-
-        while True:
-            # Try to extend the sequence
-            extended = False
-            for symbol in range(k):
-                next_seq = current[1:] + [symbol]
-                seq_tuple = tuple(next_seq)
-
-                if seq_tuple not in visited:
-                    visited.add(seq_tuple)
-                    sequence.append(symbol)
-                    current = next_seq
-                    extended = True
-                    break
-
-            if not extended:
-                break
-
-        return np.array(sequence, dtype=np.uint8)
-
-    def encode(self, proj_wh, include_reference=True):
-        """
-        Encode projector coordinates into De Bruijn color patterns.
-        :param proj_wh: projector's (width, height) in pixels as a tuple
-        :param include_reference: if True, includes white and black reference images
-        :return: a 3D numpy array of shape (total_images, height, width, 3) for color patterns
-        """
-        width, height = proj_wh
-
-        # Generate De Bruijn sequences for x and y coordinates
-        x_sequence = self.generate_debruijn_sequence(
-            self.sequence_length, self.alphabet_size
-        )
-        y_sequence = self.generate_debruijn_sequence(
-            self.sequence_length, self.alphabet_size
-        )
-
-        # Ensure sequences are long enough for the projector resolution
-        while len(x_sequence) < width:
-            x_sequence = np.concatenate([x_sequence, x_sequence])
-        while len(y_sequence) < height:
-            y_sequence = np.concatenate([y_sequence, y_sequence])
-
-        # Truncate to exact size needed
-        x_sequence = x_sequence[:width]
-        y_sequence = y_sequence[:height]
-
-        # Create color pattern for x-coordinates (vertical stripes)
-        x_pattern = np.zeros((height, width, 3), dtype=np.uint8)
-        for i, color_idx in enumerate(x_sequence):
-            x_pattern[:, i, :] = self.colors[color_idx]
-
-        # Create color pattern for y-coordinates (horizontal stripes)
-        y_pattern = np.zeros((height, width, 3), dtype=np.uint8)
-        for i, color_idx in enumerate(y_sequence):
-            y_pattern[i, :, :] = self.colors[color_idx]
-
-        # Create combined pattern (diagonal stripes for better decoding)
-        combined_pattern = np.zeros((height, width, 3), dtype=np.uint8)
-        for y in range(height):
-            for x in range(width):
-                # Combine x and y color indices using XOR
-                combined_idx = (x_sequence[x] + y_sequence[y]) % self.alphabet_size
-                combined_pattern[y, x, :] = self.colors[combined_idx]
-
-        patterns = [x_pattern, y_pattern, combined_pattern]
-
-        if include_reference:
-            # Add white and black reference images
-            white_img = np.full((height, width, 3), 255, dtype=np.uint8)
-            black_img = np.zeros((height, width, 3), dtype=np.uint8)
-            patterns.extend([white_img, black_img])
-
-        return np.array(patterns)
-
-    def decode_color_sequence(self, color_patch, color_tolerance=50):
-        """
-        Decode a color patch to determine the most likely color index.
-        :param color_patch: RGB color patch (3,) or (H, W, 3)
-        :param color_tolerance: tolerance for color matching
-        :return: most likely color index
-        """
-        if color_patch.ndim == 1:
-            color_patch = color_patch[None, None, :]
-
-        # Compute distance to each color in palette
-        distances = np.linalg.norm(
-            color_patch[..., None, :] - self.colors[None, None, :, :], axis=-1
-        )
-
-        # Find closest color
-        closest_idx = np.argmin(distances, axis=-1)
-
-        # Check if distance is within tolerance
-        min_distance = np.min(distances, axis=-1)
-        valid = min_distance < color_tolerance
-
-        return closest_idx, valid
-
-    def decode(
-        self,
-        captures,
-        proj_wh,
-        color_tolerance=50,
-        bg_threshold=10,
-        mode="ij",
-        output_dir=None,
-        debug=False,
-    ):
-        """
-        Decode captured De Bruijn patterns to extract forward mapping.
-        :param captures: a 4D numpy array of shape (n, height, width, 3) of captured color images
-        :param proj_wh: projector's (width, height) in pixels as a tuple
-        :param color_tolerance: tolerance for color matching
-        :param bg_threshold: threshold for background detection
-        :param mode: "xy" or "ij" decides coordinate order in output
-        :param output_dir: if not None, saves debug results
-        :param debug: if True, saves debug visualizations
-        :return: forward_map (height, width, 2) uint32 and foreground mask (height, width) bool
-        """
-        if captures.ndim != 4:
-            raise ValueError("captures must be a 4D numpy array")
-        if captures.shape[-1] != 3:
-            raise ValueError("captures must have 3 color channels")
-        if captures.dtype != np.uint8:
-            raise ValueError("captures must be uint8")
-
-        if output_dir is not None:
-            output_dir = Path(output_dir)
-            output_dir.mkdir(parents=True, exist_ok=True)
-
-        width, height = proj_wh
-        n_images = len(captures)
-
-        # Expected number of images: x_pattern, y_pattern, combined_pattern, white, black
-        expected_images = 5
-        if n_images != expected_images:
-            raise ValueError(
-                f"captures must have {expected_images} images, got {n_images}"
-            )
-
-        # Extract reference images for background detection
-        white_img = captures[-2]  # Second to last
-        black_img = captures[-1]  # Last image
-
-        # Create foreground mask based on white-black difference
-        intensity_diff = np.mean(
-            white_img.astype(np.float32) - black_img.astype(np.float32), axis=-1
-        )
-        foreground = intensity_diff > bg_threshold
-
-        # Decode x-coordinates from vertical stripe pattern
-        x_pattern = captures[0]
-        x_coords = np.zeros((height, width), dtype=np.uint32)
-        x_valid = np.zeros((height, width), dtype=bool)
-
-        # Sample multiple pixels per column for robustness
-        sample_size = min(10, height // 4)  # Sample every 4th row or max 10 samples
-        sample_indices = np.linspace(0, height - 1, sample_size, dtype=int)
-
-        for x in range(width):
-            # Get color samples from this column
-            column_samples = x_pattern[sample_indices, x, :]
-
-            # Decode color sequence
-            color_indices, valid_samples = self.decode_color_sequence(
-                column_samples, color_tolerance
-            )
-
-            # Use most common valid color index
-            if np.any(valid_samples):
-                valid_indices = color_indices[valid_samples]
-                most_common_idx = np.bincount(valid_indices).argmax()
-                x_coords[:, x] = most_common_idx
-                x_valid[:, x] = True
-
-        # Decode y-coordinates from horizontal stripe pattern
-        y_pattern = captures[1]
-        y_coords = np.zeros((height, width), dtype=np.uint32)
-        y_valid = np.zeros((height, width), dtype=bool)
-
-        sample_indices = np.linspace(0, width - 1, sample_size, dtype=int)
-
-        for y in range(height):
-            # Get color samples from this row
-            row_samples = y_pattern[y, sample_indices, :]
-
-            # Decode color sequence
-            color_indices, valid_samples = self.decode_color_sequence(
-                row_samples, color_tolerance
-            )
-
-            # Use most common valid color index
-            if np.any(valid_samples):
-                valid_indices = color_indices[valid_samples]
-                most_common_idx = np.bincount(valid_indices).argmax()
-                y_coords[y, :] = most_common_idx
-                y_valid[y, :] = True
-
-        # Use combined pattern to resolve ambiguities and improve accuracy
-        combined_pattern = captures[2]
-
-        # Generate lookup tables for coordinate mapping
-        x_sequence = self.generate_debruijn_sequence(
-            self.sequence_length, self.alphabet_size
-        )
-        y_sequence = self.generate_debruijn_sequence(
-            self.sequence_length, self.alphabet_size
-        )
-
-        # Extend sequences to cover projector resolution
-        while len(x_sequence) < width:
-            x_sequence = np.concatenate([x_sequence, x_sequence])
-        while len(y_sequence) < height:
-            y_sequence = np.concatenate([y_sequence, y_sequence])
-
-        x_sequence = x_sequence[:width]
-        y_sequence = y_sequence[:height]
-
-        # Create forward mapping
-        forward_map = np.zeros((height, width, 2), dtype=np.uint32)
-
-        for y in range(height):
-            for x in range(width):
-                if foreground[y, x] and x_valid[y, x] and y_valid[y, x]:
-                    # Find matching coordinates in projector space
-                    x_idx = x_coords[y, x]
-                    y_idx = y_coords[y, x]
-
-                    # Find projector coordinates that match this color combination
-                    proj_x_candidates = np.where(x_sequence == x_idx)[0]
-                    proj_y_candidates = np.where(y_sequence == y_idx)[0]
-
-                    if len(proj_x_candidates) > 0 and len(proj_y_candidates) > 0:
-                        # Use first match (could be improved with additional validation)
-                        forward_map[y, x, 0] = proj_x_candidates[0]
-                        forward_map[y, x, 1] = proj_y_candidates[0]
-
-        # Apply coordinate mode
-        if mode == "ij":
-            forward_map = forward_map  # Already in (y, x) order
-        elif mode == "xy":
-            forward_map = forward_map[..., [1, 0]]  # Swap to (x, y) order
-        else:
-            raise ValueError("mode must be 'ij' or 'xy'")
-
-        # Update foreground mask to only include valid decoded pixels
-        foreground = (
-            foreground & (forward_map[..., 0] < width) & (forward_map[..., 1] < height)
-        )
-
-        if output_dir is not None:
-            np.save(Path(output_dir, "forward_map.npy"), forward_map)
-            np.save(Path(output_dir, "fg.npy"), foreground)
-
-            if debug:
-                # Save individual decoded patterns
-                save_image(x_coords.astype(np.uint8), Path(output_dir, "x_coords.png"))
-                save_image(y_coords.astype(np.uint8), Path(output_dir, "y_coords.png"))
-                save_image(foreground, Path(output_dir, "foreground.png"))
-
-                # Create visualization of forward map
-                composed = forward_map * foreground[..., None]
-                if mode == "ij":
-                    composed_normalized = composed / np.array([proj_wh[1], proj_wh[0]])
-                    composed_normalized[..., [0, 1]] = composed_normalized[..., [1, 0]]
-                elif mode == "xy":
-                    composed_normalized = composed / np.array([proj_wh[0], proj_wh[1]])
-
-                composed_normalized_8b = to_8b(composed_normalized)
-                composed_normalized_8b_3c = np.concatenate(
-                    (
-                        composed_normalized_8b,
-                        np.zeros_like(composed_normalized_8b[..., :1]),
-                    ),
-                    axis=-1,
-                )
-                save_image(
-                    composed_normalized_8b_3c, Path(output_dir, "forward_map.png")
-                )
-
-        return forward_map, foreground
-
-
 class PhaseShifting:
     """
     A class that handles encoding and decoding phase-shifting sinusoidal patterns.
@@ -1742,42 +1416,33 @@ class PhaseShifting:
     Based on "Phase-shifting for structured light scanning".
     """
 
-    def __init__(self, num_phases=4, frequency_x=None, frequency_y=None):
+    def __init__(self, num_phases=4, cycles_x=None, cycles_y=None):
         """
         Initialize phase-shifting pattern generator.
-        :param num_phases: number of phase shifts (typically 3-5)
-        :param frequency_x: spatial frequency in x-direction (cycles per image width)
-        :param frequency_y: spatial frequency in y-direction (cycles per image height)
+        :param num_temporal_phases: number of phase shifts (typically 3-5)
+        :param cycles_x: number of cycles across image width
+        :param cycles_y: number of cycles across image height
         """
-        self.num_phases = num_phases
-        self.frequency_x = frequency_x
-        self.frequency_y = frequency_y
+        self.num_temporal_phases = num_phases
+        self.cycles_x = cycles_x
+        self.cycles_y = cycles_y
 
-    def encode(self, proj_wh, include_reference=True):
-        """
-        Encode projector coordinates into phase-shifting sinusoidal patterns.
-        :param proj_wh: projector's (width, height) in pixels as a tuple
-        :param include_reference: if True, includes white and black reference images
-        :return: a 3D numpy array of shape (total_images, height, width, 1) for grayscale patterns
-        """
+    def encode_internal(
+        self, proj_wh, cycles_x, cycles_y, num_temporal_phases, include_reference
+    ):
         width, height = proj_wh
-
-        # Set default frequencies if not provided
-        if self.frequency_x is None:
-            self.frequency_x = width // 8  # 8 cycles across width
-        if self.frequency_y is None:
-            self.frequency_y = height // 8  # 8 cycles across height
 
         patterns = []
 
         # Generate x-direction phase-shifting patterns
         x_coords = np.arange(width, dtype=np.float32)
-        for phase_idx in range(self.num_phases):
-            phase = 2 * np.pi * phase_idx / self.num_phases
+        DC = 128
+        A = 127
+        spatial_phase = 2 * np.pi * cycles_x * x_coords / width
+        for phase_idx in range(num_temporal_phases):
+            temporal_phase = 2 * np.pi * phase_idx / num_temporal_phases
             # Create sinusoidal pattern: I = A + B * cos(2πfx + φ)
-            pattern_x = 128 + 127 * np.cos(
-                2 * np.pi * self.frequency_x * x_coords / width + phase
-            )
+            pattern_x = DC + A * np.cos(spatial_phase + temporal_phase)
             pattern_x = np.clip(pattern_x, 0, 255).astype(np.uint8)
 
             # Broadcast to full 2D pattern
@@ -1786,12 +1451,11 @@ class PhaseShifting:
 
         # Generate y-direction phase-shifting patterns
         y_coords = np.arange(height, dtype=np.float32)
-        for phase_idx in range(self.num_phases):
-            phase = 2 * np.pi * phase_idx / self.num_phases
+        spatial_phase_y = 2 * np.pi * cycles_y * y_coords / height
+        for phase_idx in range(num_temporal_phases):
+            temporal_phase = 2 * np.pi * phase_idx / num_temporal_phases
             # Create sinusoidal pattern: I = A + B * cos(2πfy + φ)
-            pattern_y = 128 + 127 * np.cos(
-                2 * np.pi * self.frequency_y * y_coords / height + phase
-            )
+            pattern_y = DC + A * np.cos(spatial_phase_y + temporal_phase)
             pattern_y = np.clip(pattern_y, 0, 255).astype(np.uint8)
 
             # Broadcast to full 2D pattern
@@ -1806,66 +1470,307 @@ class PhaseShifting:
 
         return np.array(patterns)
 
-    def compute_phase(self, intensity_values, num_phases):
+    def encode(self, proj_wh):
         """
-        Compute phase from intensity values using phase-shifting algorithm.
-        :param intensity_values: array of intensity values for different phases
-        :param num_phases: number of phase shifts
+        Encode projector coordinates into phase-shifting sinusoidal patterns.
+        :param proj_wh: projector's (width, height) in pixels as a tuple
+        :return: a 3D numpy array of shape (total_images, height, width, 1) for grayscale patterns
+        """
+        width, height = proj_wh
+        # Set default cycle counts if not provided
+        if self.cycles_x is None:
+            self.cycles_x = width // 8  # 8 cycles across width
+        if self.cycles_y is None:
+            self.cycles_y = height // 8  # 8 cycles across height
+        lowfreq_patterns = self.encode_internal(
+            proj_wh, 1, 1, self.num_temporal_phases, False
+        )
+        highfreq_patterns = self.encode_internal(
+            proj_wh, self.cycles_x, self.cycles_y, self.num_temporal_phases, True
+        )
+        all_patterns = np.concatenate([lowfreq_patterns, highfreq_patterns], axis=0)
+        return all_patterns
+
+    def compute_spatial_phase(self, intensity_values, num_temporal_phases):
+        """
+        Compute spatial phase from intensity values using phase-shifting algorithm.
+        :param intensity_values: array of intensity values for different phases (n_phases/2,)
+        :param num_temporal_phases: number of phase shifts
         :return: computed phase values
         """
-        if len(intensity_values) != num_phases:
+        if len(intensity_values) != num_temporal_phases:
             raise ValueError(
-                f"Expected {num_phases} intensity values, got {len(intensity_values)}"
+                f"Expected {num_temporal_phases} intensity values, got {len(intensity_values)}"
             )
 
         # Convert to float for computation
         I = intensity_values.astype(np.float32)
 
-        if num_phases == 3:
+        if num_temporal_phases == 3:
             # 3-step algorithm: φ = atan2(I3 - I1, 2*I2 - I1 - I3)
             numerator = I[2] - I[0]  # I3 - I1
             denominator = 2 * I[1] - I[0] - I[2]  # 2*I2 - I1 - I3
-            phase = np.arctan2(numerator, denominator)
-        elif num_phases == 4:
+            spatial_phase = np.arctan2(numerator, denominator)
+        elif num_temporal_phases == 4:
             # 4-step algorithm: φ = atan2(I4 - I2, I1 - I3)
             numerator = I[3] - I[1]  # I4 - I2
             denominator = I[0] - I[2]  # I1 - I3
-            phase = np.arctan2(numerator, denominator)
-        elif num_phases == 5:
+            spatial_phase = np.arctan2(numerator, denominator)
+        elif num_temporal_phases == 5:
             # 5-step algorithm: φ = atan2(2*(I4 - I2), 2*I3 - I1 - I5)
             numerator = 2 * (I[3] - I[1])  # 2*(I4 - I2)
             denominator = 2 * I[2] - I[0] - I[4]  # 2*I3 - I1 - I5
-            phase = np.arctan2(numerator, denominator)
+            spatial_phase = np.arctan2(numerator, denominator)
         else:
             # General N-step algorithm
             numerator = 0
             denominator = 0
-            for k in range(num_phases):
-                angle = 2 * np.pi * k / num_phases
+            for k in range(num_temporal_phases):
+                angle = 2 * np.pi * k / num_temporal_phases
                 numerator += I[k] * np.sin(angle)
                 denominator += I[k] * np.cos(angle)
-            phase = np.arctan2(numerator, denominator)
+            spatial_phase = np.arctan2(numerator, denominator)
 
-        return phase
+        return spatial_phase
 
-    def unwrap_phase(self, wrapped_phase, frequency, image_size):
+    def unwrap_spatial_phase(
+        self, wrapped_spatial_phase, cycles, image_size, bins=None
+    ):
         """
         Unwrap phase to get absolute coordinates.
-        :param wrapped_phase: wrapped phase values (-π to π)
-        :param frequency: spatial frequency used in encoding
+        :param wrapped_spatial_phase: wrapped phase values (-π to π)
+        :param cycles: number of cycles across image dimension
         :param image_size: size of the image dimension
+        :param bins: bins to use for unwrapping
         :return: unwrapped coordinates
         """
         # Convert phase to coordinates
-        # phase = 2π * frequency * coord / image_size
-        # coord = phase * image_size / (2π * frequency)
-        coordinates = wrapped_phase * image_size / (2 * np.pi * frequency)
-
+        # spatial_phase = 2π * cycles * coord / image_size
+        # coord = phase * image_size / (2π * cycles)
+        coordinates = wrapped_spatial_phase * image_size / (2 * np.pi * cycles)
         # Handle phase wrapping by finding the correct cycle
-        cycle_length = image_size / frequency
+        cycle_length = image_size / cycles
         coordinates = np.mod(coordinates, cycle_length)
-
         return coordinates
+
+    def decode_lowfreq(self, captures, proj_wh, foreground, mode, output_dir, debug):
+        width, height = proj_wh
+        # Extract x-direction patterns (first num_phases images)
+        x_patterns = captures[: self.num_temporal_phases, :, :, 0]  # (n_phases, h, w)
+
+        # Extract y-direction patterns (next num_phases images)
+        y_patterns = captures[
+            self.num_temporal_phases : 2 * self.num_temporal_phases, :, :, 0
+        ]  # (n_phases, h, w)
+
+        # Compute phase for x-direction
+        x_phase = np.zeros((height, width), dtype=np.float32)
+        for y in range(height):
+            for x in range(width):
+                if foreground[y, x]:
+                    intensity_values = x_patterns[:, y, x]  # (n_phases,)
+                    x_phase[y, x] = self.compute_spatial_phase(
+                        intensity_values, self.num_temporal_phases
+                    )
+
+        # Compute phase for y-direction
+        y_phase = np.zeros((height, width), dtype=np.float32)
+        for y in range(height):
+            for x in range(width):
+                if foreground[y, x]:
+                    intensity_values = y_patterns[:, y, x]
+                    y_phase[y, x] = self.compute_spatial_phase(
+                        intensity_values, self.num_temporal_phases
+                    )
+
+        # Unwrap phases to get coordinates
+        x_coords = self.unwrap_spatial_phase(x_phase, 1, width)
+        y_coords = self.unwrap_spatial_phase(y_phase, 1, height)
+
+        # Convert to integer coordinates and clamp to valid range
+        x_coords = np.clip(np.round(x_coords), 0, width - 1).astype(np.uint64)
+        y_coords = np.clip(np.round(y_coords), 0, height - 1).astype(np.uint64)
+
+        # Create forward mapping
+        forward_map = np.zeros((height, width, 2), dtype=np.int64)
+        forward_map[..., 0] = x_coords
+        forward_map[..., 1] = y_coords
+
+        # set negative values where foreground is false
+        forward_map[~foreground] = -1
+        forward_map[forward_map[..., 0] >= width] = -1
+        forward_map[forward_map[..., 1] >= height] = -1
+        # Apply coordinate mode
+        if mode == "ij":
+            forward_map = forward_map[..., [1, 0]]  # Swap to (y, x) order
+        elif mode == "xy":
+            forward_map = forward_map  # Already in (x, y) order
+        else:
+            raise ValueError("mode must be 'ij' or 'xy'")
+
+        if output_dir is not None:
+            np.save(Path(output_dir, "forward_map_coarse.npy"), forward_map)
+
+            if debug:
+                self.save_debug_info(
+                    x_phase,
+                    y_phase,
+                    foreground,
+                    forward_map,
+                    proj_wh,
+                    mode,
+                    output_dir,
+                    "coarse",
+                )
+
+        return forward_map
+
+    def decode_highfreq(
+        self, captures, proj_wh, foreground, coarse_forwardmap, mode, output_dir, debug
+    ):
+        width, height = proj_wh
+        # Extract x-direction patterns (first num_phases images)
+        x_patterns = captures[: self.num_temporal_phases, :, :, 0]  # (n_phases, h, w)
+
+        # Extract y-direction patterns (next num_phases images)
+        y_patterns = captures[
+            self.num_temporal_phases : 2 * self.num_temporal_phases, :, :, 0
+        ]  # (n_phases, h, w)
+
+        # Compute phase for x-direction
+        x_phase = np.zeros((height, width), dtype=np.float32)
+        for y in range(height):
+            for x in range(width):
+                if foreground[y, x]:
+                    intensity_values = x_patterns[:, y, x]  # (n_phases,)
+                    x_phase[y, x] = self.compute_spatial_phase(
+                        intensity_values, self.num_temporal_phases
+                    )
+
+        # Compute phase for y-direction
+        y_phase = np.zeros((height, width), dtype=np.float32)
+        for y in range(height):
+            for x in range(width):
+                if foreground[y, x]:
+                    intensity_values = y_patterns[:, y, x]
+                    y_phase[y, x] = self.compute_spatial_phase(
+                        intensity_values, self.num_temporal_phases
+                    )
+
+        # Unwrap phases to get coordinates
+        x_coords = self.unwrap_spatial_phase(x_phase, self.cycles_x, width)
+        y_coords = self.unwrap_spatial_phase(y_phase, self.cycles_y, height)
+
+        # Convert to integer coordinates and clamp to valid range
+        x_coords = np.clip(np.round(x_coords), 0, width - 1).astype(np.uint64)
+        y_coords = np.clip(np.round(y_coords), 0, height - 1).astype(np.uint64)
+
+        # Use coarse forward map to unwrap phases
+        if mode == "ij":
+            xbins = coarse_forwardmap[..., 1]
+            ybins = coarse_forwardmap[..., 0]
+        elif mode == "xy":
+            xbins = coarse_forwardmap[..., 0]
+            ybins = coarse_forwardmap[..., 1]
+        else:
+            raise ValueError("mode must be 'ij' or 'xy'")
+
+        # use the coarse bins to resolve phase wrapping (x_coords are "local" within a bin)
+        # Calculate cycle length for high frequency patterns
+        x_cycle_length = width / self.cycles_x
+        y_cycle_length = height / self.cycles_y
+
+        # For each pixel, determine which cycle it should be in based on coarse map
+        # and adjust the high-frequency coordinates accordingly
+        for y in range(height):
+            for x in range(width):
+                if foreground[y, x] and xbins[y, x] >= 0 and ybins[y, x] >= 0:
+                    # Find which cycle the coarse bin corresponds to
+                    coarse_x_cycle = int(xbins[y, x] // x_cycle_length)
+                    coarse_y_cycle = int(ybins[y, x] // y_cycle_length)
+
+                    # Adjust high-frequency coordinates to be in the correct cycle
+                    x_coords[y, x] = coarse_x_cycle * x_cycle_length + (
+                        x_coords[y, x] % x_cycle_length
+                    )
+                    y_coords[y, x] = coarse_y_cycle * y_cycle_length + (
+                        y_coords[y, x] % y_cycle_length
+                    )
+
+        # Create forward mapping
+        forward_map = np.zeros((height, width, 2), dtype=np.int64)
+        forward_map[..., 0] = x_coords
+        forward_map[..., 1] = y_coords
+
+        # set negative values where foreground is false
+        forward_map[~foreground] = -1
+        forward_map[forward_map[..., 0] >= width] = -1
+        forward_map[forward_map[..., 1] >= height] = -1
+        # Apply coordinate mode
+        if mode == "ij":
+            forward_map = forward_map[..., [1, 0]]  # Swap to (y, x) order
+        elif mode == "xy":
+            forward_map = forward_map  # Already in (x, y) order
+        else:
+            raise ValueError("mode must be 'ij' or 'xy'")
+
+        if output_dir is not None:
+            np.save(Path(output_dir, "forward_map_fine.npy"), forward_map)
+            if debug:
+                self.save_debug_info(
+                    x_phase,
+                    y_phase,
+                    foreground,
+                    forward_map,
+                    proj_wh,
+                    mode,
+                    output_dir,
+                    "fine",
+                )
+        return forward_map
+
+    def save_debug_info(
+        self,
+        x_phase,
+        y_phase,
+        foreground,
+        forward_map,
+        proj_wh,
+        mode,
+        output_dir,
+        prefix,
+    ):
+        # Save phase maps
+        x_phase_normalized = ((x_phase + np.pi) / (2 * np.pi) * 255).astype(np.uint8)
+        y_phase_normalized = ((y_phase + np.pi) / (2 * np.pi) * 255).astype(np.uint8)
+        save_image(
+            x_phase_normalized, Path(output_dir, "x_phase_{}.png".format(prefix))
+        )
+        save_image(
+            y_phase_normalized, Path(output_dir, "y_phase_{}.png".format(prefix))
+        )
+        # save_image(foreground, Path(output_dir, "foreground.png"))
+
+        # Create visualization of forward map
+        composed = forward_map * foreground[..., None]
+        if mode == "ij":
+            composed_normalized = composed / np.array([proj_wh[1], proj_wh[0]])
+            composed_normalized[..., [0, 1]] = composed_normalized[..., [1, 0]]
+        elif mode == "xy":
+            composed_normalized = composed / np.array([proj_wh[0], proj_wh[1]])
+
+        composed_normalized_8b = to_8b(composed_normalized)
+        composed_normalized_8b_3c = np.concatenate(
+            (
+                composed_normalized_8b,
+                np.zeros_like(composed_normalized_8b[..., :1]),
+            ),
+            axis=-1,
+        )
+        save_image(
+            composed_normalized_8b_3c,
+            Path(output_dir, "forward_map_{}.png".format(prefix)),
+        )
 
     def decode(
         self,
@@ -1884,7 +1789,7 @@ class PhaseShifting:
         :param mode: "xy" or "ij" decides coordinate order in output
         :param output_dir: if not None, saves debug results
         :param debug: if True, saves debug visualizations
-        :return: forward_map (height, width, 2) uint32 and foreground mask (height, width) bool
+        :return: forward_map (height, width, 2) int64, negative values for invalid coordinates
         """
         if captures.ndim != 4:
             raise ValueError("captures must be a 4D numpy array")
@@ -1897,11 +1802,10 @@ class PhaseShifting:
             output_dir = Path(output_dir)
             output_dir.mkdir(parents=True, exist_ok=True)
 
-        width, height = proj_wh
         n_images = len(captures)
 
-        # Expected number of images: x_patterns, y_patterns, white, black
-        expected_images = 2 * self.num_phases + 2
+        # Expected images: x_patterns_lowfreq, y_patterns_lowfreq, x_patterns_highfreq, y_patterns_highfreq, white, black
+        expected_images = 4 * self.num_temporal_phases + 2
         if n_images != expected_images:
             raise ValueError(
                 f"captures must have {expected_images} images, got {n_images}"
@@ -1915,94 +1819,21 @@ class PhaseShifting:
         intensity_diff = white_img.astype(np.float32) - black_img.astype(np.float32)
         foreground = intensity_diff[..., 0] > bg_threshold
 
-        # Extract x-direction patterns (first num_phases images)
-        x_patterns = captures[: self.num_phases, :, :, 0]  # Remove channel dimension
-
-        # Extract y-direction patterns (next num_phases images)
-        y_patterns = captures[
-            self.num_phases : 2 * self.num_phases, :, :, 0
-        ]  # Remove channel dimension
-
-        # Compute phase for x-direction
-        x_phase = np.zeros((height, width), dtype=np.float32)
-        for y in range(height):
-            for x in range(width):
-                if foreground[y, x]:
-                    intensity_values = x_patterns[:, y, x]
-                    x_phase[y, x] = self.compute_phase(
-                        intensity_values, self.num_phases
-                    )
-
-        # Compute phase for y-direction
-        y_phase = np.zeros((height, width), dtype=np.float32)
-        for y in range(height):
-            for x in range(width):
-                if foreground[y, x]:
-                    intensity_values = y_patterns[:, y, x]
-                    y_phase[y, x] = self.compute_phase(
-                        intensity_values, self.num_phases
-                    )
-
-        # Unwrap phases to get coordinates
-        x_coords = self.unwrap_phase(x_phase, self.frequency_x, width)
-        y_coords = self.unwrap_phase(y_phase, self.frequency_y, height)
-
-        # Convert to integer coordinates and clamp to valid range
-        x_coords = np.clip(np.round(x_coords), 0, width - 1).astype(np.uint32)
-        y_coords = np.clip(np.round(y_coords), 0, height - 1).astype(np.uint32)
-
-        # Create forward mapping
-        forward_map = np.zeros((height, width, 2), dtype=np.uint32)
-        forward_map[..., 0] = x_coords
-        forward_map[..., 1] = y_coords
-
-        # Apply coordinate mode
-        if mode == "ij":
-            forward_map = forward_map[..., [1, 0]]  # Swap to (y, x) order
-        elif mode == "xy":
-            forward_map = forward_map  # Already in (x, y) order
-        else:
-            raise ValueError("mode must be 'ij' or 'xy'")
-
-        # Update foreground mask to only include valid decoded pixels
-        foreground = (
-            foreground & (forward_map[..., 0] < width) & (forward_map[..., 1] < height)
+        coarse_forwardmap = self.decode_lowfreq(
+            captures[: 2 * self.num_temporal_phases],
+            proj_wh,
+            foreground,
+            mode,
+            output_dir,
+            debug,
         )
-
-        if output_dir is not None:
-            np.save(Path(output_dir, "forward_map.npy"), forward_map)
-            np.save(Path(output_dir, "fg.npy"), foreground)
-
-            if debug:
-                # Save phase maps
-                x_phase_normalized = ((x_phase + np.pi) / (2 * np.pi) * 255).astype(
-                    np.uint8
-                )
-                y_phase_normalized = ((y_phase + np.pi) / (2 * np.pi) * 255).astype(
-                    np.uint8
-                )
-                save_image(x_phase_normalized, Path(output_dir, "x_phase.png"))
-                save_image(y_phase_normalized, Path(output_dir, "y_phase.png"))
-                save_image(foreground, Path(output_dir, "foreground.png"))
-
-                # Create visualization of forward map
-                composed = forward_map * foreground[..., None]
-                if mode == "ij":
-                    composed_normalized = composed / np.array([proj_wh[1], proj_wh[0]])
-                    composed_normalized[..., [0, 1]] = composed_normalized[..., [1, 0]]
-                elif mode == "xy":
-                    composed_normalized = composed / np.array([proj_wh[0], proj_wh[1]])
-
-                composed_normalized_8b = to_8b(composed_normalized)
-                composed_normalized_8b_3c = np.concatenate(
-                    (
-                        composed_normalized_8b,
-                        np.zeros_like(composed_normalized_8b[..., :1]),
-                    ),
-                    axis=-1,
-                )
-                save_image(
-                    composed_normalized_8b_3c, Path(output_dir, "forward_map.png")
-                )
-
-        return forward_map, foreground
+        fine_forwardmap = self.decode_highfreq(
+            captures[2 * self.num_temporal_phases : 4 * self.num_temporal_phases],
+            proj_wh,
+            foreground,
+            coarse_forwardmap,
+            mode,
+            output_dir,
+            debug,
+        )
+        return fine_forwardmap

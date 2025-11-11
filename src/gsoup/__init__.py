@@ -2,6 +2,7 @@ __version__ = "0.2.9"
 
 from .core import (
     is_np,
+    is_float,
     to_hom,
     homogenize,
     compose_rt,
@@ -99,7 +100,9 @@ from .gsoup_io import (
     save_pointclouds,
     load_pointcloud,
     read_exr,
+    read_exrs,
     write_exr,
+    write_exrs,
 )
 
 from .image import (
@@ -123,9 +126,11 @@ from .image import (
     resize,
     resize_images_naive,
     adjust_contrast_brightness,
-    change_brightness,
     linear_to_srgb,
     srgb_to_linear,
+    linear_to_xyz,
+    xyz_to_lab,
+    linear_to_luminance,
     pad_to_res,
     pad_to_square,
     crop_to_square,
@@ -134,6 +139,8 @@ from .image import (
     compute_color_distance,
     tonemap_reinhard,
     tonemap_tev,
+    patchify,
+    unpatchify,
 )
 
 from .video import (
@@ -157,7 +164,7 @@ from .procam import (
     naive_color_compensate,
     reconstruct_pointcloud,
     GrayCode,
-    DeBruijn,
+    PhaseShifting,
     ProjectorScene,
     estimate_color_mixing_matrix,
     estimate_projector_inverse_response,

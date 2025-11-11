@@ -1,7 +1,7 @@
 import torch
 import numpy as np
 from pathlib import Path
-from .core import to_8b, to_np, to_float
+from .core import to_8b, to_np, to_float, is_float
 from .image import alpha_compose
 from PIL import Image
 import json
@@ -87,33 +87,29 @@ def save_images(
 ):
     """
     saves images as png
-    :param images: (b x H x W x C) np array, or list of (H X W X C)
+    :param images: (b, h, w, c) np array, list of (h, w, c) np array, or (b, c, h, w) torch tensor
     :param dst: path to save images to (will create folder if it does not exist)
     :param file_names: if provided, saves images with these names (list of length b)
     :param force_grayscale: if True, saves images as grayscale
     :param overwrite: if True, overwrites existing images
     :param extension: file extension to save images as
     """
-    images = to_np(images)
+    images = to_np(images, permute_channels=True)
     if np.isnan(images).any():
-        raise ValueError("Images must be finite")
+        raise ValueError("images must be finite")
     if extension != "tiff":
-        if (
-            images.dtype == np.float32
-            or images.dtype == np.float64
-            or images.dtype == bool
-        ):
+        if is_float(images) or images.dtype == bool:
             images = to_8b(images)
         if images.dtype != np.uint8:
             raise ValueError(
-                "Images must be of type uint8 (or float32/64, which will be converted to uint8)"
+                "images must be of type uint8 (or float/bool type, which will be converted to uint8)"
             )
     if images.ndim != 4:
-        raise ValueError("Images must be of shape (b x H x W x C)")
+        raise ValueError("images must have 4 dimensions")
     if file_names:
         if images.shape[0] != len(file_names):
             raise ValueError(
-                "Number of images and length of file names list must match"
+                "number of images and length of file names list must match"
             )
         file_names = [Path(x).stem for x in file_names]  # remove suffix
     dst = Path(dst)
@@ -1127,6 +1123,21 @@ def save_meshes(vertices, faces, path, file_names: list = []):
             save_mesh(v, f, path / "{:05d}.obj".format(i))
 
 
+def write_exrs(images, file_paths=None, compression="ZIP", compression_level=6):
+    """
+    write a list of images or numpy arrays (b, h, w, c)to a list of exr files
+    :param images: list of (h, w, c) numpy arrays or (b, h, w, c) numpy array
+    :param file_paths: list of paths to exr files or None to generate file names automatically
+    :param compression: which compression type to use (we just expose NONE, ZIPS, ZIP and PIZ)
+    :param compression_level: what level of compression to use if suportted by compression algorithm
+    :note see https://openexr.com/en/latest/ReadingAndWritingImageFiles.html#compression
+    """
+    if file_paths is None:
+        file_paths = [f"{i:05d}.exr" for i in range(images.shape[0])]
+    for image, file_path in zip(images, file_paths):
+        write_exr(image, file_path, compression, compression_level)
+
+
 def write_exr(image, file_path, compression="ZIP", compression_level=6):
     """
     saves a RGB image to disk as exr (without losing precision).
@@ -1152,17 +1163,27 @@ def write_exr(image, file_path, compression="ZIP", compression_level=6):
         raise NotImplementedError
     my_path = Path(file_path)
     if not my_path.parent.exists():
-        parent_path.mkdir(parents=True, exist_ok=True)
+        my_path.parent.mkdir(parents=True, exist_ok=True)
     with OpenEXR.File(header, channels) as outputFile:
         outputFile.write(str(my_path))
 
 
+def read_exrs(file_paths):
+    """
+    read a list of exr files into a numpy array (b, h, w, c)
+    :param file_paths: list of paths to exr files
+    :return: (b, h, w, c) float16/float32 numpy array
+    """
+    images = [read_exr(file_path) for file_path in file_paths]
+    return np.stack(images, axis=0)
+
+
 def read_exr(file_path):
     """
-    read exr into a numpy array (h, w, 3)
-    note: assumes channels names in the exr are named "R" "G" and "B".
+    read exr into a numpy array (h, w, c)
+    note: assumes channels names in the exr are named "R" "G" and "B", or a single channel with arbitrary name.
     :param file_path: path to exr file
-    :return (h, w, 3) float16/float32 numpy array representing the image
+    :return (h, w, c) float16/float32 numpy array representing the image
     """
     typemap = {"UINT": np.uint32, "HALF": np.float16, "FLOAT": np.float32}
     # open the input file
@@ -1180,7 +1201,10 @@ def read_exr(file_path):
         arr = np.frombuffer(bytestring, dtype=np_type).reshape(h, w, 1)
         arr_maps[ch_name] = arr
     # stack into matrix
-    image = np.concatenate([arr_maps["R"], arr_maps["G"], arr_maps["B"]], axis=-1)
+    if "R" in arr_maps and "G" in arr_maps and "B" in arr_maps:
+        image = np.concatenate([arr_maps["R"], arr_maps["G"], arr_maps["B"]], axis=-1)
+    else:
+        image = next(iter(arr_maps.values()))  # (h, w, 1)
     ####################################################
     # FLOAT = Imath.PixelType(Imath.PixelType.FLOAT)
     # R = np.frombuffer(exr.channel("R", FLOAT), dtype=np.float32).reshape((h, w, 1))
