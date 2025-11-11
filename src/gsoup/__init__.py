@@ -128,6 +128,8 @@ from .image import (
     adjust_contrast_brightness,
     linear_to_srgb,
     srgb_to_linear,
+    linear_to_xyz,
+    xyz_to_lab,
     linear_to_luminance,
     pad_to_res,
     pad_to_square,

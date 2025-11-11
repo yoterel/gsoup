@@ -1046,8 +1046,76 @@ def srgb_to_linear(srgb):
         linear1 = torch.maximum(eps, ((200 * srgb + 11) / (211))) ** (12 / 5)
         return torch.where(srgb <= 0.04045, linear0, linear1)
 
+def linear_to_xyz(linear_img):
+    """Converts linear RGB color space to XYZ color space.
 
-def linear_to_luminance(linear_img, keep_channels=True):
+    Args:
+        linear_img: Linear RGB image [0,1] as torch tensor (B, C, H, W) or numpy array (B, H, W, C).
+    Returns:
+        XYZ image [0,1] as torch tensor (B, C, H, W) or numpy array (B, H, W, C).
+    """
+    was_numpy=False
+    if is_np(linear_img):
+        linear_img = to_torch(linear_img, permute_channels=True)
+        was_numpy = True
+    # sRGB to XYZ (D65)
+    M = torch.tensor([
+        [0.4124564, 0.3575761, 0.1804375],
+        [0.2126729, 0.7151522, 0.0721750],
+        [0.0193339, 0.1191920, 0.9503041]
+    ], device=linear_img.device, dtype=linear_img.dtype)
+    # Flatten to apply matrix multiplication
+    B, C, H, W = linear_img.shape
+    linear_img_flat = linear_img.permute(0, 2, 3, 1).reshape(-1, 3)
+    xyz_flat = linear_img_flat @ M.T
+    xyz = xyz_flat.reshape(B, H, W, 3).permute(0, 3, 1, 2)  # (B, 3, H, W)
+    if was_numpy:
+        xyz = to_np(xyz, permute_channels=True)
+    return xyz
+
+
+def xyz_to_lab(xyz):
+    """
+    Convert a batch of XYZ images to Lab (D65).
+
+    Reference: https://en.wikipedia.org/wiki/CIELAB_color_space
+    note: output is in the range [0,100] for L, [-110,110] for a, [-110,110] for b
+
+    Args:
+        xyz: XYZ image [0,1] as torch tensor (B, 3, H, W) or numpy array (B, H, W, 3).
+    Returns:
+        Lab image as torch tensor (B, 3, H, W) or numpy array (B, H, W, 3).
+    """
+    was_numpy=False
+    if is_np(xyz):
+        was_numpy = True
+        xyz = to_torch(xyz, permute_channels=True)
+    # Normalize by reference white (D65)
+    white = torch.tensor([0.95047, 1.0, 1.08883],
+                         device=xyz.device, dtype=xyz.dtype).view(1, 3, 1, 1)
+    xyz_scaled = (xyz / white).clamp(min=1e-6)
+
+    delta = 6 / 29
+    def f(t):
+        t = torch.clamp(t, min=0)
+        return torch.where(
+            t > delta**3,
+            t.pow(1/3),
+            (t / (3 * delta**2)) + (4 / 29)
+        )
+
+    fX, fY, fZ = f(xyz_scaled[:, 0]), f(xyz_scaled[:, 1]), f(xyz_scaled[:, 2])
+    L = 116 * fY - 16
+    a = 500 * (fX - fY)
+    b = 200 * (fY - fZ)
+
+    Lab = torch.stack([L, a, b], dim=1)
+    if was_numpy:
+        Lab = to_np(Lab, permute_channels=True)
+    return Lab
+    
+
+def linear_to_luminance(linear_img, keep_channels=False):
     """Converts linear RGB to luminance.
 
     Converts linear RGB image to luminance using Rec. 709 weights.
