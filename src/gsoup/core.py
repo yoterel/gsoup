@@ -168,7 +168,7 @@ def repeat(x, n):
     if is_np(x):
         y = np.tile(x, n)
     else:
-        y = torch.repeat(x, *n)
+        y = x.repeat(*n)
     return y
 
 
