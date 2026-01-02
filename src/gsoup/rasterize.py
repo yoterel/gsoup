@@ -94,11 +94,12 @@ def draw_line(image, p0, p1, color):
             y0 += sy
 
 
-def draw_triangle(image, depth_buffer, a, b, c, color):
+def draw_triangle(image, depth_buffer, a, b, c, color, tex_coords=None):
     """
     draws a triangle a,b,c into image
     """
     height, width = image.shape[:2]
+    # find bounding box for reduced computation
     min_x, max_x = max(0, min(a[0], b[0], c[0])), min(width - 1, max(a[0], b[0], c[0]))
     min_y, max_y = max(0, min(a[1], b[1], c[1])), min(height - 1, max(a[1], b[1], c[1]))
     xx, yy = np.meshgrid(
@@ -107,13 +108,34 @@ def draw_triangle(image, depth_buffer, a, b, c, color):
         indexing="ij",
     )
     grid = np.concatenate((xx[..., None], yy[..., None]), axis=-1)
+    # clip to image bounds
     clip = (xx >= 0) & (xx < width) & (yy >= 0) & (yy < height)
+    # only draw pixels inside triangle and closer than depth buffer
     inside, uvw = is_inside_triangle(grid, a[:2], b[:2], c[:2])
     depth = uvw[..., 0] * a[2] + uvw[..., 1] * b[2] + uvw[..., 2] * c[2]
     depth_mask = depth < depth_buffer[grid[..., 1], grid[..., 0]]
+    # finally, combine all conditions into a single mask
     draw_mask = clip & inside & depth_mask
+    # update depth buffer
     depth_buffer[grid[..., 1][draw_mask], grid[..., 0][draw_mask]] = depth[draw_mask]
-    image[grid[..., 1][draw_mask], grid[..., 0][draw_mask]] = color
+    # update image
+    if tex_coords is not None:
+        # interpolate texture coordinates
+        tex = (
+            uvw[..., 0, None] * tex_coords[0]
+            + uvw[..., 1, None] * tex_coords[1]
+            + uvw[..., 2, None] * tex_coords[2]
+        )  # (..., 2) in [0, 1] range
+        # sample texture using nearest neighbor
+        tex_h, tex_w = color.shape[0:2]
+        tex_x = np.clip(((1 - tex[..., 0]) * tex_w).astype(np.int32), 0, tex_w - 1)
+        tex_y = np.clip((tex[..., 1] * tex_h).astype(np.int32), 0, tex_h - 1)
+        sampled_color = color[tex_y, tex_x]  # (..., 3)
+        image[grid[..., 1][draw_mask], grid[..., 0][draw_mask]] = sampled_color[
+            draw_mask
+        ]
+    else:
+        image[grid[..., 1][draw_mask], grid[..., 0][draw_mask]] = color
     ### old serial implementation
     # for y in range(int(min_y), int(max_y + 1)):
     #     for x in range(int(min_x), int(max_x + 1)):
@@ -227,6 +249,8 @@ def render_mesh(
     K,
     w2c,
     color,
+    Vt=None,
+    Vf=None,
     wireframe=False,
     wireframe_occlude=False,
     image=None,
@@ -239,7 +263,9 @@ def render_mesh(
     :param F: a (m, 3) or (m, 4) np.int32 indices into V, defining the faces of the mesh (assumes CCW order)
     :param K: a (3, 3) np.float32 intrinsics matrix (opencv convention)
     :param w2c: a (3, 4) np.float32 extrinsics matrix (opencv convention, world -> cam)
-    :param color: (m, 3) np.uint8 color per face, or (3,) for single color.
+    :param color: (H, W, 3) texture, or (m, 3) np.uint8 color per face, or (n, 3) np.uint8 color per vertex,or (3,) for single color
+    :param Vt: (t, 2) np.float32 texture coordinates (if texture rendering is desired)
+    :param Vf: (m, 2) np.int32 indices into Vt per face (if texture rendering is desired)
     :param wireframe: if True, will render the wireframe version of the mesh
     :param wireframe_occlude: if True, will not render wireframe on backfaces
     :param image: if not None, a (height, width 3) np.uint8 to be rendered into
@@ -277,12 +303,24 @@ def render_mesh(
         mask = should_cull_tri(V[F], camera_pos[None, ...])
         for i, f in enumerate(F):
             if not mask[i]:
+                tex_coords = None
+                if Vt is not None and Vf is not None:
+                    tex_coords = np.array(
+                        [Vt[Vf[i, 0]], Vt[Vf[i, 1]], Vt[Vf[i, 2]]]
+                    )  # (3, 2)
+                    col = color
+                else:
+                    if color.shape[0] == V.shape[0]:  # per-vertex color
+                        col = np.array([color[f[0]], color[f[1]], color[f[2]]])
+                    else:
+                        col = color[i]  # per-face color
                 draw_triangle(
                     image,
                     depth_buffer,
                     projected_vertices[f[0]],
                     projected_vertices[f[1]],
                     projected_vertices[f[2]],
-                    color[i],
+                    col,
+                    tex_coords,
                 )
     return image
