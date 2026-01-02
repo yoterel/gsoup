@@ -190,8 +190,8 @@ def main():
     ####################### TRACKING #########################
     ##########################################################
     # lets select two random views where the AruCo is visible.
-    frame1 = videos[0, 480]
-    frame2 = videos[0, 330]
+    frame1 = videos[0, 256]
+    frame2 = videos[0, 397]
     # create a "patch" to be applied onto the AruCo location for visualizing.
     patch_image = gsoup.generate_lollipop_pattern(200, 200)
     detector, c1, ids1, rejected1 = detect_aruco(frame1)

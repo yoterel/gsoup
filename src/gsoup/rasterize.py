@@ -128,8 +128,8 @@ def draw_triangle(image, depth_buffer, a, b, c, color, tex_coords=None):
         )  # (..., 2) in [0, 1] range
         # sample texture using nearest neighbor
         tex_h, tex_w = color.shape[0:2]
-        tex_x = np.clip(((1 - tex[..., 0]) * tex_w).astype(np.int32), 0, tex_w - 1)
-        tex_y = np.clip((tex[..., 1] * tex_h).astype(np.int32), 0, tex_h - 1)
+        tex_x = np.clip((tex[..., 0] * tex_w).astype(np.int32), 0, tex_w - 1)
+        tex_y = np.clip(((1 - tex[..., 1]) * tex_h).astype(np.int32), 0, tex_h - 1)
         sampled_color = color[tex_y, tex_x]  # (..., 3)
         image[grid[..., 1][draw_mask], grid[..., 0][draw_mask]] = sampled_color[
             draw_mask
