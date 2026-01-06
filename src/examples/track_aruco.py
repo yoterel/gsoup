@@ -3,226 +3,241 @@ import numpy as np
 from pathlib import Path
 import cv2
 import time
+import json
 
 
-def create_aruco(dst_path):
+def create_aruco(marker_id, dst_path):
+    """
+    create AruCo marker image and possibly save to disk
+    args:
+        marker_id: int, id of marker to create
+        dst_path: str or Path, directory to save marker image, if None, do not save
+    returns:
+        marker_image: (h,w,3) uint8 image of the marker
+    """
     aruco_dict = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_6X6_50)
-    marker_id = 42
-    marker_size = 1024  # Size in pixels
+    marker_size = 1024  # arbtitrary size in pixels
     marker_image = cv2.aruco.generateImageMarker(aruco_dict, marker_id, marker_size)
-    gsoup.save_image(marker_image, Path(dst_path, "aruco.png"))
+    if dst_path is not None:
+        gsoup.save_image(marker_image, Path(dst_path, "aruco{}.png".format(marker_id)))
+    return marker_image
 
 
-def detect_aruco(image, detector=None):
+def detect_aruco_marker(image, id):
+    """
+    detect AruCo marker corners in image, return corners of given id
+    0: top-left, 1: top-right, 2: bottom-right, 3: bottom-left
+    args:
+        image: (h,w,3) image
+        id: int, marker id to detect
+    returns:
+        corners: 4x2 array of float32
+    """
     gray = gsoup.to_gray(image)
-    # blur a bit to improve detection
-    if detector is None:
-        aruco_dict = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_6X6_50)
-        parameters = cv2.aruco.DetectorParameters()
-        parameters.detectInvertedMarker = True
-        # Create the ArUco detector
-        detector = cv2.aruco.ArucoDetector(aruco_dict, parameters)
-    # Detect the markers
+    aruco_dict = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_6X6_50)
+    parameters = cv2.aruco.DetectorParameters()
+    parameters.detectInvertedMarker = True
+    detector = cv2.aruco.ArucoDetector(aruco_dict, parameters)
     corners, ids, rejected = detector.detectMarkers(gray)
-    return detector, corners, ids, rejected
+    corners_filtered = corners[np.where(ids[:, 0] == id)[0][0]]
+    return corners_filtered[0]
 
 
-def get_default_cam(params):
-    # Define camera intrinsics.
-    height, width = params["resolution"], params["resolution"]
-    f = height * 2
-    K = np.array([[f, 0, width / 2], [0, f, height / 2], [0, 0, 1]])
-    K = K.astype(np.float32)
-
-    # Define camera extrinsics.
-    if params["n_views"] == 1:
-        cam_loc = np.array([1.0, 0.0, 0.0])[None, ...]
-    elif params["n_views"] == 2:
-        cam_loc = np.array([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]])
-    else:
-        raise NotImplementedError
-    cam_at = np.array([[0.0, 0.0, 0.0]])
-    cam_up = np.array([[0.0, 0.0, 1.0]])
-    c2w = gsoup.look_at_np(cam_loc, cam_at, cam_up)  # cam -> world
-    w2c = gsoup.invert_rigid(c2w)  # world -> cam
-    w2c = w2c.astype(np.float32)
-    return height, width, K, w2c
+def rt_vec_to_mat(rvec, tvec):
+    """
+    standard conversion from rodrigues + translation to matrix
+    """
+    R, _ = cv2.Rodrigues(rvec)  # (3,3)
+    T = np.eye(4)  # (4,4)
+    T[:3, :3] = R
+    T[:3, 3:4] = tvec
+    return T
 
 
-def create_video(params, wireframe=False):
-    frames = []
-    o2ws = []
-    height, width, K, w2c = get_default_cam(params)
-    rand_qvec = gsoup.random_qvec(2).astype(np.float32)
-    rand_trans = np.random.uniform(-0.1, 0.1, size=6).astype(np.float32).reshape(2, 3)
-    t = np.linspace(0, 1, params["tmp_frames"], dtype=np.float32)
-    if wireframe:
-        colors = np.array([255, 255, 255])
-    else:
-        if params.get("texture", None) is not None:
-            colors = params["texture"]
-        else:
-            colors = np.random.randint(0, 256, size=(len(params["f"]), 3))
-    for i in range(params["tmp_frames"]):
-        print("frame: {:04d}".format(i))
-        cur_qvec = gsoup.qslerp(rand_qvec[0], rand_qvec[1], t[i])
-        cur_t = rand_trans[0] * (t[i] - 1) + rand_trans[1] * t[i]
-        cur_rmat = gsoup.qvec2mat(cur_qvec[None, ...])
-        o2w = gsoup.compose_rt(cur_rmat, cur_t[None, ...], square=False)[0]
-        o2ws.append(o2w)
-    for i in range(len(w2c)):
-        for ii in range(params["tmp_frames"]):
-            V_cur = (o2ws[ii] @ gsoup.to_hom(params["v"]).T).T
-            render = gsoup.render_mesh(
-                V_cur,
-                params["f"],
-                K,
-                w2c[i],
-                colors,
-                Vt=params.get("vt", None),
-                Vf=params.get("vf", None),
-                wireframe=wireframe,
-                wireframe_occlude=True,
-                wh=(width, height),
-            )
-            frames.append(render)
-    frames = np.array(frames).reshape(
-        params["n_views"], params["tmp_frames"], *frames[0].shape
-    )  # (n_views, n_frames, h, w, 3)
-    return frames, np.array(o2ws)
-
-
-def save_video(videos, params, name):
-    for i in range(len(videos)):
-        video = videos[i]
-        captions = ["frame: {:03d}".format(ii) for ii in range(len(video))]
-        animation = gsoup.draw_text_on_image(
-            video, captions, size=16, color=np.array([255, 255, 255])
+def plot_points(image, points):
+    """
+    debugging function to plot 2D points on image
+    """
+    cc = image.copy()
+    for x, y in points:
+        cv2.circle(
+            cc, (int(round(x)), int(round(y))), 3, (0, 255, 0), -1, lineType=cv2.LINE_AA
         )
-        dst = Path(params["dst_path"])
-        dst.mkdir(parents=True, exist_ok=True)
-        gsoup.save_video(
-            animation,
-            Path(dst, "{}_{:02d}.mp4".format(name, i)),
-            int(1000 / params["ms_per_frame"]),
-            "1000k",
-        )
+    return cc
 
 
-def main():
-    print("Track AruCo example")
-    params = {}
-    mesh_name = "cube_tex"
-    params["dst_path"] = "track_aruco_results"
-    Path(params["dst_path"]).mkdir(exist_ok=True, parents=True)
-    # settings for tracker
-    params["save_results"] = True
-    params["sample_per_edge"] = 10
-    params["iters_per_frame"] = 1
-    params["seed"] = 1234
-    params["corres_dist_threshold"] = 5.0
-    params["use_normals"] = True
-    # settings for virtual camera
-    params["resolution"] = 512
-    params["n_views"] = 1  # (for now, support 1 or 2)
-    height, width, K, w2c = get_default_cam(params)
-    params["height"] = height
-    params["width"] = width
-    params["K"] = K
-    params["w2c"] = w2c
-    params["ms_per_frame"] = 100
-    params["dist_coeffs"] = np.zeros((5, 1), dtype=np.float32)  # no lense distortion
-    # set up geometry of scene
-    vertices, faces, vt, vf = gsoup.load_mesh(
-        "tests/tests_resource/{}.obj".format(mesh_name), return_vert_uvs=True
+def main(c1, c2, camera_params_path, dst_path):
+    """
+    Demonstrates how to using AruCo markers to track a planar surface pose
+    In this setup we have:
+    1) A pinhole camera observing a plane from the side
+    2) A pinhole projector that projects an AruCo marker (id 42) onto the plane (projector is fronto-parallel to plane)
+    3) The plane contains a printed AruCo marker (id 41) and is captured in two different poses by the camera (c1 and c2)
+    - Camera and projector are calibrated (intrinsics, extrinsics known).
+    - We want the projector to always project the AruCo marker (id 42) onto the plane
+    such that the camera sees it as if it was a sticker on the plane.
+    Output is the image that the projector should project at time of c2.
+    Note: this *does not* leverage the projected marker id 42 in c2. That marker is projected there just to show how if we do nothing, it distorts.
+    """
+    cameras = json.load(open(camera_params_path, "r"))
+    K_cam = np.array(cameras["camera"]["intrinsics"])
+    K_proj = np.array(cameras["projector_camera"]["intrinsics"])
+    c2w = np.array(cameras["camera"]["extrinsics"])
+    p2w = np.array(cameras["projector_camera"]["extrinsics"])
+    projector_resx = cameras["projector_camera"]["resx"]
+    projector_resy = cameras["projector_camera"]["resy"]
+    c2p = np.linalg.inv(p2w) @ c2w
+    dist = np.zeros((5,))  # (5,)
+    # ============================================================
+    # STEP 1: offline procedure
+    # ============================================================
+    # 1.0: find AruCo markers' corners in camera-space
+    marker41_c1 = detect_aruco_marker(c1, 41)
+    marker42_c1 = detect_aruco_marker(c1, 42)
+    # 1.1 find projected markers (42) corners in plane space
+    s = 0.615  # important: set to match the printed marker size in same units as calibration
+    marker41_plane = np.array(
+        [
+            [0, s, 0],  # top left
+            [s, s, 0],  # top right
+            [s, 0, 0],  # bottom right
+            [0, 0, 0],  # bottom left
+        ],
+        dtype=np.float32,
+    )  # (4,3) - crucial: Y increases upwards in world space. do not change order.
+    # marker41_plane -= np.array([[s / 2, s / 2, 0]])  # center at origin
+    ####################### visualize for debugging
+    # success, rvec41, tvec41 = cv2.solvePnP(
+    #     marker41_plane,
+    #     marker41_c1,
+    #     K_cam,
+    #     dist,
+    #     flags=cv2.SOLVEPNP_IPPE_SQUARE,
+    # )
+    # test = cv2.drawFrameAxes(c1.copy(), K_cam, None, rvec41, tvec41, 0.5)
+    # gsoup.save_image(test, Path(dst_path, "marker41_pose.png"))
+    #######################
+    H, _ = cv2.findHomography(marker41_plane[:, :2], marker41_c1)  # (4,2)  # (4,2)
+    H_inv = np.linalg.inv(H)  # (3,3)
+    marker42_plane = (H_inv @ gsoup.to_hom(marker42_c1).T).T  # (4,3)
+    marker42_plane = gsoup.homogenize(marker42_plane)  # (4,2)
+    marker42_plane = np.hstack(
+        [marker42_plane, np.zeros((4, 1), dtype=np.float32)]
+    )  # (4,3)
+    ####################### visualize for debugging
+    # success, rvec42, tvec42 = cv2.solvePnP(
+    #     marker41_plane,  # place marker bottom left at origin
+    #     marker42_c1,
+    #     K_cam,
+    #     dist,
+    #     flags=cv2.SOLVEPNP_IPPE_SQUARE,
+    # )
+    # test2 = cv2.drawFrameAxes(c1.copy(), K_cam, None, rvec42, tvec42, 0.5)
+    # gsoup.save_image(test2, Path(dst_path, "marker42_pose.png"))
+    ####################### visualize more for debugging
+    # T_plane2c1 = rt_vec_to_mat(rvec41, tvec41)
+    # marker41_c1_test = (T_plane2c1 @ gsoup.to_hom(marker41_plane).T).T  # (4,4)
+    # marker41_c1_test = marker41_c1_test[:, :3]  # (4,3)
+    # test, _ = cv2.projectPoints(
+    #     marker41_c1_test,  # (4,3)
+    #     np.zeros((3, 1)),  # rvec (identity)
+    #     np.zeros((3, 1)),  # tvec (identity)
+    #     K_cam,  # (3,3)
+    #     dist,
+    # )
+    # test = test.reshape(-1, 2)  # (4,2)
+    # gsoup.save_image(plot_points(c1, test), Path(dst_path, "reproject41.png"))
+    ####################### visualize more for debugging
+    # marker42_c1_test = (T_plane2c1 @ gsoup.to_hom(marker42_plane).T).T  # (4,4)
+    # marker42_c1_test = marker42_c1_test[:, :3]  # (4,3)
+    # test, _ = cv2.projectPoints(
+    #     marker42_c1_test,  # (4,3)
+    #     np.zeros((3, 1)),  # rvec (identity)
+    #     np.zeros((3, 1)),  # tvec (identity)
+    #     K_cam,  # (3,3)
+    #     dist,
+    # )
+    # test = test.reshape(-1, 2)  # (4,2)
+    # gsoup.save_image(plot_points(c1, test), Path(dst_path, "reproject42.png"))
+    # ============================================================
+    # STEP 2: online procedure (for every new frame)
+    # ============================================================
+    # 2.0: find AruCo marker (41) corners in camera-space
+    marker41_c2 = detect_aruco_marker(c2, 41)
+    # 2.1: estimate plane -> camera transform
+    success, rvec_plane2c2, tvec_plane2c2 = cv2.solvePnP(
+        marker41_plane,
+        marker41_c2,
+        K_cam,
+        dist,
+        flags=cv2.SOLVEPNP_IPPE_SQUARE,  # (4,3)  # (4,2)  # (3,3)  # (5,)
     )
-    # vertices, faces = gsoup.structures.quad_cube()  # quad_cube(), icosehedron()
-    # vertices[:, 2] *= 2
-    # gsoup.save_mesh(vertices, faces, "tests/tests_resource/{}.obj".format(mesh_name))
-    vertices = gsoup.normalize_vertices(vertices) / 10
-    edges, _, e2f = gsoup.faces2edges_naive(faces)
-    params["v"] = vertices
-    params["e"] = edges
-    params["e2f"] = e2f
-    params["f"] = faces
-    params["vt"] = vt
-    params["vf"] = vf
-    # set up texture
-    # create_aruco(Path("tests/tests_resource/aruco.png"))
-    params["texture"] = gsoup.load_image("tests/tests_resource/cube_tex.png")[..., :3]
-    # video settings
-    params["tmp_frames"] = 500  # n frames used to simulate motion
-    params["n_frames"] = 20  # actual number of frames used for tracking
-    params["force_recreate_video"] = False
-    # create video
-    video_path = Path(params["dst_path"], "video.npy")
-    video_wireframe_path = Path(params["dst_path"], "video_wireframe.npy")
-    gt_o2ws_path = Path(params["dst_path"], "gt_o2ws.npy")
-    if (
-        video_path.exists()
-        and video_wireframe_path.exists()
-        and gt_o2ws_path.exists()
-        and not params["force_recreate_video"]
-    ):
-        print("loading video and poses...")
-        videos = np.load(video_path)
-        videos_wireframe = np.load(video_wireframe_path)
-        # video_silhouette = np.load(video_silhouette_path)
-        gt_o2ws = np.load(gt_o2ws_path)
-    else:
-        print("rendering gt video...")
-        np.random.seed(params["seed"])
-        videos, gt_o2ws = create_video(params, False)
-        # print("rendering gt silhouette video...")
-        # video_silhouette = [get_silhouette(frame[..., 0]) for frame in video]
-        # video_silhouette = np.array(video_silhouette)
-        print("rendering gt wireframe video...")
-        np.random.seed(params["seed"])
-        videos_wireframe, _ = create_video(params, True)
-        np.save(video_path, videos)
-        np.save(video_wireframe_path, videos_wireframe)
-        # np.save(video_silhouette_path, video_silhouette)
-        np.save(gt_o2ws_path, gt_o2ws)
-        save_video(videos, params, "orig_video")
-        save_video(videos_wireframe, params, "orig_video_wireframe")
-        # save_video(video_silhouette, params, "orig_video_silhouette")
-
-    ####################### TRACKING #########################
-    ##########################################################
-    # lets select two random views where the AruCo is visible.
-    frame1 = videos[0, 256]
-    frame2 = videos[0, 397]
-    # create a "patch" to be applied onto the AruCo location for visualizing.
-    patch_image = gsoup.generate_lollipop_pattern(200, 200)
-    detector, c1, ids1, rejected1 = detect_aruco(frame1)
-    _, c2, ids2, rejected2 = detect_aruco(frame2, detector)
-    c1 = c1[0]
-    c2 = c2[0]
-    # find homography c1->c2
-    H_1_to_2, _ = cv2.findHomography(c1, c2, method=0)
-    h, w = patch_image.shape[:2]
+    T_plane2c2 = rt_vec_to_mat(rvec_plane2c2, tvec_plane2c2)
+    # 2.2: compute plane -> projector transform (using calibration)
+    T_plane2p2 = c2p @ T_plane2c2  # (4,4)
+    # 2.3: transform marker42 coords into projector space (using offline step)
+    marker42_plane_h = gsoup.to_hom(marker42_plane)  # (4,4) h stands for homogeneous
+    ####################### visualize for debugging
+    # marker42_c2_test = (T_plane2c2 @ marker42_plane_h.T).T  # (4,4)
+    # marker42_c2_test = marker42_c2_test[:, :3]  # (4,3)
+    # test, _ = cv2.projectPoints(
+    #     marker42_c2_test,  # (4,3)
+    #     np.zeros((3, 1)),  # rvec (identity)
+    #     np.zeros((3, 1)),  # tvec (identity)
+    #     K_cam,  # (3,3)
+    #     dist,
+    # )
+    # test = test.reshape(-1, 2)  # (4,2)
+    # gsoup.save_image(plot_points(c2, test), Path(dst_path, "reproject42_c2.png"))
+    ####################### visualize for debugging
+    # marker41_c2_test = (T_plane2c2 @ gsoup.to_hom(marker41_plane).T).T  # (4,4)
+    # marker41_c2_test = marker41_c2_test[:, :3]  # (4,3)
+    # test, _ = cv2.projectPoints(
+    #     marker41_c2_test,  # (4,3)
+    #     np.zeros((3, 1)),  # rvec (identity)
+    #     np.zeros((3, 1)),  # tvec (identity)
+    #     K_cam,  # (3,3)
+    #     dist,
+    # )
+    # test = test.reshape(-1, 2)  # (4,2)
+    # gsoup.save_image(plot_points(c2, test), Path(dst_path, "reproject41_c2.png"))
+    #######################
+    marker42_p2_h = (T_plane2p2 @ marker42_plane_h.T).T  # (4,4)
+    marker42_p2 = marker42_p2_h[:, :3]  # (4,3)
+    # 2.4: project marker42_p2 into projector image plane
+    marker42_p2_projected, _ = cv2.projectPoints(
+        marker42_p2,  # (4,3)
+        np.zeros((3, 1)),  # rvec (identity)
+        np.zeros((3, 1)),  # tvec (identity)
+        K_proj,  # (3,3)
+        dist,
+    )
+    marker42_p2_projected = marker42_p2_projected.reshape(-1, 2)  # (4,2)
+    # Now we know where the aruco should be projected in the projector image.
+    # 2.5: synthesize the image to be projected, by deforming a pure AruCo marker
+    aruco_patch = create_aruco(42, None)
+    h, w = aruco_patch.shape[:2]
     square_pts = np.array(
-        [[0, 0], [w - 1, 0], [w - 1, h - 1], [0, h - 1]], dtype=np.float32
+        [[0, 0], [w - 1, 0], [w - 1, h - 1], [0, h - 1]],
+        dtype=np.float32,
     )
-    # find homography square->c1
-    H_sq_to_1, _ = cv2.findHomography(square_pts, c1)
-    warp1 = cv2.warpPerspective(
-        patch_image, H_sq_to_1, (frame1.shape[1], frame1.shape[0])
+    H_sq2p2, _ = cv2.findHomography(
+        square_pts, marker42_p2_projected
+    )  # patch -> projector
+    warp = cv2.warpPerspective(
+        aruco_patch,
+        H_sq2p2,
+        (int(projector_resx), int(projector_resy)),
+        borderMode=cv2.BORDER_CONSTANT,
+        borderValue=[255, 255, 255],
     )
-    # visualize patch1 ontop of frame1
-    frame1_walpha = gsoup.add_alpha(frame1, np.ones_like(frame1[..., :1]) * 127)
-    final1 = gsoup.alpha_compose(frame1_walpha, warp1)
-    gsoup.save_image(final1, Path(params["dst_path"], "final1.png"))
-    # find homography square->c2
-    H_sq_to_2 = H_1_to_2 @ H_sq_to_1
-    warp2 = cv2.warpPerspective(
-        patch_image, H_sq_to_2, (frame2.shape[1], frame2.shape[0])
-    )
-    # visualize patch2 ontop of frame2
-    frame2_walpha = gsoup.add_alpha(frame2, np.ones_like(frame2[..., :1]) * 127)
-    final2 = gsoup.alpha_compose(frame2_walpha, warp2)
-    gsoup.save_image(final2, Path(params["dst_path"], "final2.png"))
+    # 2.6: save result (project this !)
+    gsoup.save_image(warp, Path(dst_path, "warpped.png"))
 
 
 if __name__ == "__main__":
-    main()
+    c1 = gsoup.load_image("tests/tests_resource/aruco_track/C1_t=1.png")
+    c2 = gsoup.load_image("tests/tests_resource/aruco_track/C1_t=2.png")
+    dst_path = "track_results_aruco"
+    cams = Path("tests/tests_resource/aruco_track/cameras.json")
+    main(c1, c2, cams, dst_path)
