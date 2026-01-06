@@ -68,16 +68,15 @@ def plot_points(image, points):
 
 def main(c1, c2, camera_params_path, dst_path):
     """
-    Demonstrates how to using AruCo markers to track a planar surface pose
+    Demonstrates how to create a "sticky" projection on a planar surface
     In this setup we have:
     1) A pinhole camera observing a plane from the side
     2) A pinhole projector that projects an AruCo marker (id 42) onto the plane (projector is fronto-parallel to plane)
     3) The plane contains a printed AruCo marker (id 41) and is captured in two different poses by the camera (c1 and c2)
     - Camera and projector are calibrated (intrinsics, extrinsics known).
-    - We want the projector to always project the AruCo marker (id 42) onto the plane
-    such that the camera sees it as if it was a sticker on the plane.
+    We want the projector to always project the AruCo marker (id 42) onto the plane such that the camera sees it as if it was a sticker on the plane.
     Output is the image that the projector should project at time of c2.
-    Note: this *does not* leverage the projected marker id 42 in c2. That marker is projected there just to show how if we do nothing, it distorts.
+    Note: this *does not* leverage the projected marker id 42 in c2. That marker is projected there just to show how it looks like if we do nothing.
     """
     cameras = json.load(open(camera_params_path, "r"))
     K_cam = np.array(cameras["camera"]["intrinsics"])
